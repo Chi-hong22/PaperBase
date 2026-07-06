@@ -1,0 +1,1232 @@
+我提问:
+"```
+我有个初步想法,建立一个论文知识库(agents脚手架)
+- 该知识库通过下载论文pdf(输入层与备份层),转换为规则化md文档(知识库主体层),通过 graphify 进行 md 论文图谱化与管理(信息管理层)
+- 该知识库作为独立文件夹,其他项目都能够接入该知识库,所以对应的AGENTS.md/CLAUDE.md要具备清晰而简洁的知识库描述以及知识库工作流与维护指南, 还有针对外来AI AGENT系统的使用指南(可以包装为skill),
+- 需要一整套工作流: 论文搜索与pdf下载(需要pdf且无pdf文件时)--pdf规则化(文件名)--pdf对应md转换(无md文件时)--md文档规则化(结构化元数据\md全文(包含图表资源)\文献引用)--更新图谱工具graphify
+- 工作流对应的agent model设置
+- 要有统一的Markdown 规则化器, 目的是有结构化元数据\md全文(包含图表资源)\文献引用), 比如frontmatter/title / abstract / sections / references/assets 相对路径/paper_id() / source / chunk metadata
+- 需要能够兼容并连接搜索当前电脑的zotero (zotero mcp)
+- 所有知识库用到的skill需要放到项目级文件夹
+我有一些现有个工具: 
+1. https://github.com/Dictation354/paper-fetch-skill 获得结构化元数据 + 干净 Markdown 全文 + 图表资源, 以及基于该项目开发的 https://github.com/Rimagination/scansci-pdf, 但是该项目好像并没有那么方便agent操作
+2. https://github.com/serenakeyitan/citation-check-skill 相关文献引用真实性审查
+3. https://github.com/microsoft/markitdown 万格式转 Markdown 的通用入口, Python library + CLI
+```
+
+请你和我审核优化以上思路
+"
+
+
+我认真审核了一遍。先给结论：
+
+> **你的方向是对的，而且已经接近一个真正可复用的“论文知识基础设施”。但当前设计还缺两个决定长期成败的核心层：`Canonical Schema` 与 `State/Manifest Control Plane`。**
+>
+> 我建议不要把它实现成“若干 Skills 串起来的 Agent 项目”，而要实现成：
+>
+> **稳定核心库 + 幂等 CLI + Adapter 工具层 + Canonical Paper Schema + 状态机 + Graph Projection + Thin Skills。**
+
+这样以后 Claude Code、Codex、其他 Agent、普通 Python 项目，甚至不使用 AI 的脚本，都能接入同一个知识库。
+
+以下基于我对你列出的几个项目截至 **2026-07-06** 的实际能力核对。
+
+---
+
+# 一、先审核你的原始思路
+
+## 1. 总体分层正确，但我建议从 4 层改成 7 层
+
+你原来的思路：
+
+1. PDF 输入与备份层
+2. Markdown 知识库主体层
+3. Graphify 信息管理层
+4. Agent 接入层
+
+概念没问题，但工程上还少了三个层。
+
+我建议：
+
+```text
+┌─────────────────────────────────────────────┐
+│ 7. Agent Interface Layer                    │
+│ AGENTS.md / CLAUDE.md / Project Skills      │
+├─────────────────────────────────────────────┤
+│ 6. Query & Projection Layer                 │
+│ Graphify / MCP / future search indexes      │
+├─────────────────────────────────────────────┤
+│ 5. Canonical Knowledge Layer                │
+│ paper.md / references.jsonl / chunks.jsonl  │
+├─────────────────────────────────────────────┤
+│ 4. Validation Layer                         │
+│ schema / references / provenance / quality  │
+├─────────────────────────────────────────────┤
+│ 3. Normalization Layer                      │
+│ Canonical Paper Normalizer                  │
+├─────────────────────────────────────────────┤
+│ 2. Acquisition & Conversion Adapter Layer   │
+│ paper-fetch / scansci / markitdown / zotero │
+├─────────────────────────────────────────────┤
+│ 1. Source & Control Plane                   │
+│ PDF / source cache / manifest / registry    │
+└─────────────────────────────────────────────┘
+```
+
+其中最重要的是：
+
+> **Graphify 不是知识库主体。Canonical Markdown 才是知识库主体。Graphify 是一个可重建的 projection/index。**
+
+这是我最强烈的建议之一。
+
+---
+
+# 二、对你已有工具的具体审核
+
+## A. `paper-fetch-skill`：建议升级为主要论文内容 Adapter
+
+这个工具与你的目标高度匹配。当前项目本身已经提供 CLI、MCP 和 thin skill 三个入口；支持 DOI、URL、标题输入，输出结构化元数据、Markdown 正文、引用信息和本地资产。项目也明确说明，它**不负责开放式主题检索、文献推荐或综述生成**。([GitHub][1])
+
+它的 CLI 还支持：
+
+* `markdown/json/both`
+* `ArticleModel` JSON
+* Markdown artifact
+* `<doi>_assets/`
+* PDF fallback 源文件
+* references 渲染
+* `batch-results.jsonl`
+* asset profile
+
+这些已经非常接近你的 ingestion adapter。([GitHub][2])
+
+### 但它不能直接成为你的 Canonical Schema
+
+这是一个关键发现。
+
+我检查了它的实际论文 Markdown 示例，目前顶部类似：
+
+```text
+title ...
+authors ...
+journal ...
+doi ...
+published ...
+source ...
+has_fulltext ...
+```
+
+然后才进入：
+
+```markdown
+# Title
+
+## Abstract
+...
+```
+
+它不是你想要的稳定 YAML frontmatter canonical schema。([GitHub][3])
+
+因此我的建议是：
+
+```text
+paper-fetch
+    ↓
+Source ArticleModel + candidate Markdown + assets
+    ↓
+你自己的 paper-normalizer
+    ↓
+Canonical paper.md
+```
+
+**不要 fork `paper-fetch-skill` 去强迫它成为整个知识库标准。**
+
+让它只承担：
+
+> `Known Paper → Rich Source Artifact`
+
+这样升级外部项目时最轻松。
+
+---
+
+## B. `scansci-pdf`：你的“Agent 不方便操作”判断，现在需要修正
+
+当前版本已经提供 MCP 服务，而且明确暴露：
+
+* `scansci_pdf_download`
+* `scansci_pdf_batch_download`
+* `scansci_pdf_search`
+* `scansci_pdf_citation`
+* 登录与网络诊断工具
+
+所以从当前版本来看，它已经具备 Agent 调用能力。([GitHub][4])
+
+### 但我仍然不建议让它成为主干
+
+我建议它的角色严格限定为：
+
+> **PDF Acquisition Fallback**
+
+即：
+
+```text
+已有本地 PDF?
+  ├─ yes → 不下载
+  └─ no
+      ↓
+Zotero 是否已有 attachment?
+      ├─ yes → 导入
+      └─ no
+          ↓
+paper-fetch 能否得到官方/合法全文?
+          ├─ yes → 保存内容；若仍缺 PDF 再继续
+          └─ no
+              ↓
+scansci-pdf 合规 profile
+```
+
+### 特别重要：默认配置必须覆写
+
+当前 `scansci-pdf` README 展示的配置表里，`scihub_enabled` 默认值是 `true`。([GitHub][4])
+
+你的知识库项目应该明确配置：
+
+```yaml
+scansci:
+  enabled: true
+  scihub_enabled: false
+  libgen_enabled: false
+  require_authorized_access: true
+```
+
+这是一个必须写入 `AGENTS.md` 和测试的 invariant：
+
+> **不得通过知识库自动化工作流绕过付费墙或访问授权。**
+
+---
+
+## C. `MarkItDown`：应该是通用 fallback，不是论文主解析器
+
+Microsoft 对 MarkItDown 自己的定位就是面向 LLM/text analysis 的通用 Markdown 转换器，支持 PDF、Office、图片、音频、HTML 等多种格式；其 README 同时明确说，它并不以高保真人类文档转换为目标。([GitHub][5])
+
+所以非常适合：
+
+```text
+Unknown file
+DOCX
+PPTX
+HTML
+EPUB
+generic PDF
+    ↓
+MarkItDown
+    ↓
+Candidate Markdown
+    ↓
+Canonical Normalizer
+```
+
+而不是：
+
+```text
+所有论文 PDF
+    ↓
+MarkItDown
+    ↓
+直接进入知识库   ❌
+```
+
+我的优先级建议：
+
+```text
+论文专用结构化来源
+    paper-fetch
+        ↓ fallback
+PDF 专用转换路径
+        ↓ fallback
+MarkItDown
+        ↓ fallback
+OCR / Vision recovery
+```
+
+---
+
+## D. `citation-check-skill`：应该放在 Validation/Audit，而不是转换层
+
+当前这个 skill 的重点是：
+
+* 提取 factual claims
+* 检查 claim 是否有 citation
+* 检查 cited source 是否存在
+* 检查 claim–citation consistency
+* 支持 web verification 和 doc-only verification
+
+它本质是**生成结果审计器**。([GitHub][6])
+
+所以我不建议：
+
+```text
+PDF → citation-check → Markdown
+```
+
+而建议两个调用位置：
+
+### 位置 1：论文 Reference Identity Audit
+
+```text
+Canonical references
+    ↓
+DOI/title resolution
+    ↓
+unresolved references
+    ↓
+citation audit
+```
+
+### 位置 2：Agent 最终产物审查
+
+```text
+Agent 写综述/报告
+    ↓
+citation-check
+    ↓
+pass → ship
+fail → revise
+```
+
+尤其第二个才是它最强的场景。
+
+---
+
+## E. Graphify：非常适合，但必须“降级”为 Projection
+
+Graphify 当前能处理代码、Markdown、PDF、图片等，生成 `graph.html`、`GRAPH_REPORT.md` 和 `graph.json`；也提供 query/path/explain 与 MCP 服务。([GitHub][7])
+
+它现在还支持：
+
+```text
+--update
+--watch
+--mcp
+```
+
+并支持 `.graphifyignore`。([GitHub][7])
+
+所以非常适合你的方案。
+
+### 但这里有一个重要陷阱
+
+**绝对不要让 Graphify 同时扫描：**
+
+```text
+paper.pdf
+paper-fetch 原始 md
+normalized paper.md
+chunks
+assets caption dumps
+```
+
+否则同一篇论文可能产生多套近似语义节点。
+
+建议：
+
+```text
+Graphify input
+    ↓
+仅：
+papers/**/paper.md
+可选：
+collections/**/*.md
+notes/**/*.md
+```
+
+`.graphifyignore`：
+
+```gitignore
+sources/
+registry/
+**/source/
+**/chunks.jsonl
+**/references.jsonl
+**/manifest.json
+**/assets/**
+**/*.pdf
+```
+
+还有一个值得注意的现实问题：Graphify README 一处强调图不是 vector index，但其文档/PDF 语义抽取实际上需要 LLM backend；其故障排查也明确说明 docs/PDF/images 需要 LLM 调用。([GitHub][7])
+
+所以：
+
+> **不要把 Graphify 当 deterministic database。**
+>
+> 它应该是 derived artifact，可随时从 canonical corpus 重建。
+
+---
+
+## F. Zotero MCP：很适合，而且应该比你原计划更深入
+
+我建议采用 `54yyyu/zotero-mcp` 这一类实现作为默认 Zotero bridge。当前它支持搜索本地库、元数据、全文、注释，以及可选语义检索；还提供 standalone CLI。([GitHub][8])
+
+更关键的是：
+
+* 本地 Zotero API 可用于本地读取
+* `ZOTERO_LOCAL=true`
+* 只读本地模式不需要 API key
+* 写操作可切 hybrid mode，通过 Web API 完成
+
+([GitHub][8])
+
+所以我建议 Zotero 不只是：
+
+> “搜索当前电脑 Zotero”
+
+而应该是：
+
+```text
+Zotero = Local Discovery + Existing PDF Resolver + Metadata Source + Annotation Source
+```
+
+优先顺序：
+
+```text
+用户请求论文
+    ↓
+先查 KB
+    ↓
+再查本地 Zotero
+    ↓
+再查外部 scholarly search
+```
+
+这样可以减少重复下载。
+
+---
+
+# 三、我建议的最终项目架构
+
+这是我认为最适合你的形态。
+
+```text
+paper-knowledge-base/
+├── AGENTS.md
+├── CLAUDE.md
+├── README.md
+├── pyproject.toml
+├── uv.lock
+│
+├── config/
+│   ├── kb.yaml
+│   ├── models.yaml
+│   ├── sources.yaml
+│   └── schemas/
+│       ├── paper.schema.json
+│       ├── manifest.schema.json
+│       ├── reference.schema.json
+│       └── chunk.schema.json
+│
+├── src/
+│   └── paper_kb/
+│       ├── cli/
+│       ├── core/
+│       │   ├── identity.py
+│       │   ├── state.py
+│       │   ├── registry.py
+│       │   └── provenance.py
+│       ├── discovery/
+│       ├── acquisition/
+│       ├── conversion/
+│       ├── normalization/
+│       ├── validation/
+│       ├── graph/
+│       └── adapters/
+│           ├── paper_fetch.py
+│           ├── scansci.py
+│           ├── markitdown.py
+│           ├── zotero.py
+│           ├── graphify.py
+│           ├── openalex.py
+│           ├── crossref.py
+│           └── semantic_scholar.py
+│
+├── skills/
+│   ├── paper-kb/
+│   ├── paper-search/
+│   ├── paper-ingest/
+│   ├── paper-audit/
+│   └── paper-graph/
+│
+├── .agents/
+│   └── skills/
+│       ├── paper-kb -> ../../skills/paper-kb
+│       ├── paper-search -> ../../skills/paper-search
+│       └── ...
+│
+├── .claude/
+│   └── skills/
+│       ├── paper-kb -> ../../skills/paper-kb
+│       ├── paper-search -> ../../skills/paper-search
+│       └── ...
+│
+├── library/
+│   ├── sources/
+│   │   └── pdf/
+│   │       └── sha256/
+│   │
+│   ├── papers/
+│   │   └── <storage_id>/
+│   │       ├── paper.md
+│   │       ├── manifest.json
+│   │       ├── references.jsonl
+│   │       ├── chunks.jsonl
+│   │       ├── assets/
+│   │       └── source/
+│   │           ├── source.pdf
+│   │           ├── candidate.md
+│   │           └── metadata.json
+│   │
+│   ├── collections/
+│   └── notes/
+│
+├── registry/
+│   ├── papers.sqlite
+│   └── events.jsonl
+│
+├── graph/
+│   └── graphify-out/
+│
+├── scripts/
+│   ├── install-skills.py
+│   └── doctor.py
+│
+└── tests/
+    ├── fixtures/
+    ├── unit/
+    ├── integration/
+    └── e2e/
+```
+
+---
+
+# 四、为什么我要加入 `registry + manifest`
+
+这是你原方案最大的缺口。
+
+假设存在：
+
+```text
+foo.pdf
+foo.md
+foo_assets/
+```
+
+Agent 无法可靠回答：
+
+* PDF 是什么时候下载的？
+* MD 是从哪个 PDF 转换的？
+* MD 是否过期？
+* normalizer 是否升级了？
+* DOI 是否已经变化或被纠正？
+* Graphify 是否已经更新？
+* PDF 内容 hash 是否变化？
+* 有 MD 但没有 PDF，是正常还是失败？
+* 有 PDF 没 MD，是正在处理还是漏处理？
+
+因此每篇论文都必须有：
+
+```json
+{
+  "paper_id": "doi:10.1038/s41586-026-10265-5",
+  "storage_id": "p_a93d42c19e7f",
+  "state": "ready",
+  "source_pdf": {
+    "path": "./source/source.pdf",
+    "sha256": "...",
+    "acquired_at": "..."
+  },
+  "canonical_md": {
+    "path": "./paper.md",
+    "sha256": "...",
+    "schema_version": "1.0"
+  },
+  "pipeline": {
+    "converter": "paper-fetch",
+    "converter_version": "...",
+    "normalizer_version": "..."
+  },
+  "graph": {
+    "indexed": true,
+    "indexed_content_sha256": "..."
+  }
+}
+```
+
+这意味着整个知识库工作流可以做成真正的：
+
+> **幂等状态机**
+
+---
+
+# 五、推荐工作流：不要按“文件存在”简单判断
+
+你的原始逻辑：
+
+```text
+无 PDF → 下载
+无 MD → 转换
+更新 graph
+```
+
+作为初步想法可以，但长期会出问题。
+
+我建议：
+
+```text
+DISCOVERED
+    ↓
+RESOLVED
+    ↓
+SOURCE_READY
+    ↓
+CONVERTED
+    ↓
+NORMALIZED
+    ↓
+VALIDATED
+    ↓
+GRAPHED
+    ↓
+READY
+```
+
+额外状态：
+
+```text
+NEEDS_REVIEW
+BLOCKED
+FAILED_RETRYABLE
+FAILED_PERMANENT
+```
+
+每个 stage 依据：
+
+```text
+input hash
+tool version
+schema version
+config hash
+output hash
+```
+
+判断是否需要重新执行。
+
+---
+
+# 六、完整论文摄入工作流
+
+## Step 1：输入识别
+
+接受：
+
+```text
+DOI
+arXiv ID
+URL
+title
+BibTeX
+RIS
+本地 PDF
+Zotero item
+自然语言主题查询
+```
+
+先判断：
+
+```text
+exact paper request?
+    ↓
+resolve
+
+topic discovery request?
+    ↓
+search
+```
+
+这两条不能混。
+
+`paper-fetch` 自己也明确将开放式搜索与已知论文抓取分开，所以你自己的 orchestration 应该保留这个边界。([GitHub][1])
+
+---
+
+## Step 2：Discovery
+
+建议顺序：
+
+```text
+1. 当前 KB
+2. 本地 Zotero
+3. OpenAlex
+4. Crossref
+5. Semantic Scholar
+6. domain-specific source
+```
+
+OpenAlex 提供 scholarly works、authors、sources、institutions 等检索；Crossref REST API 提供 DOI 与 scholarly metadata；Semantic Scholar API 提供 paper/citation/recommendation 数据。因此它们适合分别承担 discovery、identity resolution 与 citation expansion。([OpenAlex Developers][9])
+
+注意：
+
+> 搜索阶段只生成 `Candidate[]`，不要立即下载 50 篇 PDF。
+
+例如：
+
+```json
+{
+  "candidate_id": "...",
+  "title": "...",
+  "doi": "...",
+  "authors": [],
+  "year": 2026,
+  "sources": ["zotero", "openalex"],
+  "score": 0.91
+}
+```
+
+---
+
+## Step 3：Identity Resolution
+
+核心原则：
+
+> **文件名不是身份。**
+
+`paper_id` 推荐：
+
+```text
+优先级：
+
+doi:<normalized-doi>
+pmid:<id>
+arxiv:<base-id>
+openalex:<id>
+s2:<id>
+fallback:<sha256-normalized-title-year-first-author>
+```
+
+例如：
+
+```yaml
+paper_id: "doi:10.1038/s41586-026-10265-5"
+```
+
+文件系统另用：
+
+```yaml
+storage_id: "p_a93d42c19e7f"
+```
+
+这样 DOI 中的 `/` 不会污染路径。
+
+---
+
+## Step 4：PDF Acquisition
+
+建议：
+
+```text
+PDF required?
+  └─ no → 可以继续全文获取
+
+PDF required?
+  └─ yes
+      ↓
+KB source store 是否已有?
+      ↓ no
+Zotero attachment 是否已有?
+      ↓ no
+合法 OA / publisher source
+      ↓ no
+scansci compliant adapter
+      ↓ no
+NEEDS_REVIEW
+```
+
+PDF 使用 content-addressed backup：
+
+```text
+library/sources/pdf/sha256/
+  ab/
+    abcdef....pdf
+```
+
+然后 paper bundle 中：
+
+```text
+source/source.pdf
+```
+
+可以是：
+
+* hardlink
+* symlink
+* copy
+
+根据平台配置。
+
+---
+
+## Step 5：Conversion
+
+推荐 routing：
+
+```text
+paper-fetch fulltext available?
+    ├─ yes
+    │   → ArticleModel
+    │   → candidate.md
+    │   → assets
+    │
+    └─ no
+        ↓
+PDF available?
+    ├─ yes
+    │   → PDF-specific conversion
+    │
+    └─ fallback
+        → MarkItDown
+
+scanned/failed?
+    → OCR/Vision recovery
+```
+
+---
+
+## Step 6：Canonical Normalization
+
+这是整个项目的核心。
+
+我甚至建议：
+
+> **先写 Normalizer，再写 Agent。**
+
+Normalizer 必须：
+
+* deterministic first
+* 不默认让 LLM 改写正文
+* 保留 provenance
+* 所有资产相对路径
+* 统一 heading
+* 统一 references
+* 统一 frontmatter
+* 生成 chunk sidecar
+* 输出 schema validation report
+
+---
+
+# 七、我推荐的 Canonical Markdown Schema
+
+例如：
+
+```yaml
+---
+schema_version: "1.0"
+
+paper_id: "doi:10.1038/s41586-026-10265-5"
+storage_id: "p_a93d42c19e7f"
+
+title: "Towards end-to-end automation of AI research"
+
+authors:
+  - name: "Chris Lu"
+    orcid: null
+  - name: "Cong Lu"
+    orcid: null
+
+year: 2026
+published_at: "2026-03-26"
+
+venue:
+  name: "Nature"
+  type: "journal"
+
+identifiers:
+  doi: "10.1038/s41586-026-10265-5"
+  arxiv: null
+  pmid: null
+  openalex: null
+  semantic_scholar: null
+
+language: "en"
+
+abstract: >-
+  ...
+
+keywords: []
+
+source:
+  discovery: "zotero"
+  fulltext_provider: "paper-fetch"
+  original_url: null
+
+provenance:
+  ingested_at: "2026-07-06T..."
+  converter:
+    name: "paper-fetch"
+    version: "..."
+  normalizer:
+    name: "paper-kb-normalizer"
+    version: "1.0.0"
+  source_pdf_sha256: "..."
+  canonical_content_sha256: "..."
+
+assets:
+  root: "./assets"
+
+references:
+  path: "./references.jsonl"
+  count: 42
+
+chunks:
+  path: "./chunks.jsonl"
+  strategy: "section-aware-v1"
+
+quality:
+  fulltext: true
+  metadata_complete: true
+  references_parsed: true
+  needs_review: false
+---
+
+# Towards end-to-end automation of AI research
+
+## Abstract
+
+...
+
+## Main
+
+...
+
+### ...
+
+...
+
+## References
+
+1. ...
+2. ...
+```
+
+---
+
+# 八、`chunk metadata` 不要塞进主 Markdown
+
+这是我对你原设想的一个重要优化。
+
+不要这样：
+
+```markdown
+<!-- chunk_id: ... -->
+<!-- token_count: ... -->
+<!-- source_start: ... -->
+```
+
+大量塞入 `paper.md`。
+
+否则：
+
+* 污染正文
+* 增加 token
+* Graphify 可能抽取无意义元数据
+* schema 演进麻烦
+
+建议：
+
+```text
+chunks.jsonl
+```
+
+例如：
+
+```json
+{
+  "chunk_id": "p_a93d42c19e7f:s003:c002",
+  "paper_id": "doi:10.1038/...",
+  "section_path": [
+    "Main",
+    "Experimental evaluation"
+  ],
+  "ordinal": 12,
+  "char_start": 18342,
+  "char_end": 22481,
+  "token_estimate": 913,
+  "content_sha256": "...",
+  "citation_keys": [
+    "ref-0012",
+    "ref-0018"
+  ],
+  "asset_refs": [
+    "./assets/fig-003.png"
+  ]
+}
+```
+
+主 Markdown 是：
+
+> human-readable + agent-readable canonical document
+
+chunk sidecar 是：
+
+> retrieval infrastructure
+
+必须分开。
+
+---
+
+# 九、References 也建议双轨
+
+主 MD：
+
+```markdown
+## References
+
+1. Vaswani, A. et al. ...
+2. ...
+```
+
+结构化 sidecar：
+
+```text
+references.jsonl
+```
+
+例如：
+
+```json
+{
+  "ref_id": "ref-0012",
+  "ordinal": 12,
+  "raw_text": "...",
+  "title": "...",
+  "authors": [],
+  "year": 2017,
+  "identifiers": {
+    "doi": "10....",
+    "arxiv": "1706.03762"
+  },
+  "resolution": {
+    "status": "resolved",
+    "provider": "crossref",
+    "confidence": 0.98
+  },
+  "cited_in_sections": [
+    "Introduction",
+    "Methods"
+  ]
+}
+```
+
+Reference validation 分三层：
+
+```text
+L1 Syntax Parse
+    ↓
+L2 Identity Resolution
+    ↓
+L3 Claim-support Audit
+```
+
+不要让 citation-check skill 一个人承担三层。
+
+---
+
+# 十、Agent 与 Model 设置建议
+
+我不建议在 Skills 中硬编码某个具体模型名。
+
+模型更新太快。
+
+应该使用：
+
+```yaml
+# config/models.yaml
+
+profiles:
+  deterministic:
+    provider: none
+
+  fast:
+    model_env: KB_FAST_MODEL
+    reasoning: low
+    temperature: 0
+
+  standard:
+    model_env: KB_STANDARD_MODEL
+    reasoning: medium
+    temperature: 0
+
+  deep:
+    model_env: KB_DEEP_MODEL
+    reasoning: high
+
+  vision:
+    model_env: KB_VISION_MODEL
+    reasoning: medium
+```
+
+然后按任务映射：
+
+| Stage                        | Agent            |       Profile | 说明          |
+| ---------------------------- | ---------------- | ------------: | ----------- |
+| identity normalization       | resolver         | deterministic | DOI、ID、hash |
+| exact metadata merge         | resolver         | deterministic | 不需要 LLM     |
+| ambiguous title resolution   | resolver         |          fast | 只处理歧义       |
+| topic search ranking         | discoverer       |      standard | 候选重排        |
+| PDF download                 | acquirer         | deterministic | 工具调用        |
+| PDF→MD                       | converter        | deterministic | converter   |
+| scanned PDF recovery         | converter        |        vision | 仅异常触发       |
+| canonical normalization      | normalizer       | deterministic | 默认禁止改写      |
+| malformed section repair     | normalizer       |      standard | 仅异常触发       |
+| reference resolution         | validator        | deterministic | Crossref 等  |
+| ambiguous citation match     | validator        |      standard | 少量          |
+| claim-support audit          | auditor          |          deep | 高价值任务       |
+| workflow orchestration       | coordinator      |          deep | 规划/异常处理     |
+| Graphify semantic extraction | graph-maintainer | fast/standard | 根据 corpus   |
+
+核心原则：
+
+> **能用代码完成的，不用 LLM。**
+>
+> **能用小模型完成的，不用 deep model。**
+>
+> **Vision 只在明确检测到扫描件或结构失败时启用。**
+
+---
+
+# 十一、Agent 架构：不要过度 multi-agent
+
+我建议 V1 只有五个逻辑角色：
+
+```text
+Coordinator
+  ├── Discoverer
+  ├── Acquirer
+  ├── Normalizer
+  ├── Validator
+  └── Graph Maintainer
+```
+
+但注意：
+
+> 这些首先是“职责边界”，不一定每次真的 spawn 五个 Agent。
+
+例如 PDF 下载：
+
+```text
+Coordinator
+    ↓
+直接调用 deterministic CLI
+```
+
+而不是：
+
+```text
+Coordinator
+    ↓
+spawn Download Agent
+    ↓
+Download Agent 再思考 3000 tokens
+    ↓
+调用 CLI
+```
+
+后者纯属浪费。
+
+---
+
+# 十二、Skills 应该如何放
+
+你的要求“所有知识库用到的 skill 都放项目级文件夹”是正确的。
+
+而且目前 Codex 官方支持 repo 级 `.agents/skills`，Claude Code 官方支持项目级 `.claude/skills`；两边也都支持 symlink skill 目录。([OpenAI 开发者][10])
+
+因此我推荐单一源：
+
+```text
+skills/
+```
+
+然后：
+
+```text
+.agents/skills/paper-kb
+    → ../../skills/paper-kb
+
+.claude/skills/paper-kb
+    → ../../skills/paper-kb
+```
+
+这非常漂亮。
+
+官方 Codex 文档当前明确将 `.agents/skills` 作为 repo skill 位置，并使用 progressive disclosure；Claude Code 同样只在 skill 被使用时加载正文。([OpenAI 开发者][10])
+
+### 我建议只做 5 个 Skills
+
+```text
+paper-kb
+paper-search
+paper-ingest
+paper-audit
+paper-graph
+```
+
+不要搞：
+
+```text
+download-pdf
+rename-pdf
+convert-pdf
+fix-title
+extract-abstract
+...
+```
+
+太碎。
+
+---
+
+# 十三、AGENTS.md / CLAUDE.md 怎么设计
+
+## `AGENTS.md`
+
+只放：
+
+```text
+1. What this repository is
+2. Source of truth
+3. Directory map
+4. Invariants
+5. Exact commands
+6. Workflow/state machine
+7. Do-not rules
+8. Done criteria
+9. Skill index
+```
+
+不要塞完整 tutorial。
+
+Codex 官方目前也明确建议 `AGENTS.md` 保持短、准确、实用，将大块 task-specific 流程拆到其他文档。
+
+[1]: https://github.com/Dictation354/paper-fetch-skill "GitHub - Dictation354/paper-fetch-skill: Fetch papers as agent-ready markdown — DOI/URL/title in, structured full text out. CLI · MCP · Skill. · GitHub"
+[2]: https://github.com/Dictation354/paper-fetch-skill/blob/main/docs/cli.md "paper-fetch-skill/docs/cli.md at main · Dictation354/paper-fetch-skill · GitHub"
+[3]: https://github.com/Dictation354/paper-fetch-skill/blob/main/figures/towards-end-to-end-automation-of-ai-research.md "paper-fetch-skill/figures/towards-end-to-end-automation-of-ai-research.md at main · Dictation354/paper-fetch-skill · GitHub"
+[4]: https://github.com/Rimagination/scansci-pdf "GitHub - Rimagination/scansci-pdf · GitHub"
+[5]: https://github.com/microsoft/markitdown "GitHub - microsoft/markitdown: Python tool for converting files and office documents to Markdown. · GitHub"
+[6]: https://github.com/serenakeyitan/citation-check-skill "GitHub - serenakeyitan/citation-check-skill: Citation Check Skill is a lightweight, opinionated citation validation layer designed to detect, verify, and enforce citations in LLM outputs. · GitHub"
+[7]: https://github.com/safishamsi/graphify "GitHub - Graphify-Labs/graphify: AI coding assistant skill (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, and more). Turn any folder of code, SQL schemas, R scripts, shell scripts, docs, papers, images, or videos into a queryable knowledge graph. App code + database schema + infrastructure in one graph. · GitHub"
+[8]: https://github.com/54yyyu/zotero-mcp "GitHub - 54yyyu/zotero-mcp: Zotero MCP: Connects your Zotero research library with Claude and other AI assistants via the Model Context Protocol to discuss papers, get summaries, analyze citations, and more. · GitHub"
+[9]: https://developers.openalex.org/?utm_source=chatgpt.com "OpenAlex API"
+[10]: https://developers.openai.com/codex/skills "Agent Skills – Codex | OpenAI Developers"
+
+
+
+我反馈:
+"1. 暂时不考虑multi-agent framework
+2. 我给你的几个项目skill,尽量作为项目级的skill直接进行使用"
