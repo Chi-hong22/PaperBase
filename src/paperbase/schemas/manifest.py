@@ -47,7 +47,7 @@ class PipelineInfo(BaseModel):
 class GraphInfo(BaseModel):
     """图谱索引信息"""
     indexed: bool = False
-    indexed_content_sha256: str | None = None
+    updated_at: str | None = None
 
 
 class ManifestSchema(BaseModel):
