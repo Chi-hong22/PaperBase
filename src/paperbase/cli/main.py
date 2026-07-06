@@ -5,6 +5,7 @@ from pathlib import Path
 from paperbase.cli.commands.status import status
 from paperbase.cli.commands.ingest import ingest
 from paperbase.cli.commands.graph import graph
+from paperbase.cli.commands.search import search
 
 
 @click.group()
@@ -26,6 +27,7 @@ def main(ctx, base_dir: Path):
 main.add_command(status)
 main.add_command(ingest)
 main.add_command(graph)
+main.add_command(search)
 
 
 if __name__ == "__main__":
