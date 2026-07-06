@@ -46,10 +46,11 @@ paperbase/
 1. **每篇论文必须有唯一 `paper_id`**（doi:xxx 优先）
 2. **每篇论文必须有 `manifest.json`** 记录状态和溯源
 3. **不得通过自动化工作流绕过付费墙**（scansci 必须配置 `scihub_enabled=false`）
-4. **Graphify 只扫描 `library/papers/**/paper.md`**（用 `.graphifyignore` 排除其他）
-5. **所有资产路径必须是相对路径**（`./assets/fig-001.png`）
-6. **状态转换必须更新 `manifest.json` 的 `updated_at`**
-7. **不修改 `paper.md` 的 frontmatter 必须保持 `canonical_content_sha256` 不变**
+4. **graphify 和 zotero-mcp 使用全局安装**（`uv tool install`），不作为项目依赖
+5. **Graphify 只扫描 `library/papers/**/paper.md`**（用 `.graphifyignore` 排除其他）
+6. **所有资产路径必须是相对路径**（`./assets/fig-001.png`）
+7. **状态转换必须更新 `manifest.json` 的 `updated_at`**
+8. **不修改 `paper.md` 的 frontmatter 必须保持 `canonical_content_sha256` 不变**
 
 ## 工作流状态机
 
@@ -101,8 +102,9 @@ paperbase validate
 - **Schema 验证**: pydantic v2
 - **Registry**: sqlite3
 - **元数据标准**: CSL JSON
+- **全局工具**（需单独安装）:
+  - graphify (`uv tool install graphify`) - 知识图谱构建
+  - zotero-mcp (`uv tool install zotero-mcp-server`) - Zotero 集成
 - **依赖项目**:
-  - paper-fetch-skill (论文获取)
-  - zotero-mcp (Zotero 集成)
-  - graphify (知识图谱)
-  - citation-check-skill (引用验证)
+  - paper-fetch-skill (论文获取，git clone 到 skills/)
+  - citation-check-skill (引用验证，手动下载到 skills/)

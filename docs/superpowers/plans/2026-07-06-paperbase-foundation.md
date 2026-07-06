@@ -23,6 +23,7 @@
 - 所有 schema 必须通过 pydantic 验证
 - 所有状态转换必须记录到 manifest.json
 - 不得通过自动化工作流绕过付费墙（scansci 配置 scihub_enabled=false）
+- **graphify 和 zotero-mcp 使用全局安装**（`uv tool install`），不作为项目依赖
 - Graphify 只扫描 `library/papers/**/paper.md`
 - 资产路径必须是相对路径
 - 遵循 DRY, YAGNI, KISS 原则
