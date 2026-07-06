@@ -3,11 +3,20 @@ sources/
 **/source/
 **/*.pdf
 
+# Library 子目录（只扫描 library/papers/**/paper.md）
+library/sources/
+library/collections/
+library/notes/
+
 # Registry 和状态文件
 registry/
 **/manifest.json
 **/chunks.jsonl
 **/references.jsonl
+**/assets/
+
+# 图谱输出目录
+graph/
 
 # 构建产物
 __pycache__/
