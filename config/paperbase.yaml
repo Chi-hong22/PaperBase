@@ -1,0 +1,40 @@
+# PaperBase 配置文件
+
+project:
+  name: "PaperBase"
+  version: "0.1.0"
+
+paths:
+  library: "library"
+  registry: "registry"
+  graph: "graph"
+  skills: "skills"
+
+storage:
+  pdf_content_addressed: true
+  sha256_sharding: true  # ab/abcdef...pdf
+
+state_machine:
+  initial_state: "discovered"
+  final_state: "ready"
+
+adapters:
+  paper_fetch:
+    enabled: true
+  zotero:
+    enabled: true
+    local_mode: true
+  scansci:
+    enabled: false
+    scihub_enabled: false
+    require_authorized_access: true
+
+graphify:
+  auto_update: true
+  ignore_patterns:
+    - "sources/"
+    - "registry/"
+    - "**/source/"
+    - "**/*.pdf"
+    - "**/chunks.jsonl"
+    - "**/references.jsonl"
