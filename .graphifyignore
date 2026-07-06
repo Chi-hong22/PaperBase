@@ -1,0 +1,21 @@
+# 源文件和备份
+sources/
+**/source/
+**/*.pdf
+
+# Registry 和状态文件
+registry/
+**/manifest.json
+**/chunks.jsonl
+**/references.jsonl
+
+# 构建产物
+__pycache__/
+*.pyc
+.venv/
+uv.lock
+
+# 临时文件
+*.tmp
+*.log
+.DS_Store
