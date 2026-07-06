@@ -3,6 +3,7 @@
 import click
 from pathlib import Path
 from paperbase.cli.commands.status import status
+from paperbase.cli.commands.ingest import ingest
 
 
 @click.group()
@@ -22,6 +23,7 @@ def main(ctx, base_dir: Path):
 
 # 注册命令
 main.add_command(status)
+main.add_command(ingest)
 
 
 if __name__ == "__main__":
