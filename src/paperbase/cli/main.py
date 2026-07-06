@@ -4,6 +4,7 @@ import click
 from pathlib import Path
 from paperbase.cli.commands.status import status
 from paperbase.cli.commands.ingest import ingest
+from paperbase.cli.commands.graph import graph
 
 
 @click.group()
@@ -24,6 +25,7 @@ def main(ctx, base_dir: Path):
 # 注册命令
 main.add_command(status)
 main.add_command(ingest)
+main.add_command(graph)
 
 
 if __name__ == "__main__":
