@@ -12,15 +12,40 @@
 
 ## 快速开始
 
-```bash
-# 安装
-uv sync
+### 安装项目依赖
 
+```bash
+# 安装 Python 依赖
+uv sync
+```
+
+### 安装全局工具（必需）
+
+PaperBase 依赖以下全局工具，需要单独安装：
+
+```bash
+# 安装 graphify（知识图谱构建）
+uv tool install graphify
+
+# 安装 zotero-mcp（Zotero 集成）
+uv tool install zotero-mcp-server
+
+# 验证安装
+graphify --version
+zotero-cli --version
+```
+
+### 使用
+
+```bash
 # 摄入论文
 paperbase ingest "10.1038/s41586-026-10265-5"
 
 # 查询知识库
 paperbase search "machine learning"
+
+# 更新知识图谱
+paperbase graph update
 ```
 
 ## 文档
