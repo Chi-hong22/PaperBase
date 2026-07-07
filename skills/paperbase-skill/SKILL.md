@@ -25,6 +25,44 @@ Use this skill when the user wants to:
 - Check paper processing status and state
 - Update or query the knowledge graph
 - Manage their PaperBase library
+- **Diagnose environment issues**
+- **Get quick help with common operations**
+
+## Quick Start
+
+### Basic Commands (Most Common)
+
+```bash
+# Ingest a paper (open access recommended)
+/paperbase ingest arxiv:1706.03762
+
+# Check what papers you have
+/paperbase status
+
+# Search for content
+/paperbase search "deep learning"
+
+# Diagnose problems
+/paperbase doctor
+```
+
+### For AI Agents
+
+When invoking this skill, use the wrapper script for automatic path detection:
+
+```bash
+# Unix/Linux/macOS
+paperbase-wrapper.sh <command> <args>
+
+# Windows
+paperbase-wrapper.ps1 <command> <args>
+```
+
+The wrapper automatically:
+- ✅ Detects PaperBase library location
+- ✅ Validates uv is installed
+- ✅ Navigates to repository root
+- ✅ Executes the CLI command
 
 ## Commands
 
@@ -91,6 +129,42 @@ Manage the knowledge graph:
 - `/paperbase graph update --incremental` - Only update changed papers
 - `/paperbase graph update --force` - Force rebuild entire graph
 - `/paperbase graph status` - View graph statistics
+
+### Diagnostics
+
+Check environment and dependencies:
+
+```
+/paperbase doctor
+```
+
+**Output includes:**
+- ✅ Python version check (>= 3.11)
+- ✅ uv availability
+- ⚠️ graphify installation (optional)
+- ✅ SQLite version (FTS5 support)
+- ✅ Library location and paper count
+- ✅ Registry database status
+- ✅ Knowledge graph status
+
+**Example:**
+```
+/paperbase doctor
+
+# Output:
+🔍 PaperBase Doctor - Environment Diagnostics
+============================================================
+✅ Python Version            Python 3.11.5
+✅ uv Package Manager        uv 0.5.0
+⚠️  graphify (optional)      graphify not found (optional)
+✅ SQLite Version            SQLite 3.45.0 (FTS5 supported)
+✅ PaperBase Library         Library found (12 papers)
+✅ Registry Database         Registry database found (45.3 KB)
+✅ Knowledge Graph           Knowledge graph found (3 files)
+============================================================
+
+✅ All required checks passed!
+```
 
 ## Behavior
 

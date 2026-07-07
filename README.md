@@ -69,6 +69,26 @@ PDF → Markdown → 知识图谱 → 搜索/分析
 
 ## 🚀 快速开始
 
+### 🔍 安装前检查
+
+在开始之前，请确认以下条件：
+
+| 检查项 | 最低要求 | 如何检查 |
+|--------|---------|---------|
+| **Python 版本** | ≥ 3.11 | `python --version` 或 `python3 --version` |
+| **磁盘空间** | ≥ 2GB 可用空间 | Windows: `dir` / Unix: `df -h .` |
+| **网络连接** | 稳定（需下载依赖和 PDF） | `ping github.com` |
+| **Git** | 已安装 | `git --version` |
+
+**快速检查命令（可选）：**
+```bash
+# Unix/Linux/macOS
+python3 --version && git --version && df -h . | grep -v Filesystem
+
+# Windows PowerShell
+python --version; git --version; Get-PSDrive -Name (Get-Location).Drive.Name | Select-Object Free
+```
+
 ### 环境要求
 
 - Python 3.11+
@@ -284,17 +304,38 @@ cp -r skills/paperbase-skill ~/.claude/skills/
 
 论文通过状态机处理（定义在 `manifest.json` 中）：
 
-```
-DISCOVERED → RESOLVED → SOURCE_READY → CONVERTED → NORMALIZED → VALIDATED → GRAPHED → READY
+```mermaid
+graph LR
+    A[DISCOVERED<br/>已发现] --> B[RESOLVED<br/>已解析]
+    B --> C[SOURCE_READY<br/>PDF已下载]
+    C --> D[CONVERTED<br/>已转换]
+    D --> E[NORMALIZED<br/>已规范化]
+    E --> F[VALIDATED<br/>已验证]
+    F --> G[GRAPHED<br/>已图谱化]
+    G --> H[READY<br/>可用]
+    
+    style H fill:#90EE90
+    style A fill:#FFF9C4
+    style C fill:#BBDEFB
+    style E fill:#C5CAE9
+    style G fill:#B2DFDB
 ```
 
-- **DISCOVERED**: 识别论文标识（DOI/arXiv 等）
-- **SOURCE_READY**: PDF 已下载
-- **CONVERTED**: PDF 已转换为初步 Markdown
-- **NORMALIZED**: Markdown 已规范化（符合 schema）
-- **VALIDATED**: 通过 schema 验证
-- **GRAPHED**: 已加入知识图谱
-- **READY**: 可用状态
+**状态说明：**
+
+| 状态 | 英文 | 说明 | 典型耗时 |
+|------|------|------|---------|
+| 📥 已发现 | DISCOVERED | 识别论文标识（DOI/arXiv/etc） | <1s |
+| 🔍 已解析 | RESOLVED | 获取元数据（标题、作者等） | 1-3s |
+| 📄 PDF已下载 | SOURCE_READY | PDF 已下载到 sources/pdf/ | 5-30s |
+| 📝 已转换 | CONVERTED | PDF 转换为初步 Markdown | 5-15s |
+| ✨ 已规范化 | NORMALIZED | Markdown 已规范化（符合 schema） | 1-2s |
+| ✅ 已验证 | VALIDATED | 通过 Pydantic schema 验证 | <1s |
+| 🔗 已图谱化 | GRAPHED | 已加入知识图谱 | 2-10s |
+| 🎉 可用 | READY | 可用状态（最终状态） | - |
+
+**特殊状态：**
+- ⏸️ **BLOCKED**：处理失败，需手动干预（查看 manifest.json 中的 error_log）
 
 ### 核心模块
 
@@ -359,6 +400,141 @@ uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
 **为什么分离 PDF 存储？**
 - 内容寻址（SHA256）消除重复存储，同一 PDF 可被多篇论文元数据引用
 - 支持多来源场景：同一论文可能从 arXiv、期刊、会议获取不同版本
+
+---
+
+## ❓ 常见问题
+
+### Q1: 我已经有 Zotero 了，还需要 PaperBase 吗？
+
+**取决于使用场景：**
+
+| 需求 | 推荐工具 | 原因 |
+|------|---------|------|
+| 管理论文、插入引文到 Word | Zotero | 文献管理器的核心优势 |
+| 阅读 PDF、做标注 | Zotero | 内置 PDF 阅读器 |
+| **从 100 篇论文提取方法演进** | **PaperBase** | 知识图谱 + 结构化数据 |
+| **AI Agent 分析论文** | **PaperBase** | Markdown + Schema 验证 |
+| **构建领域知识图谱** | **PaperBase** | Graphify 关系查询 |
+
+**最佳实践**：两者结合使用
+- 在 Zotero 中管理论文和阅读
+- 通过 MCP 导入到 PaperBase 进行深度分析
+
+### Q2: graphify 是必需的吗？不装会怎样？
+
+**非必需**，但功能受限：
+
+| 功能 | 不装 graphify | 安装 graphify |
+|------|--------------|--------------|
+| 摄入论文 | ✅ 正常 | ✅ 正常 |
+| 搜索内容 | ✅ 正常 | ✅ 正常 |
+| 状态管理 | ✅ 正常 | ✅ 正常 |
+| **知识图谱** | ❌ `graph update` 命令不可用 | ✅ 完整功能 |
+| **引用关系查询** | ❌ 不可用 | ✅ 可用 |
+
+**安装命令**：
+```bash
+uv tool install graphify
+```
+
+如果安装失败，可以跳过，后续需要时再安装。
+
+### Q3: 为什么用 uv 而不是 pip？
+
+**uv 的优势：**
+- ⚡ **更快**：依赖解析速度提升 10-100 倍
+- 🔒 **更可靠**：锁文件机制（uv.lock）确保环境一致
+- 📦 **更简单**：集成虚拟环境管理、工具安装
+
+**如果必须用 pip**：
+```bash
+# 创建虚拟环境
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 安装依赖
+pip install -e .
+```
+
+但推荐使用 uv 以获得最佳体验。
+
+### Q4: 摄入卡住不动了怎么办？
+
+**诊断步骤：**
+
+1. **检查网络连接**
+   ```bash
+   ping github.com
+   curl -I https://arxiv.org
+   ```
+
+2. **中断并查看状态**
+   ```bash
+   # 按 Ctrl+C 中断
+   uv run paperbase status <paper_id>
+   ```
+
+3. **查看错误日志**
+   ```bash
+   # 查看 manifest.json 中的 error_log
+   cat library/papers/<storage_id>/manifest.json | grep error_log
+   ```
+
+**常见原因和解决方案：**
+
+| 症状 | 可能原因 | 解决方案 |
+|------|---------|---------|
+| 卡在 "Downloading PDF" | 网络慢、PDF 大 | 等待或换网络 |
+| 卡在 "Converting PDF" | PDF 加密/扫描版 | 手动解密或使用 OCR |
+| 状态为 BLOCKED | 处理失败 | 查看 manifest.json error_log |
+
+### Q5: PDF 转换结果为空怎么办？
+
+**原因**：
+- PDF 是扫描版（图片）
+- PDF 加密或有复制保护
+
+**解决方案：**
+1. **使用 OCR 工具预处理**（如 Adobe Acrobat、Tesseract）
+2. **手动编辑 paper.md**：
+   ```bash
+   # 查看转换结果
+   cat library/papers/<storage_id>/paper.md
+   
+   # 手动补充内容
+   vim library/papers/<storage_id>/paper.md
+   ```
+3. **跳过该论文**，使用其他来源（如 arXiv 版本）
+
+### Q6: 如何重置卡住的论文状态？
+
+**步骤：**
+
+1. **查看当前状态**
+   ```bash
+   uv run paperbase status <paper_id>
+   ```
+
+2. **编辑 manifest.json**
+   ```bash
+   vim library/papers/<storage_id>/manifest.json
+   ```
+
+3. **将 state 改为前一个状态**
+   ```json
+   {
+     "state": "SOURCE_READY",  // 从 BLOCKED 改为前一个有效状态
+     "error_log": []           // 可选：清空错误日志
+   }
+   ```
+
+4. **重新运行摄入**
+   ```bash
+   uv run paperbase ingest <paper_id>
+   ```
+
+---
 
 ## 🧪 开发指南
 

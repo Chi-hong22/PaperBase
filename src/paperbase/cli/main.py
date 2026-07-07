@@ -7,6 +7,7 @@ from paperbase.cli.commands.ingest import ingest
 from paperbase.cli.commands.graph import graph
 from paperbase.cli.commands.search import search
 from paperbase.cli.commands.query import query
+from paperbase.cli.commands.doctor import doctor
 
 
 @click.group()
@@ -30,6 +31,7 @@ main.add_command(ingest)
 main.add_command(graph)
 main.add_command(search)
 main.add_command(query)
+main.add_command(doctor)
 
 
 if __name__ == "__main__":
