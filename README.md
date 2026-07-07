@@ -161,6 +161,9 @@ uv run paperbase search "attention mechanism"
 
 # 更新知识图谱
 uv run paperbase graph update
+
+# 删除论文（硬删除，需确认）
+uv run paperbase remove "arxiv:1706.03762"
 ```
 
 论文存储为 `library/papers/<storage_id>/paper.md`，带有结构化 frontmatter。
