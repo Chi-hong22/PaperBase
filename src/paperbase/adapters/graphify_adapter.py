@@ -114,14 +114,30 @@ def get_graph_stats(graph_dir: Path) -> dict:
             "files": list[str]
         }
     """
-    if not graph_dir.exists():
-        return {"nodes": 0, "edges": 0, "files": []}
+    graph_dir = Path(graph_dir)
 
-    # 统计图谱文件
-    graph_files = list(graph_dir.glob("**/*.json"))
-
-    return {
-        "nodes": 0,  # TODO: 从图谱文件中解析
-        "edges": 0,  # TODO: 从图谱文件中解析
-        "files": [f.name for f in graph_files]
+    stats = {
+        "files": [],
+        "nodes": 0,
+        "edges": 0
     }
+
+    # 列出所有文件
+    if graph_dir.exists():
+        stats["files"] = [f.name for f in graph_dir.iterdir() if f.is_file()]
+
+    # 读取 graph.json 统计节点和边
+    graph_json = graph_dir / "graph.json"
+    if graph_json.exists():
+        try:
+            import json
+            with open(graph_json, "r", encoding="utf-8") as f:
+                graph_data = json.load(f)
+
+            stats["nodes"] = len(graph_data.get("nodes", []))
+            stats["edges"] = len(graph_data.get("edges", []))
+        except (json.JSONDecodeError, OSError):
+            # 优雅降级：解析失败时返回 0
+            pass
+
+    return stats
