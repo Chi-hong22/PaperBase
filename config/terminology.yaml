@@ -1,0 +1,210 @@
+# Terminology Library for Entity Fuzzy Matching
+#
+# Structure:
+#   aliases:
+#     <category>:
+#       <canonical_term>:
+#         - <variant1>
+#         - <variant2>
+#
+# Categories: methods, datasets, domains, platforms, constraints
+#
+# Matching rules:
+# - Case-insensitive matching
+# - Both canonical term and variants can be matched
+# - Returns canonical term when matched
+# - Preserves original term if no match found
+
+aliases:
+  methods:
+    # Mapping methods
+    submap:
+      - submapping
+      - sub-map
+      - local map
+      - local mapping
+      - submap-based
+
+    occupancy_grid:
+      - occupancy map
+      - grid map
+      - occupancy-grid
+
+    # Loop closure
+    loop_closure:
+      - loop detection
+      - place recognition
+      - loop closing
+      - closure detection
+
+    # SLAM variants
+    SLAM:
+      - slam
+      - Simultaneous Localization and Mapping
+      - simultaneous localization and mapping
+
+    visual_SLAM:
+      - visual slam
+      - vSLAM
+      - vision-based SLAM
+
+    # Localization
+    particle_filter:
+      - Particle Filter
+      - PF
+      - particle filtering
+
+    extended_kalman_filter:
+      - Extended Kalman Filter
+      - EKF
+      - extended KF
+
+    # Feature detection
+    SIFT:
+      - sift
+      - Scale-Invariant Feature Transform
+
+    ORB:
+      - orb
+      - Oriented FAST and Rotated BRIEF
+
+    # Deep learning
+    CNN:
+      - cnn
+      - convolutional neural network
+      - Convolutional Neural Network
+
+    transformer:
+      - Transformer
+      - attention mechanism
+
+    BERT:
+      - bert
+      - Bidirectional Encoder Representations from Transformers
+
+  datasets:
+    # Vision datasets
+    KITTI:
+      - kitti
+      - Kitti
+
+    ImageNet:
+      - imagenet
+      - image-net
+
+    COCO:
+      - coco
+      - MS COCO
+      - Microsoft COCO
+
+    # Underwater datasets
+    AQUALOC:
+      - aqualoc
+      - Aqualoc
+      - AQUALOC dataset
+
+    # NLP datasets
+    IMDB:
+      - imdb
+      - IMDb
+
+  domains:
+    # Robotics
+    underwater_navigation:
+      - underwater SLAM
+      - subsea navigation
+      - underwater localization
+
+    autonomous_driving:
+      - self-driving
+      - autonomous vehicles
+      - autonomous navigation
+
+    aerial_navigation:
+      - drone navigation
+      - UAV navigation
+      - aerial SLAM
+
+    # NLP
+    sentiment_analysis:
+      - sentiment classification
+      - opinion mining
+
+    machine_translation:
+      - neural machine translation
+      - NMT
+
+    # CV
+    object_detection:
+      - object recognition
+      - detection
+
+    image_classification:
+      - image recognition
+      - classification
+
+  platforms:
+    # Robots
+    AUV:
+      - autonomous underwater vehicle
+      - underwater robot
+      - underwater vehicle
+      - submersible
+
+    UAV:
+      - drone
+      - unmanned aerial vehicle
+      - quadcopter
+
+    UGV:
+      - unmanned ground vehicle
+      - ground robot
+
+    # Hardware
+    GPU:
+      - gpu
+      - graphics processing unit
+      - CUDA device
+
+    mobile_device:
+      - smartphone
+      - mobile phone
+      - embedded device
+
+    edge_device:
+      - edge computing device
+      - IoT device
+
+  constraints:
+    # Performance constraints
+    real-time:
+      - real time
+      - realtime
+      - online
+      - low latency
+
+    low_power:
+      - power-efficient
+      - energy-efficient
+      - battery-constrained
+
+    limited_memory:
+      - memory-constrained
+      - low memory
+      - memory-limited
+
+    # Environmental constraints
+    underwater:
+      - subsea
+      - marine environment
+      - aquatic
+
+    low_visibility:
+      - poor visibility
+      - turbid water
+      - low-light
+
+    dynamic_environment:
+      - changing environment
+      - non-static
+      - moving objects
