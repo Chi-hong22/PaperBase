@@ -4,7 +4,23 @@ Canonical Markdown frontmatter 的 pydantic 模型
 """
 
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def validate_iso8601_timestamp(v: str | None) -> str | None:
+    """验证 ISO 8601 时间戳格式"""
+    if v is None:
+        return v
+
+    try:
+        # 必须包含 'T' 分隔符，确保是完整的日期时间格式
+        if 'T' not in v:
+            raise ValueError(f"时间戳必须符合 ISO 8601 格式，收到: {v}")
+
+        datetime.fromisoformat(v.replace("Z", "+00:00"))
+        return v
+    except (ValueError, AttributeError):
+        raise ValueError(f"时间戳必须符合 ISO 8601 格式，收到: {v}")
 
 
 class PaperAuthor(BaseModel):
@@ -43,6 +59,11 @@ class PaperProvenance(BaseModel):
     normalizer: dict[str, str]  # {name, version}
     source_pdf_sha256: str | None = None
     canonical_content_sha256: str
+
+    @field_validator("ingested_at")
+    @classmethod
+    def validate_ingested_at(cls, v: str) -> str:
+        return validate_iso8601_timestamp(v)
 
 
 class PaperAssets(BaseModel):
