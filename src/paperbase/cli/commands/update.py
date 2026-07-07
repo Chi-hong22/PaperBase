@@ -3,7 +3,6 @@
 import click
 import json
 from rich.console import Console
-from pathlib import Path
 from paperbase.core.entity_manager import EntityManager
 from paperbase.core.registry import PaperRegistry
 

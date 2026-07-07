@@ -108,7 +108,7 @@ def test_update_replace_mode(runner, test_paper):
     ])
 
     assert result.exit_code == 0
-    assert "成功更新实体" in result.output or "Successfully updated entities" in result.output
+    assert "成功更新实体" in result.output
 
     # 验证 paper.md 被更新
     paths = test_paper["paths"]
@@ -170,7 +170,7 @@ def test_update_invalid_paper_id(runner, test_paper):
     ])
 
     assert result.exit_code == 1
-    assert "未找到论文" in result.output or "Paper not found" in result.output
+    assert "未找到论文" in result.output
 
 
 def test_update_invalid_json(runner, test_paper):
@@ -248,4 +248,4 @@ def test_update_schema_validation_error(runner, test_paper):
     ])
 
     assert result.exit_code == 1
-    assert "验证失败" in result.output or "validation" in result.output.lower()
+    assert "验证失败" in result.output
