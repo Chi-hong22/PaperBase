@@ -70,6 +70,7 @@ class GraphInfo(BaseModel):
     """图谱索引信息"""
     indexed: bool = False
     updated_at: str | None = None
+    content_sha256_at_index: str | None = None  # 新增：记录图谱化时的内容 SHA256
 
 
 class ManifestSchema(BaseModel):
