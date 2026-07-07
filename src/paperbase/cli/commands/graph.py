@@ -13,6 +13,7 @@ from paperbase.core.registry import PaperRegistry
 from paperbase.core.manifest import load_manifest, save_manifest
 from paperbase.core.paths import PaperPaths
 from paperbase.schemas.manifest import PaperState, GraphInfo
+from paperbase.core.graph_updater import detect_changed_papers
 
 
 @click.group()
@@ -27,13 +28,23 @@ def graph():
     is_flag=True,
     help="强制重建图谱（删除现有数据）"
 )
+@click.option(
+    "--incremental",
+    is_flag=True,
+    help="仅更新内容发生变化的论文"
+)
 @click.pass_context
-def update(ctx, force: bool):
+def update(ctx, force: bool, incremental: bool):
     """更新知识图谱"""
     console = Console()
     base_dir = ctx.obj["base_dir"]
 
     console.print("[cyan]开始更新知识图谱...[/cyan]")
+
+    # 互斥检查
+    if force and incremental:
+        console.print("[red]❌ --force 和 --incremental 不能同时使用[/red]")
+        raise click.Abort()
 
     # Step 1: 检查 graphify 是否安装
     console.print("[yellow]1. 检查 graphify 安装...[/yellow]")
@@ -44,20 +55,40 @@ def update(ctx, force: bool):
 
     console.print("   ✓ graphify 已安装")
 
-    # Step 2: 检查是否有 NORMALIZED 论文
-    console.print("[yellow]2. 检查待图谱化的论文...[/yellow]")
-    registry_path = base_dir / "registry" / "papers.db"
-    if not registry_path.exists():
-        console.print("[red]❌ Registry 不存在，请先摄入论文[/red]")
-        raise click.Abort()
+    # Step 2: 增量模式检测
+    library_dir = base_dir / "library"
+    if incremental:
+        console.print("[yellow]2. 检测内容变化的论文（增量模式）...[/yellow]")
+        changed_papers = detect_changed_papers(library_dir)
 
-    registry = PaperRegistry(registry_path)
-    normalized_papers = registry.list_papers(state=PaperState.NORMALIZED)
-    all_papers = registry.list_papers()
-    registry.close()
+        if not changed_papers:
+            console.print("   ✓ 没有论文需要更新")
+            console.print("\n[green]✅ 图谱已是最新状态[/green]")
+            return
 
-    console.print(f"   找到 {len(normalized_papers)} 篇待图谱化论文")
-    console.print(f"   总计 {len(all_papers)} 篇论文")
+        console.print(f"   找到 {len(changed_papers)} 篇需要更新的论文：")
+        for paper in changed_papers[:5]:  # 最多显示 5 篇
+            console.print(f"     - {paper['paper_id']}: {paper['reason']}")
+        if len(changed_papers) > 5:
+            console.print(f"     ... 还有 {len(changed_papers) - 5} 篇")
+
+        # 增量模式下，只更新变化的论文
+        normalized_papers = changed_papers
+    else:
+        # Step 2: 检查是否有 NORMALIZED 论文（全量模式）
+        console.print("[yellow]2. 检查待图谱化的论文...[/yellow]")
+        registry_path = base_dir / "registry" / "papers.db"
+        if not registry_path.exists():
+            console.print("[red]❌ Registry 不存在，请先摄入论文[/red]")
+            raise click.Abort()
+
+        registry = PaperRegistry(registry_path)
+        normalized_papers = registry.list_papers(state=PaperState.NORMALIZED)
+        all_papers = registry.list_papers()
+        registry.close()
+
+        console.print(f"   找到 {len(normalized_papers)} 篇待图谱化论文")
+        console.print(f"   总计 {len(all_papers)} 篇论文")
 
     # Step 3: 运行 graphify
     console.print("[yellow]3. 运行 graphify...[/yellow]")
@@ -88,7 +119,8 @@ def update(ctx, force: bool):
 
     # Step 5: 更新 manifest 和 registry
     console.print("[yellow]5. 更新论文状态...[/yellow]")
-    registry = PaperRegistry(registry_path)
+    if not incremental:
+        registry = PaperRegistry(registry_path)
     updated_count = 0
     now = datetime.now(UTC).isoformat() + "Z"
 
@@ -101,17 +133,24 @@ def update(ctx, force: bool):
         if paths.manifest_json.exists():
             manifest = load_manifest(paths.manifest_json)
             manifest.state = PaperState.GRAPHED
+
+            # 记录图谱化时的内容 SHA256
+            content_sha256 = manifest.canonical_md.sha256 if manifest.canonical_md else None
+
             manifest.graph = GraphInfo(
                 indexed=True,
-                updated_at=now
+                updated_at=now,
+                content_sha256_at_index=content_sha256
             )
             save_manifest(manifest, paths.manifest_json)
 
         # 更新 registry
-        registry.update_state(paper_id, PaperState.GRAPHED)
+        if not incremental:
+            registry.update_state(paper_id, PaperState.GRAPHED)
         updated_count += 1
 
-    registry.close()
+    if not incremental:
+        registry.close()
     console.print(f"   ✓ 更新了 {updated_count} 篇论文")
 
     console.print(f"\n[green]✅ 知识图谱更新完成![/green]")
