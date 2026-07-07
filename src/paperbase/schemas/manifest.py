@@ -46,6 +46,14 @@ class SourcePDF(BaseModel):
     sha256: str
     acquired_at: str
 
+    @field_validator("sha256")
+    @classmethod
+    def validate_sha256(cls, v: str) -> str:
+        import re
+        if not re.match(r'^[a-f0-9]{64}$', v):
+            raise ValueError(f"SHA256 必须是 64 位小写十六进制，收到: {v}")
+        return v
+
     @field_validator("acquired_at")
     @classmethod
     def validate_acquired_at(cls, v: str) -> str:
