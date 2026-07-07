@@ -29,6 +29,51 @@ adapters:
     scihub_enabled: false
     require_authorized_access: true
 
+llm:
+  # 内部 LLM 配置（可选）
+  # 如果不配置，PaperBase 仍可正常使用（由外部 Agent 提供 LLM）
+  enabled: false  # 是否启用内部 LLM
+
+  # OpenAI-compatible API 配置
+  # 支持：OpenAI、Anthropic (via proxy)、Ollama、vLLM、LM Studio 等
+  base_url: ${PAPERBASE_LLM_BASE_URL}  # API 端点
+  api_key: ${PAPERBASE_LLM_API_KEY}    # API 密钥（本地 LLM 可留空或设为 "not-required"）
+  model: ${PAPERBASE_LLM_MODEL}        # 模型名称
+
+  # 提取配置
+  auto_extract_on_ingest: false  # ingest 时是否自动提取实体
+  extract_timeout: 30  # 超时（秒）
+
+  # 提取范围（降低成本）
+  max_content_length: 4000  # 最大输入长度（字符）
+
+# 示例配置：
+#
+# OpenAI:
+#   export PAPERBASE_LLM_BASE_URL="https://api.openai.com/v1"
+#   export PAPERBASE_LLM_API_KEY="sk-xxx"
+#   export PAPERBASE_LLM_MODEL="gpt-4o-mini"
+#
+# Anthropic (通过 OpenAI-compatible proxy):
+#   export PAPERBASE_LLM_BASE_URL="https://anthropic-proxy.example.com/v1"
+#   export PAPERBASE_LLM_API_KEY="sk-ant-xxx"
+#   export PAPERBASE_LLM_MODEL="claude-3-5-sonnet-20241022"
+#
+# Ollama 本地:
+#   export PAPERBASE_LLM_BASE_URL="http://localhost:11434/v1"
+#   export PAPERBASE_LLM_API_KEY="not-required"
+#   export PAPERBASE_LLM_MODEL="llama3.2"
+#
+# vLLM / LM Studio:
+#   export PAPERBASE_LLM_BASE_URL="http://localhost:8000/v1"
+#   export PAPERBASE_LLM_API_KEY="not-required"
+#   export PAPERBASE_LLM_MODEL="meta-llama/Llama-2-7b-hf"
+
+# 术语库配置
+terminology:
+  fuzzy_matching: true
+  custom_aliases: []  # 用户自定义别名
+
 graphify:
   auto_update: true
   ignore_patterns:
@@ -38,3 +83,11 @@ graphify:
     - "**/*.pdf"
     - "**/chunks.jsonl"
     - "**/references.jsonl"
+
+# 图谱更新配置
+graph:
+  auto_update: true           # 默认自动更新
+  update_mode: incremental    # 默认增量更新（也可设为 full）
+  auto_update_on:
+    - entity_change           # entities 字段修改时触发
+    - paper_ingest            # 新论文摄入时触发
