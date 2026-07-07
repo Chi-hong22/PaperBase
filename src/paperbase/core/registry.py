@@ -121,6 +121,14 @@ class PaperRegistry:
             results.append(result)
         return results
 
+    def delete_paper(self, paper_id: str):
+        """删除论文记录"""
+        self.conn.execute(
+            "DELETE FROM papers WHERE paper_id = ?",
+            (paper_id,)
+        )
+        self.conn.commit()
+
     def close(self):
         """关闭连接"""
         self.conn.close()

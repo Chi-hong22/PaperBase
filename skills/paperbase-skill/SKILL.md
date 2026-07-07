@@ -59,10 +59,12 @@ paperbase-wrapper.ps1 <command> <args>
 ```
 
 The wrapper automatically:
-- ✅ Detects PaperBase library location
+- ✅ Detects PaperBase library location (with configuration persistence)
+- ✅ Remembers library paths across sessions (stores in `workspaces.json`)
 - ✅ Validates uv is installed
 - ✅ Navigates to repository root
 - ✅ Executes the CLI command
+- ✅ Compatible with both `~/.claude/skills` and `~/.codex/skills`
 
 ## Commands
 
@@ -146,6 +148,25 @@ Check environment and dependencies:
 - ✅ Library location and paper count
 - ✅ Registry database status
 - ✅ Knowledge graph status
+
+### Remove Papers
+
+Permanently delete papers (hard delete, irreversible):
+
+```
+/paperbase remove <paper_id>
+/paperbase remove <paper_id> --confirm
+```
+
+**Examples:**
+- `/paperbase remove doi:10.1038/nature12373` - Delete with interactive confirmation
+- `/paperbase remove arxiv:1706.03762 --confirm` - Delete without confirmation (dangerous)
+
+**Warning:** This operation:
+- ❌ Permanently deletes all files (paper.md, source PDF, metadata)
+- ❌ Removes registry entries
+- ❌ Cannot be undone
+- ⚠️ Requires manual knowledge graph update after deletion
 
 **Example:**
 ```

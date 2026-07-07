@@ -8,6 +8,7 @@ from paperbase.cli.commands.graph import graph
 from paperbase.cli.commands.search import search
 from paperbase.cli.commands.query import query
 from paperbase.cli.commands.doctor import doctor
+from paperbase.cli.commands.remove import remove
 
 
 @click.group()
@@ -32,6 +33,7 @@ main.add_command(graph)
 main.add_command(search)
 main.add_command(query)
 main.add_command(doctor)
+main.add_command(remove)
 
 
 if __name__ == "__main__":
