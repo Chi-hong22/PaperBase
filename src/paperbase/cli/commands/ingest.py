@@ -133,7 +133,7 @@ def ingest(ctx, pdf_path: Path | None, no_graph: bool, batch: Path | None):
         )
         registry.close()
 
-        console.print(f"\n[green]✅ 摄入完成![/green]")
+        console.print(f"\n[green]✅ 论文已注册到知识库[/green]")
         console.print(f"   路径: {paths.paper_dir}")
         console.print(f"   状态: {PaperState.NORMALIZED.value}")
 
@@ -190,6 +190,10 @@ def ingest(ctx, pdf_path: Path | None, no_graph: bool, batch: Path | None):
         else:
             console.print("\n[yellow]ℹ️  跳过图谱更新（--no-graph）[/yellow]")
             console.print("   稍后可运行: [cyan]paperbase graph update[/cyan]")
+
+        # 摄入流程完成
+        console.print(f"\n[green]✅ 摄入完成![/green]")
+        console.print(f"   论文已成功添加到知识库")
 
     except Exception as e:
         console.print(f"\n[red]❌ 摄入失败: {e}[/red]")
