@@ -149,6 +149,57 @@ Check environment and dependencies:
 - ✅ Registry database status
 - ✅ Knowledge graph status
 
+### Entity Management (NEW)
+
+Update paper entities for structured queries and graph relationships:
+
+```
+/paperbase update <paper_id> --json '<entities_json>'
+/paperbase update <paper_id> --merge --json '<entities_json>'
+/paperbase update <paper_id> --output-json --json '<entities_json>'
+```
+
+**Entity Categories:**
+- `methods`: Algorithms, models, techniques (e.g., SLAM, Transformer, submap)
+- `datasets`: Training/evaluation datasets (e.g., ImageNet, KITTI, AQUALOC)
+- `domains`: Application areas (e.g., AUV navigation, sentiment analysis, object detection)
+- `platforms`: Hardware/software platforms (e.g., AUV, GPU, mobile device)
+- `constraints`: Key limitations (e.g., underwater environment, real-time requirement)
+
+**Examples:**
+- `/paperbase update doi:10.1038/nature --json '{"methods": [{"name": "SLAM"}]}'` - Replace entities
+- `/paperbase update arxiv:1706.03762 --merge --json '{"datasets": [{"name": "ImageNet"}]}'` - Append entities
+- `/paperbase update doi:10.1038/nature --output-json --json '{"domains": [{"name": "CV"}]}'` - JSON output for parsing
+
+**Entity Format:**
+```json
+{
+  "methods": [
+    {"name": "submap", "type": "mapping"},
+    {"name": "Particle Filter", "type": "localization"}
+  ],
+  "datasets": [
+    {"name": "AQUALOC"}
+  ],
+  "domains": [
+    {"name": "AUV navigation"},
+    {"name": "underwater SLAM"}
+  ],
+  "platforms": [
+    {"name": "AUV"}
+  ],
+  "constraints": [
+    {"name": "underwater environment"}
+  ]
+}
+```
+
+**Auto-Extract (Optional):**
+If internal LLM is configured (`config/paperbase.yaml`), entities are automatically extracted during `ingest`:
+- ✅ Extracts entities from paper abstract using LLM
+- ✅ Normalizes terminology using `config/terminology.yaml`
+- ⚠️ Optional: requires OpenAI-compatible API configuration
+
 ### Remove Papers
 
 Permanently delete papers (hard delete, irreversible):
