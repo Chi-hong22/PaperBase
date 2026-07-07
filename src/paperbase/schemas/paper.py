@@ -35,6 +35,14 @@ class PaperVenue(BaseModel):
     name: str
     type: str  # journal, conference, preprint
 
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v: str) -> str:
+        allowed = {"journal", "conference", "preprint"}
+        if v not in allowed:
+            raise ValueError(f"type 必须是 {allowed} 之一，收到: {v}")
+        return v
+
 
 class PaperIdentifiers(BaseModel):
     """论文标识符"""
@@ -50,6 +58,14 @@ class PaperSource(BaseModel):
     discovery: str  # zotero, search, manual
     fulltext_provider: str | None = None  # paper-fetch, manual
     original_url: str | None = None
+
+    @field_validator("discovery")
+    @classmethod
+    def validate_discovery(cls, v: str) -> str:
+        allowed = {"zotero", "search", "manual"}
+        if v not in allowed:
+            raise ValueError(f"discovery 必须是 {allowed} 之一，收到: {v}")
+        return v
 
 
 class PaperProvenance(BaseModel):
@@ -81,6 +97,14 @@ class PaperChunks(BaseModel):
     """分块信息"""
     path: str = "./chunks.jsonl"
     strategy: str = "section-aware-v1"
+
+    @field_validator("strategy")
+    @classmethod
+    def validate_strategy(cls, v: str) -> str:
+        allowed = {"section-aware-v1"}
+        if v not in allowed:
+            raise ValueError(f"strategy 必须是 {allowed} 之一，收到: {v}")
+        return v
 
 
 class PaperQuality(BaseModel):
