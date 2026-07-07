@@ -32,6 +32,16 @@ PaperBase 是论文知识库脚手架，核心理念：
 - Manifest: `src/paperbase/schemas/manifest.py` - `ManifestSchema`
 - CSL JSON: `src/paperbase/schemas/csl.py` - `CSLItem`
 
+## 验证规则
+
+所有 schema 包含严格验证规则：
+- 时间戳：ISO 8601 格式
+- 年份：1000-2100
+- SHA256：64 位小写十六进制
+- 枚举：严格匹配
+
+详见 `docs/schemas/validation-rules.md`。
+
 ## 修改边界
 
 **可修改：**

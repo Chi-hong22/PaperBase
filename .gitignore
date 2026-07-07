@@ -57,3 +57,23 @@ graph/
 Thumbs.db
 *.tmp
 *.log
+
+# Development process artifacts
+PHASE*.md
+TASK*.md
+INGEST_VERIFICATION.md
+*_REPORT.md
+*_PROGRESS*.md
+*_PLANNING*.md
+知识库思路讨论.txt
+docs/superpowers/plans/
+.superpowers
+
+# Manual test scripts (可能包含真实论文标识)
+test_*_manual.py
+quick_*.py
+scripts/verify_*.py
+
+# Agent workspace
+.agents/
+.codex/
