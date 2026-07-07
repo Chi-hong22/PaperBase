@@ -137,6 +137,46 @@ def ingest(ctx, pdf_path: Path | None, no_graph: bool, batch: Path | None):
         console.print(f"   路径: {paths.paper_dir}")
         console.print(f"   状态: {PaperState.NORMALIZED.value}")
 
+        # Step 9.5: 自动提取实体（如果 LLM 已配置）
+        console.print("\n[cyan]检查实体提取...[/cyan]")
+        try:
+            from paperbase.core.entity_manager import EntityManager
+
+            entity_manager = EntityManager(base_dir=base_dir)
+
+            if entity_manager.llm_client.enabled:
+                console.print("  [yellow]内部 LLM 已启用，正在提取实体...[/yellow]")
+
+                try:
+                    entities = entity_manager.auto_extract_entities(paper_id, storage_id)
+
+                    if entities:
+                        console.print("[green]✅ 实体已自动提取（内部 LLM）[/green]")
+                        for category, items in entities.items():
+                            if items:
+                                names = [e.get("name", "") for e in items]
+                                console.print(f"   {category}: {', '.join(names[:3])}")
+                                if len(names) > 3:
+                                    console.print(f"      ... 及其他 {len(names) - 3} 项")
+                    else:
+                        console.print("[yellow]⚠️  实体提取失败或返回空[/yellow]")
+                        console.print("   论文已摄入，可稍后手动填充实体")
+
+                except Exception as e:
+                    console.print(f"[yellow]⚠️  实体提取异常: {e}[/yellow]")
+                    console.print("   论文已摄入，可稍后手动填充实体")
+            else:
+                console.print("[yellow]ℹ️  内部 LLM 未配置，跳过自动提取[/yellow]")
+                console.print("   提示：")
+                console.print("   1. 配置内部 LLM: 编辑 config/paperbase.yaml")
+                console.print("   2. 使用外部 Agent: 让 Claude Code/Codex 调用 'paperbase update'")
+                console.print("   3. 手动填充: paperbase update <paper_id> --json '{{...}}'")
+
+        except ImportError as e:
+            console.print(f"[yellow]⚠️  无法导入 EntityManager: {e}[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow]⚠️  实体提取检查失败: {e}[/yellow]")
+
         # Step 10: 更新图谱（可选）
         if not no_graph:
             console.print("\n[yellow]10. 更新知识图谱...[/yellow]")
