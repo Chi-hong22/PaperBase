@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-import yaml
+from paperbase.utils.markdown import parse_frontmatter
 
 
 class EntityGraphBuilder:
@@ -67,7 +67,7 @@ class EntityGraphBuilder:
                 with open(paper_md, "r", encoding="utf-8") as f:
                     content = f.read()
 
-                frontmatter = self._parse_frontmatter(content)
+                frontmatter, _ = parse_frontmatter(content)
 
                 # 提取 entities 字段
                 entities = frontmatter.get("entities", {})
@@ -178,28 +178,3 @@ class EntityGraphBuilder:
             # 再写入所有边
             for edge in edges:
                 f.write(json.dumps(edge, ensure_ascii=False) + "\n")
-
-    def _parse_frontmatter(self, content: str) -> dict:
-        """
-        解析 YAML frontmatter
-
-        Args:
-            content: Markdown 内容
-
-        Returns:
-            frontmatter 字典
-
-        Raises:
-            ValueError: frontmatter 格式错误
-        """
-        parts = content.split("---\n")
-
-        if len(parts) < 3:
-            raise ValueError("Invalid frontmatter format")
-
-        frontmatter = yaml.safe_load(parts[1])
-
-        if not isinstance(frontmatter, dict):
-            raise ValueError("Frontmatter must be a dictionary")
-
-        return frontmatter
