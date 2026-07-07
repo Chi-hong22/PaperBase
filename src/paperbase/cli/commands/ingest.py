@@ -17,14 +17,30 @@ import yaml
 
 
 @click.command()
-@click.argument("pdf_path", type=click.Path(exists=True, path_type=Path))
+@click.argument("pdf_path", type=click.Path(exists=True, path_type=Path), required=False)
 @click.option("--no-graph", is_flag=True, help="跳过图谱更新")
+@click.option("--batch", type=click.Path(exists=True, path_type=Path), help="批量摄入文件列表（每行一个路径）")
 @click.pass_context
-def ingest(ctx, pdf_path: Path, no_graph: bool):
+def ingest(ctx, pdf_path: Path | None, no_graph: bool, batch: Path | None):
     """摄入论文 PDF"""
     console = Console()
     base_dir = ctx.obj["base_dir"]
 
+    # 互斥检查
+    if pdf_path and batch:
+        console.print("[red]❌ 不能同时使用 PDF_PATH 和 --batch[/red]")
+        raise click.Abort()
+
+    if not pdf_path and not batch:
+        console.print("[red]❌ 必须提供 PDF_PATH 或 --batch[/red]")
+        raise click.Abort()
+
+    # 批量模式
+    if batch:
+        _ingest_batch(ctx, batch, no_graph)
+        return
+
+    # 单文件模式
     console.print(f"[cyan]开始摄入论文:[/cyan] {pdf_path.name}")
 
     try:
@@ -152,3 +168,64 @@ def generate_canonical_markdown(metadata: "PaperMetadata", body: str) -> str:
     canonical = f"---\n{frontmatter_yaml}---\n\n{body}"
 
     return canonical
+
+
+def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
+    """批量摄入论文"""
+    console = Console()
+    base_dir = ctx.obj["base_dir"]
+
+    console.print(f"[cyan]批量摄入模式:[/cyan] {batch_file.name}")
+
+    # 读取文件列表
+    try:
+        pdf_paths = []
+        with open(batch_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    pdf_path = Path(line)
+                    if not pdf_path.exists():
+                        console.print(f"[yellow]⚠️  跳过不存在的文件: {line}[/yellow]")
+                        continue
+                    pdf_paths.append(pdf_path)
+
+        console.print(f"[cyan]找到 {len(pdf_paths)} 个有效 PDF 文件[/cyan]\n")
+
+        # 逐个摄入（跳过图谱）
+        success_count = 0
+        failed_count = 0
+
+        for i, pdf_path in enumerate(pdf_paths, 1):
+            console.print(f"[cyan]--- [{i}/{len(pdf_paths)}] {pdf_path.name} ---[/cyan]")
+            try:
+                # 调用单文件摄入逻辑，强制跳过图谱
+                ctx.invoke(ingest, pdf_path=pdf_path, no_graph=True, batch=None)
+                success_count += 1
+            except Exception as e:
+                console.print(f"[red]❌ 摄入失败: {e}[/red]")
+                failed_count += 1
+
+            console.print()  # 空行分隔
+
+        # 统计
+        console.print(f"[cyan]批量摄入完成:[/cyan]")
+        console.print(f"  成功: {success_count} 篇")
+        console.print(f"  失败: {failed_count} 篇")
+
+        # 统一更新图谱
+        if not no_graph and success_count > 0:
+            console.print("\n[yellow]开始统一更新知识图谱...[/yellow]")
+            try:
+                from paperbase.cli.commands.graph import update as graph_update
+                ctx.invoke(graph_update, force=False)
+            except Exception as e:
+                console.print(f"[yellow]⚠️  图谱更新失败: {e}[/yellow]")
+                console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
+        elif no_graph:
+            console.print("\n[yellow]ℹ️  跳过图谱更新（--no-graph）[/yellow]")
+            console.print("   稍后可运行: [cyan]paperbase graph update[/cyan]")
+
+    except Exception as e:
+        console.print(f"[red]❌ 批量摄入失败: {e}[/red]")
+        raise
