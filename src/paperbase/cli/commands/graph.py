@@ -14,6 +14,7 @@ from paperbase.core.manifest import load_manifest, save_manifest
 from paperbase.core.paths import PaperPaths
 from paperbase.schemas.manifest import PaperState, GraphInfo
 from paperbase.core.graph_updater import detect_changed_papers
+from paperbase.core.entity_graph_builder import EntityGraphBuilder
 
 
 @click.group()
@@ -179,3 +180,76 @@ def status(ctx):
         console.print(f"  文件列表:")
         for f in stats['files']:
             console.print(f"    - {f}")
+
+
+@graph.command()
+@click.option(
+    "--output",
+    type=click.Path(),
+    default=None,
+    help="输出文件路径（默认: graph/entities.jsonl）"
+)
+@click.pass_context
+def build_entities(ctx, output: str | None):
+    """构建实体图谱（从 paper.md 的 entities 字段）"""
+    console = Console()
+    base_dir = ctx.obj["base_dir"]
+
+    console.print("[cyan]开始构建实体图谱...[/cyan]")
+
+    # Step 1: 设置输出路径
+    if output:
+        output_path = Path(output)
+    else:
+        output_path = base_dir / "graph" / "entities.jsonl"
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Step 2: 提取实体
+    console.print("[yellow]1. 提取论文实体...[/yellow]")
+    library_dir = base_dir / "library"
+
+    if not library_dir.exists():
+        console.print("[red]❌ library 目录不存在[/red]")
+        raise click.Abort()
+
+    builder = EntityGraphBuilder(base_dir=base_dir)
+    entities_dict = builder.extract_all_entities(library_dir)
+
+    console.print(f"   ✓ 从 {len(entities_dict)} 篇论文提取实体")
+
+    if not entities_dict:
+        console.print("[yellow]⚠ 没有找到包含 entities 的论文[/yellow]")
+        return
+
+    # Step 3: 生成节点
+    console.print("[yellow]2. 生成实体节点...[/yellow]")
+    nodes = builder.build_entity_nodes(entities_dict)
+    console.print(f"   ✓ 生成 {len(nodes)} 个唯一实体节点")
+
+    # Step 4: 生成边
+    console.print("[yellow]3. 生成关系边...[/yellow]")
+    edges = builder.build_entity_edges(entities_dict)
+    console.print(f"   ✓ 生成 {len(edges)} 条关系边")
+
+    # Step 5: 导出 JSONL
+    console.print("[yellow]4. 导出 JSONL...[/yellow]")
+    builder.export_to_jsonl(nodes, edges, output_path)
+    console.print(f"   ✓ 已导出到 {output_path}")
+
+    # 统计信息
+    console.print(f"\n[green]✅ 实体图谱构建完成![/green]")
+    console.print(f"   输出文件: {output_path}")
+    console.print(f"   节点数: {len(nodes)}")
+    console.print(f"   边数: {len(edges)}")
+    console.print(f"   总对象数: {len(nodes) + len(edges)}")
+
+    # 显示实体类别分布
+    category_stats = {}
+    for node in nodes:
+        category = node["category"]
+        category_stats[category] = category_stats.get(category, 0) + 1
+
+    console.print(f"\n   实体类别分布:")
+    for category, count in sorted(category_stats.items()):
+        console.print(f"     - {category}: {count}")
