@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import pytest
 from click.testing import CliRunner
-from paperbase.cli.main import cli
+from paperbase.cli.main import main as cli
 
 
 @pytest.fixture

@@ -12,8 +12,8 @@ from paperbase.adapters.pdf_converter import convert_pdf_to_markdown
 from paperbase.core.normalizer import normalize_paper
 from paperbase.schemas.manifest import PaperState, SourcePDF, CanonicalMD, PipelineInfo
 from paperbase.utils.hash import sha256_file, sha256_string
+from paperbase.utils.markdown import generate_canonical_markdown
 import shutil
-import yaml
 
 
 @click.command()
@@ -92,7 +92,9 @@ def ingest(ctx, pdf_path: Path | None, no_graph: bool, batch: Path | None):
 
         # Step 7: 生成 Canonical Markdown
         console.print("[yellow]7. 生成 Canonical Markdown...[/yellow]")
-        canonical_md = generate_canonical_markdown(paper_metadata, candidate_md)
+        # 转换 PaperMetadata 为字典
+        metadata_dict = paper_metadata.model_dump(mode="json", exclude_none=True)
+        canonical_md = generate_canonical_markdown(metadata_dict, candidate_md)
         paths.paper_md.write_text(canonical_md, encoding="utf-8")
         canonical_sha256 = sha256_string(canonical_md)
 
@@ -198,20 +200,6 @@ def ingest(ctx, pdf_path: Path | None, no_graph: bool, batch: Path | None):
     except Exception as e:
         console.print(f"\n[red]❌ 摄入失败: {e}[/red]")
         raise
-
-
-def generate_canonical_markdown(metadata: "PaperMetadata", body: str) -> str:
-    """生成 Canonical Markdown"""
-    import yaml
-
-    # 生成 frontmatter
-    frontmatter_dict = metadata.model_dump(mode="json", exclude_none=True)
-    frontmatter_yaml = yaml.dump(frontmatter_dict, allow_unicode=True, sort_keys=False)
-
-    # 组合
-    canonical = f"---\n{frontmatter_yaml}---\n\n{body}"
-
-    return canonical
 
 
 def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
