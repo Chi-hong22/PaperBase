@@ -138,6 +138,20 @@ class PaperQuality(BaseModel):
     needs_review: bool = False
 
 
+class PaperEntity(BaseModel):
+    """论文实体（methods/datasets/domains/platforms/constraints）"""
+    name: str
+    type: str | None = None
+    confidence: float | None = None
+
+    @field_validator("confidence")
+    @classmethod
+    def validate_confidence(cls, v: float | None) -> float | None:
+        if v is not None and (v < 0 or v > 1):
+            raise ValueError(f"confidence 必须在 0-1 范围内，收到: {v}")
+        return v
+
+
 class PaperMetadata(BaseModel):
     """Paper Canonical Metadata (YAML frontmatter)"""
     schema_version: str
@@ -162,6 +176,9 @@ class PaperMetadata(BaseModel):
     references: PaperReferences | None = None
     chunks: PaperChunks | None = None
     quality: PaperQuality = Field(default_factory=PaperQuality)
+
+    # 实体字段（核心扩展）
+    entities: dict[str, list[PaperEntity]] = Field(default_factory=dict)
 
     @field_validator("year")
     @classmethod
