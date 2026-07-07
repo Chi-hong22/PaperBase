@@ -73,7 +73,7 @@ def normalize_paper(
 
     # 构建 source
     source = PaperSource(
-        discovery="local",
+        discovery="manual",  # 修改为合法枚举值
         fulltext_provider=source_provider
     )
 
