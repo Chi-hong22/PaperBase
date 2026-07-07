@@ -18,8 +18,9 @@ import yaml
 
 @click.command()
 @click.argument("pdf_path", type=click.Path(exists=True, path_type=Path))
+@click.option("--no-graph", is_flag=True, help="跳过图谱更新")
 @click.pass_context
-def ingest(ctx, pdf_path: Path):
+def ingest(ctx, pdf_path: Path, no_graph: bool):
     """摄入论文 PDF"""
     console = Console()
     base_dir = ctx.obj["base_dir"]
@@ -119,6 +120,20 @@ def ingest(ctx, pdf_path: Path):
         console.print(f"\n[green]✅ 摄入完成![/green]")
         console.print(f"   路径: {paths.paper_dir}")
         console.print(f"   状态: {PaperState.NORMALIZED.value}")
+
+        # Step 10: 更新图谱（可选）
+        if not no_graph:
+            console.print("\n[yellow]10. 更新知识图谱...[/yellow]")
+            try:
+                from paperbase.cli.commands.graph import update as graph_update
+                # 调用 graph update 命令
+                ctx.invoke(graph_update, force=False)
+            except Exception as e:
+                console.print(f"[yellow]⚠️  图谱更新失败: {e}[/yellow]")
+                console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
+        else:
+            console.print("\n[yellow]ℹ️  跳过图谱更新（--no-graph）[/yellow]")
+            console.print("   稍后可运行: [cyan]paperbase graph update[/cyan]")
 
     except Exception as e:
         console.print(f"\n[red]❌ 摄入失败: {e}[/red]")
