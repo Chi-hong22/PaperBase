@@ -10,6 +10,16 @@ class PaperPaths:
     storage_id: str
     base_dir: Path
 
+    def __post_init__(self):
+        """验证 storage_id 安全性"""
+        # 验证 storage_id 不包含路径遍历字符
+        if ".." in self.storage_id or "/" in self.storage_id or "\\" in self.storage_id:
+            raise ValueError(f"Invalid storage_id (contains path traversal characters): {self.storage_id}")
+
+        # 验证非空
+        if not self.storage_id.strip():
+            raise ValueError("storage_id cannot be empty")
+
     @property
     def paper_dir(self) -> Path:
         """论文目录"""

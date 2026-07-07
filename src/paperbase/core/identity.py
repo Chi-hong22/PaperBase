@@ -15,6 +15,18 @@ def normalize_paper_id(raw: str) -> str:
     """
     raw = raw.strip()
 
+    # 限制最大长度
+    if len(raw) > 500:
+        raise ValueError(f"paper_id 过长: {len(raw)} 字符（最大 500）")
+
+    # 验证非空
+    if not raw:
+        raise ValueError("paper_id 不能为空")
+
+    # 验证字符集（可打印 ASCII）
+    if not re.match(r'^[\x20-\x7E]+$', raw):
+        raise ValueError(f"paper_id 包含非法字符")
+
     # DOI
     if raw.lower().startswith("doi:"):
         return f"doi:{raw[4:].strip()}"
@@ -51,6 +63,9 @@ def generate_storage_id(paper_id: str) -> str:
 
     格式: p_<12位hash>
     """
+    if not paper_id:
+        raise ValueError("paper_id 不能为空")
+
     hash_value = sha256_string(paper_id)
     return f"p_{hash_value[:12]}"
 
@@ -61,7 +76,15 @@ def parse_paper_id(paper_id: str) -> dict[str, str]:
 
     返回: {type: str, value: str}
     """
-    if ":" in paper_id:
-        type_part, value_part = paper_id.split(":", 1)
-        return {"type": type_part, "value": value_part}
-    return {"type": "unknown", "value": paper_id}
+    if ":" not in paper_id:
+        return {"type": "unknown", "value": paper_id}
+
+    parts = paper_id.split(":", 1)
+    type_part = parts[0]
+
+    # 验证类型是否合法
+    valid_types = {"doi", "arxiv", "pmid", "openalex", "s2", "fallback"}
+    if type_part not in valid_types:
+        return {"type": "unknown", "value": paper_id}
+
+    return {"type": type_part, "value": parts[1]}

@@ -28,8 +28,18 @@ class SearchEngine:
     def _connect(self):
         """连接或创建索引数据库"""
         self.index_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.index_path)
+        self.conn = sqlite3.connect(self.index_path, timeout=10.0)
+        self.conn.execute("PRAGMA journal_mode=WAL")  # 启用 WAL 模式提升并发性能
         self.conn.row_factory = sqlite3.Row
+
+    def __enter__(self):
+        """上下文管理器入口"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """上下文管理器退出"""
+        self.close()
+        return False
 
     def build_index(self):
         """构建 FTS5 索引"""
