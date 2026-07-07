@@ -1,6 +1,5 @@
 """集成测试: ingest 命令中的自动实体提取"""
 
-import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -23,11 +22,11 @@ def sample_pdf(tmp_path):
     return pdf_path
 
 
-def test_ingest_without_llm_skips_auto_extract(runner, sample_pdf, tmp_path):
-    """测试没有 LLM 配置时跳过自动提取"""
+@pytest.fixture
+def mock_pdf_processing():
+    """Mock PDF 处理相关的依赖"""
     with patch("paperbase.adapters.pdf_extractor.pymupdf.open") as mock_pymupdf, \
-         patch("paperbase.adapters.pdf_converter.MarkItDown") as mock_markitdown, \
-         patch("paperbase.core.entity_manager.EntityManager") as mock_em_class:
+         patch("paperbase.adapters.pdf_converter.MarkItDown") as mock_markitdown:
 
         # Mock PyMuPDF
         mock_doc = MagicMock()
@@ -42,6 +41,16 @@ def test_ingest_without_llm_skips_auto_extract(runner, sample_pdf, tmp_path):
         mock_md_instance = MagicMock()
         mock_md_instance.convert.return_value.text_content = "# Test Paper\n\nContent here."
         mock_markitdown.return_value = mock_md_instance
+
+        yield {
+            "pymupdf": mock_pymupdf,
+            "markitdown": mock_markitdown
+        }
+
+
+def test_ingest_without_llm_skips_auto_extract(runner, sample_pdf, tmp_path, mock_pdf_processing):
+    """测试没有 LLM 配置时跳过自动提取"""
+    with patch("paperbase.core.entity_manager.EntityManager") as mock_em_class:
 
         # Mock EntityManager - LLM 未启用
         mock_em = MagicMock()
@@ -65,25 +74,9 @@ def test_ingest_without_llm_skips_auto_extract(runner, sample_pdf, tmp_path):
         mock_em.auto_extract_entities.assert_not_called()
 
 
-def test_ingest_with_llm_extracts_entities(runner, sample_pdf, tmp_path):
+def test_ingest_with_llm_extracts_entities(runner, sample_pdf, tmp_path, mock_pdf_processing):
     """测试 LLM 启用时自动提取实体"""
-    with patch("paperbase.adapters.pdf_extractor.pymupdf.open") as mock_pymupdf, \
-         patch("paperbase.adapters.pdf_converter.MarkItDown") as mock_markitdown, \
-         patch("paperbase.core.entity_manager.EntityManager") as mock_em_class:
-
-        # Mock PyMuPDF
-        mock_doc = MagicMock()
-        mock_doc.metadata = {
-            "title": "Test Paper",
-            "author": "Alice",
-            "creationDate": "D:20240101"
-        }
-        mock_pymupdf.return_value = mock_doc
-
-        # Mock MarkItDown
-        mock_md_instance = MagicMock()
-        mock_md_instance.convert.return_value.text_content = "# Test Paper\n\nContent here."
-        mock_markitdown.return_value = mock_md_instance
+    with patch("paperbase.core.entity_manager.EntityManager") as mock_em_class:
 
         # Mock EntityManager - LLM 已启用
         mock_em = MagicMock()
@@ -113,25 +106,9 @@ def test_ingest_with_llm_extracts_entities(runner, sample_pdf, tmp_path):
         mock_em.auto_extract_entities.assert_called_once()
 
 
-def test_ingest_auto_extract_failure_does_not_block(runner, sample_pdf, tmp_path):
+def test_ingest_auto_extract_failure_does_not_block(runner, sample_pdf, tmp_path, mock_pdf_processing):
     """测试自动提取失败不会阻塞摄入流程"""
-    with patch("paperbase.adapters.pdf_extractor.pymupdf.open") as mock_pymupdf, \
-         patch("paperbase.adapters.pdf_converter.MarkItDown") as mock_markitdown, \
-         patch("paperbase.core.entity_manager.EntityManager") as mock_em_class:
-
-        # Mock PyMuPDF
-        mock_doc = MagicMock()
-        mock_doc.metadata = {
-            "title": "Test Paper",
-            "author": "Alice",
-            "creationDate": "D:20240101"
-        }
-        mock_pymupdf.return_value = mock_doc
-
-        # Mock MarkItDown
-        mock_md_instance = MagicMock()
-        mock_md_instance.convert.return_value.text_content = "# Test Paper\n\nContent here."
-        mock_markitdown.return_value = mock_md_instance
+    with patch("paperbase.core.entity_manager.EntityManager") as mock_em_class:
 
         # Mock EntityManager - LLM 已启用但提取失败
         mock_em = MagicMock()
@@ -160,25 +137,9 @@ def test_ingest_auto_extract_failure_does_not_block(runner, sample_pdf, tmp_path
         registry.close()
 
 
-def test_ingest_auto_extract_returns_empty(runner, sample_pdf, tmp_path):
+def test_ingest_auto_extract_returns_empty(runner, sample_pdf, tmp_path, mock_pdf_processing):
     """测试自动提取返回空结果"""
-    with patch("paperbase.adapters.pdf_extractor.pymupdf.open") as mock_pymupdf, \
-         patch("paperbase.adapters.pdf_converter.MarkItDown") as mock_markitdown, \
-         patch("paperbase.core.entity_manager.EntityManager") as mock_em_class:
-
-        # Mock PyMuPDF
-        mock_doc = MagicMock()
-        mock_doc.metadata = {
-            "title": "Test Paper",
-            "author": "Alice",
-            "creationDate": "D:20240101"
-        }
-        mock_pymupdf.return_value = mock_doc
-
-        # Mock MarkItDown
-        mock_md_instance = MagicMock()
-        mock_md_instance.convert.return_value.text_content = "# Test Paper\n\nContent here."
-        mock_markitdown.return_value = mock_md_instance
+    with patch("paperbase.core.entity_manager.EntityManager") as mock_em_class:
 
         # Mock EntityManager - LLM 已启用但返回空
         mock_em = MagicMock()
