@@ -24,8 +24,7 @@ def extract_pdf_metadata(pdf_path: Path) -> dict:
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF 文件不存在: {pdf_path}")
 
-    doc = pymupdf.open(pdf_path)
-    try:
+    with pymupdf.open(pdf_path) as doc:
         metadata = doc.metadata or {}
 
         # 提取作者列表
@@ -72,8 +71,6 @@ def extract_pdf_metadata(pdf_path: Path) -> dict:
             "subject": metadata.get("subject"),
             "keywords": metadata.get("keywords"),
         }
-    finally:
-        doc.close()
 
 
 def extract_pdf_text(pdf_path: Path, max_pages: int = 10) -> str:
@@ -90,8 +87,7 @@ def extract_pdf_text(pdf_path: Path, max_pages: int = 10) -> str:
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF 文件不存在: {pdf_path}")
 
-    doc = pymupdf.open(pdf_path)
-    try:
+    with pymupdf.open(pdf_path) as doc:
         text_parts = []
 
         for page_num in range(min(max_pages, len(doc))):
@@ -99,5 +95,3 @@ def extract_pdf_text(pdf_path: Path, max_pages: int = 10) -> str:
             text_parts.append(page.get_text())
 
         return "\n\n".join(text_parts)
-    finally:
-        doc.close()

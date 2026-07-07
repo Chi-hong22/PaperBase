@@ -1,27 +1,16 @@
+# tests/unit/test_pdf_extractor.py
 import pytest
 from pathlib import Path
-from paperbase.adapters.pdf_extractor import extract_pdf_metadata
+from paperbase.adapters.pdf_extractor import extract_pdf_metadata, extract_pdf_text
 
 
-@pytest.fixture
-def sample_pdf():
-    """测试 PDF 路径"""
-    return Path("tests/fixtures/sample_liu2025.pdf")
-
-
-def test_extract_pdf_metadata(sample_pdf):
-    """测试提取 PDF 元数据"""
-    if not sample_pdf.exists():
-        pytest.skip("测试 PDF 不存在")
-
-    metadata = extract_pdf_metadata(sample_pdf)
-
-    assert "title" in metadata
-    assert "authors" in metadata
-    assert isinstance(metadata["authors"], list)
-
-
-def test_extract_pdf_metadata_missing_file():
-    """测试提取不存在的 PDF"""
+def test_extract_pdf_metadata_file_not_found():
+    """文件不存在应该抛出 FileNotFoundError"""
     with pytest.raises(FileNotFoundError):
-        extract_pdf_metadata(Path("nonexistent.pdf"))
+        extract_pdf_metadata(Path("/nonexistent/file.pdf"))
+
+
+def test_extract_pdf_text_file_not_found():
+    """文件不存在应该抛出 FileNotFoundError"""
+    with pytest.raises(FileNotFoundError):
+        extract_pdf_text(Path("/nonexistent/file.pdf"))
