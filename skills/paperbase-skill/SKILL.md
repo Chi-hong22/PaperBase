@@ -132,6 +132,30 @@ Manage the knowledge graph:
 - `/paperbase graph update --force` - Force rebuild entire graph
 - `/paperbase graph status` - View graph statistics
 
+### Query Papers
+
+Query papers based on relationships, topics, or entities:
+
+```
+/paperbase query related <paper_id>
+/paperbase query related <paper_id> --depth <N>
+/paperbase query topic "<topic>"
+/paperbase query entity "<category:name>"
+```
+
+**Examples:**
+- `/paperbase query related doi:10.1038/nature01` - Find directly related papers
+- `/paperbase query related arxiv:1706.03762 --depth 2` - Find papers within 2 hops
+- `/paperbase query topic "deep learning"` - Find papers by topic (case-insensitive)
+- `/paperbase query entity "methods:SLAM"` - Find papers using SLAM method
+- `/paperbase query entity "datasets:ImageNet"` - Find papers using ImageNet dataset
+- `/paperbase query entity "domains:AUV navigation"` - Find papers in AUV navigation domain
+
+**Entity Filter Format:**
+- Format: `category:name` (case-insensitive)
+- Categories: `methods`, `datasets`, `domains`, `platforms`, `constraints`
+- The query will match entities in both `entities.jsonl` (preferred) and `graph.json` (fallback)
+
 ### Diagnostics
 
 Check environment and dependencies:
