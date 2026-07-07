@@ -53,8 +53,11 @@ fi
 echo "📦 Installing skill to: $TARGET_DIR"
 cp -r "$SOURCE_DIR" "$TARGET_DIR"
 
+# Make wrapper executable
+chmod +x "$TARGET_DIR/paperbase-wrapper.sh"
+
 # Verify installation
-if [ -f "$TARGET_DIR/SKILL.md" ] && [ -f "$TARGET_DIR/README.md" ]; then
+if [ -f "$TARGET_DIR/SKILL.md" ] && [ -f "$TARGET_DIR/README.md" ] && [ -f "$TARGET_DIR/paperbase-wrapper.sh" ]; then
     echo "✅ Installation successful!"
     echo ""
     echo "📋 Next steps:"
@@ -70,3 +73,22 @@ fi
 
 echo ""
 echo "🎉 Done! The /paperbase skill is now available globally."
+echo ""
+echo "🔍 Verifying dependencies..."
+
+# Check uv
+if ! command -v uv &> /dev/null; then
+    echo "⚠️  'uv' not found. Install: https://github.com/astral-sh/uv"
+else
+    echo "✓ uv: $(uv --version)"
+fi
+
+# Check paperbase CLI (optional, only if in a PaperBase repo)
+if [ -f "$(pwd)/../../pyproject.toml" ]; then
+    cd ../..
+    if uv run paperbase --version &> /dev/null; then
+        echo "✓ PaperBase CLI: Available"
+    else
+        echo "⚠️  PaperBase CLI not available. Run 'uv sync' in project root."
+    fi
+fi

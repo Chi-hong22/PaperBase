@@ -1,5 +1,20 @@
 # PaperBase - Academic Paper Knowledge Base Management
 
+## ⚠️ Skill Type: Reference Documentation + Lightweight Wrapper
+
+**当前版本（v0.2）提供：**
+1. **参考文档**：AI Agent 可阅读本文档了解可用命令
+2. **包装器脚本**：`paperbase-wrapper.sh` (Unix) / `paperbase-wrapper.ps1` (Windows) 提供自动库路径检测
+
+**使用方式：**
+- AI Agent 构造命令：`paperbase-wrapper.sh <subcommand> <args>`
+- 包装器自动检测库位置（当前目录、父目录、`$PAPERBASE_LIBRARY`）
+- 无需手动 `cd` 到仓库根目录
+
+**未来版本**将深度集成 MCP server 模式，支持智能错误处理和状态诊断。
+
+---
+
 Manage your academic paper knowledge base with structured ingestion, search, and graph operations.
 
 ## When to Use

@@ -50,7 +50,7 @@ Write-Host "📦 Installing skill to: $TargetDir" -ForegroundColor Cyan
 Copy-Item -Recurse $SourceDir $TargetDir
 
 # Verify installation
-if ((Test-Path "$TargetDir\SKILL.md") -and (Test-Path "$TargetDir\README.md")) {
+if ((Test-Path "$TargetDir\SKILL.md") -and (Test-Path "$TargetDir\README.md") -and (Test-Path "$TargetDir\paperbase-wrapper.ps1")) {
     Write-Host "✅ Installation successful!" -ForegroundColor Green
     Write-Host ""
     Write-Host "📋 Next steps:" -ForegroundColor Cyan
@@ -66,3 +66,24 @@ if ((Test-Path "$TargetDir\SKILL.md") -and (Test-Path "$TargetDir\README.md")) {
 
 Write-Host ""
 Write-Host "🎉 Done! The /paperbase skill is now available globally." -ForegroundColor Green
+Write-Host ""
+Write-Host "🔍 Verifying dependencies..." -ForegroundColor Cyan
+
+# Check uv
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    $uvVersion = uv --version
+    Write-Host "✓ uv: $uvVersion" -ForegroundColor Green
+} else {
+    Write-Host "⚠️  'uv' not found. Install: https://github.com/astral-sh/uv" -ForegroundColor Yellow
+}
+
+# Check paperbase CLI (optional, only if in a PaperBase repo)
+if (Test-Path "..\..\pyproject.toml") {
+    Set-Location ..\..
+    try {
+        $null = uv run paperbase --version 2>$null
+        Write-Host "✓ PaperBase CLI: Available" -ForegroundColor Green
+    } catch {
+        Write-Host "⚠️  PaperBase CLI not available. Run 'uv sync' in project root." -ForegroundColor Yellow
+    }
+}
