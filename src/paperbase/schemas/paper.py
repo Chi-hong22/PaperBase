@@ -3,6 +3,7 @@
 Canonical Markdown frontmatter 的 pydantic 模型
 """
 
+import re
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
@@ -21,6 +22,16 @@ def validate_iso8601_timestamp(v: str | None) -> str | None:
         return v
     except (ValueError, AttributeError):
         raise ValueError(f"时间戳必须符合 ISO 8601 格式，收到: {v}")
+
+
+def validate_sha256(v: str | None) -> str | None:
+    """验证 SHA256 哈希格式（64 位小写十六进制）"""
+    if v is None:
+        return v
+
+    if not re.match(r'^[a-f0-9]{64}$', v):
+        raise ValueError(f"SHA256 必须是 64 位小写十六进制字符串，收到: {v}")
+    return v
 
 
 class PaperAuthor(BaseModel):
@@ -81,6 +92,11 @@ class PaperProvenance(BaseModel):
     def validate_ingested_at(cls, v: str) -> str:
         return validate_iso8601_timestamp(v)
 
+    @field_validator("source_pdf_sha256", "canonical_content_sha256")
+    @classmethod
+    def validate_sha256_fields(cls, v: str | None) -> str | None:
+        return validate_sha256(v)
+
 
 class PaperAssets(BaseModel):
     """资产配置"""
@@ -91,6 +107,13 @@ class PaperReferences(BaseModel):
     """引用信息"""
     path: str = "./references.jsonl"
     count: int
+
+    @field_validator("count")
+    @classmethod
+    def validate_count(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"count 必须非负，收到: {v}")
+        return v
 
 
 class PaperChunks(BaseModel):
@@ -139,3 +162,10 @@ class PaperMetadata(BaseModel):
     references: PaperReferences | None = None
     chunks: PaperChunks | None = None
     quality: PaperQuality = Field(default_factory=PaperQuality)
+
+    @field_validator("year")
+    @classmethod
+    def validate_year(cls, v: int) -> int:
+        if v < 1000 or v > 2100:
+            raise ValueError(f"year 必须在 1000-2100 范围内，收到: {v}")
+        return v
