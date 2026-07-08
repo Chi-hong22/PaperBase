@@ -256,28 +256,30 @@ def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
 
     # 读取文件列表
     try:
-        pdf_paths = []
+        targets = []
         with open(batch_file, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):
-                    pdf_path = Path(line)
-                    if not pdf_path.exists():
-                        console.print(f"[yellow]⚠️  跳过不存在的文件: {line}[/yellow]")
-                        continue
-                    pdf_paths.append(pdf_path)
+                    targets.append(line)
 
-        console.print(f"[cyan]找到 {len(pdf_paths)} 个有效 PDF 文件[/cyan]\n")
+        console.print(f"[cyan]找到 {len(targets)} 个目标（文件/DOI/URL）[/cyan]\n")
 
         # 逐个摄入（跳过图谱）
         success_count = 0
         failed_count = 0
 
-        for i, pdf_path in enumerate(pdf_paths, 1):
-            console.print(f"[cyan]--- [{i}/{len(pdf_paths)}] {pdf_path.name} ---[/cyan]")
+        for i, target in enumerate(targets, 1):
+            # 判断是本地文件还是在线查询
+            if _target_is_local_file(target):
+                display_name = Path(target).name
+            else:
+                display_name = target[:50] + "..." if len(target) > 50 else target
+
+            console.print(f"[cyan]--- [{i}/{len(targets)}] {display_name} ---[/cyan]")
             try:
-                # 调用单文件摄入逻辑，强制跳过图谱
-                ctx.invoke(ingest, pdf_path=pdf_path, no_graph=True, batch=None)
+                # 调用主 ingest 命令，让它自动路由
+                ctx.invoke(ingest, target=target, no_graph=True, batch=None)
                 success_count += 1
             except Exception as e:
                 console.print(f"[red]❌ 摄入失败: {e}[/red]")
