@@ -1,0 +1,177 @@
+{
+  "library\\papers\\p_164622e0fc87\\paper.md": {
+    "methods": [
+      {
+        "name": "graph-based particle filter bathymetric simultaneous localization and mapping (BSLAM)",
+        "type": "method"
+      },
+      {
+        "name": "graph-based trajectory update",
+        "type": "method"
+      },
+      {
+        "name": "particle weighting based on submap matching",
+        "type": "method"
+      },
+      {
+        "name": "graph-based map generation",
+        "type": "method"
+      }
+    ],
+    "datasets": [
+      {
+        "name": "simulated dataset"
+      },
+      {
+        "name": "field dataset"
+      }
+    ],
+    "domains": [
+      {
+        "name": "underwater topography mapping"
+      },
+      {
+        "name": "bathymetric simultaneous localization and mapping"
+      }
+    ],
+    "platforms": [
+      {
+        "name": "autonomous underwater vehicle"
+      }
+    ],
+    "constraints": [
+      {
+        "name": "low precise vehicle motion model"
+      },
+      {
+        "name": "oscillation problem of trajectories"
+      },
+      {
+        "name": "map selection problem"
+      }
+    ]
+  },
+  "library\\papers\\p_36686d68e8e8\\paper.md": {
+    "methods": [],
+    "datasets": [],
+    "domains": [
+      {
+        "name": "AUV"
+      },
+      {
+        "name": "ocean exploration"
+      },
+      {
+        "name": "marine scientific research"
+      },
+      {
+        "name": "resource exploration"
+      },
+      {
+        "name": "environmental monitoring"
+      }
+    ],
+    "platforms": [],
+    "constraints": []
+  },
+  "library\\papers\\p_bb421ead1166\\paper.md": {
+    "methods": [
+      {
+        "name": "Bathymetric Simultaneous Localization and Mapping (BSLAM)",
+        "type": "mapping"
+      },
+      {
+        "name": "front-end odometry",
+        "type": "localization"
+      },
+      {
+        "name": "loop closure detection",
+        "type": "mapping"
+      },
+      {
+        "name": "back-end optimization",
+        "type": "mapping"
+      }
+    ],
+    "datasets": [],
+    "domains": [
+      {
+        "name": "AUV-based bathymetric SLAM"
+      },
+      {
+        "name": "underwater navigation"
+      },
+      {
+        "name": "terrain mapping"
+      }
+    ],
+    "platforms": [
+      {
+        "name": "Autonomous Underwater Vehicles (AUVs)"
+      }
+    ],
+    "constraints": [
+      {
+        "name": "unstructured underwater environments"
+      }
+    ]
+  },
+  "library\\papers\\p_fbedd43cea9a\\paper.md": {
+    "methods": [
+      {
+        "name": "MINS",
+        "type": "navigation system"
+      },
+      {
+        "name": "MultiBeam EchoSounder (MBES)",
+        "type": "sensor"
+      },
+      {
+        "name": "Inertial Measurement Unit (IMU)",
+        "type": "sensor"
+      },
+      {
+        "name": "Doppler Velocity Log (DVL)",
+        "type": "sensor"
+      },
+      {
+        "name": "factor graph",
+        "type": "optimization"
+      },
+      {
+        "name": "joint IMU and DVL preintegration",
+        "type": "odometry"
+      },
+      {
+        "name": "probabilistic registration algorithm",
+        "type": "scan matching"
+      },
+      {
+        "name": "Gaussian Mixture Models",
+        "type": "representation"
+      },
+      {
+        "name": "on-manifold formulation",
+        "type": "state estimation"
+      }
+    ],
+    "datasets": [],
+    "domains": [
+      {
+        "name": "3D bathymetric underwater inspection"
+      },
+      {
+        "name": "underwater mapping"
+      },
+      {
+        "name": "AUV navigation"
+      }
+    ],
+    "platforms": [
+      {
+        "name": "Autonomous Underwater Vehicle (AUV)"
+      }
+    ],
+    "constraints": []
+  }
+}
