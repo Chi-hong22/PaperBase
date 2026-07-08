@@ -90,6 +90,15 @@ After installation, invoke the skill in any AI agent session:
 /paperbase status --state ready
 ```
 
+### Extracting Entities
+
+```
+/paperbase extract doi:10.1038/nature12373
+/paperbase extract --all
+/paperbase extract --all --force
+/paperbase extract --output-json
+```
+
 ### Graph Operations
 
 ```

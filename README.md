@@ -43,7 +43,7 @@ PDF → Markdown → 知识图谱 → 搜索/分析
 | 工具 | 定位 | 典型场景 |
 |------|------|----------|
 | **Zotero** | 文献管理器（管理 PDF + 引用） | 📚 阅读论文、插入引文到 Word |
-| **PaperBase** | 知识库（提取结构化知识） | 🔬 AI 分析、图谱可视化、深度检索 |
+| **PaperBase** | 知识库（提取结构化知识） | 🔬 实体提取、图谱可视化、深度检索 |
 
 **5 秒决策：**
 - ✅ 如果你只需要"整理论文 + 生成参考文献" → **用 Zotero**
@@ -221,16 +221,21 @@ nano .env  # 或使用其他编辑器
 **2. 修改 `config/paperbase.yaml`**
 ```yaml
 llm:
-  enabled: true  # 改为 true
-  auto_extract_on_ingest: true  # 摄入时自动提取实体
+  base_url: ${PAPERBASE_LLM_BASE_URL}
+  api_key: ${PAPERBASE_LLM_API_KEY}
+  model: ${PAPERBASE_LLM_MODEL}
 ```
 
 **3. 验证配置**
 ```bash
-uv run paperbase doctor
+uv run paperbase config check-llm
 
 # 预期输出：
-# ✅ LLM Configuration      enabled (gpt-4o-mini)
+# ✓ 配置文件存在
+# ✓ LLM 已启用
+# ✓ 环境变量已设置
+# ✓ 初始化成功
+# ✓ 配置检查通过
 ```
 
 #### **支持的 LLM 服务**
@@ -320,6 +325,24 @@ uv run paperbase search "transformer architecture" -n 20
 
 # 在 Zotero 中搜索（需要 zotero-mcp）
 uv run paperbase search --zotero "quantum computing"
+```
+
+### 提取论文关键信息
+
+使用 LLM 自动提取论文的方法、数据集、领域等关键信息：
+
+```bash
+# 提取单篇论文
+uv run paperbase extract doi:10.1038/nature12373
+
+# 提取所有未处理的论文
+uv run paperbase extract --all
+
+# 强制重新提取
+uv run paperbase extract --all --force
+
+# 输出为 JSON 格式
+uv run paperbase extract doi:10.1038/nature12373 --output-json
 ```
 
 ### 知识图谱

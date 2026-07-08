@@ -97,6 +97,44 @@ def check_paper_fetch() -> Tuple[bool, str]:
     except ImportError:
         return False, "not installed; run `uv sync --extra online-fetch`"
 
+def check_llm_config() -> Tuple[bool, str]:
+    """Check LLM configuration"""
+    try:
+        import os
+        import yaml
+        from pathlib import Path
+
+        config_path = Path("config/paperbase.yaml")
+        if not config_path.exists():
+            return False, "config/paperbase.yaml not found"
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+
+        llm_config = config.get("llm", {})
+        enabled = llm_config.get("enabled", False)
+
+        if not enabled:
+            return True, "disabled (optional)"
+
+        # 检查环境变量
+        base_url = os.getenv("PAPERBASE_LLM_BASE_URL")
+        api_key = os.getenv("PAPERBASE_LLM_API_KEY")
+        model = os.getenv("PAPERBASE_LLM_MODEL")
+
+        if not all([base_url, api_key, model]):
+            missing = []
+            if not base_url: missing.append("BASE_URL")
+            if not api_key: missing.append("API_KEY")
+            if not model: missing.append("MODEL")
+            return False, f"enabled but env vars missing: {', '.join(missing)}"
+
+        return True, f"enabled ({model})"
+
+    except Exception as e:
+        return False, f"check failed: {e}"
+
+
 def main():
     print("🔍 PaperBase Doctor - Environment Diagnostics\n")
     print("=" * 60)
@@ -107,6 +145,7 @@ def main():
         ("graphify (optional)", check_graphify()),
         ("paper-fetch (optional)", check_paper_fetch()),
         ("SQLite Version", check_sqlite_version()),
+        ("LLM Configuration", check_llm_config()),
         ("PaperBase Library", check_library()),
         ("Registry Database", check_registry()),
         ("Knowledge Graph", check_graph()),

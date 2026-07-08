@@ -42,6 +42,12 @@ Use this skill when the user wants to:
 # Search for content
 /paperbase search "deep learning"
 
+# Extract entities from papers (requires LLM)
+/paperbase extract --all
+
+# Check configuration
+/paperbase config show
+
 # Diagnose problems
 /paperbase doctor
 ```
@@ -162,6 +168,76 @@ Query papers based on relationships, topics, or entities:
 - Format: `category:name` (case-insensitive)
 - Categories: `methods`, `datasets`, `domains`, `platforms`, `constraints`
 - The query will match entities in both `entities.jsonl` (preferred) and `graph.json` (fallback)
+
+### Extract Entities
+
+Extract key information from papers using LLM (requires LLM configuration):
+
+```
+/paperbase extract <paper_id>
+/paperbase extract --all
+/paperbase extract --all --force
+/paperbase extract <paper_id> --output-json
+```
+
+**Examples:**
+- `/paperbase extract doi:10.1038/nature12373` - Extract entities from a single paper
+- `/paperbase extract --all` - Extract entities from all papers without entities
+- `/paperbase extract --all --force` - Re-extract entities for all papers
+- `/paperbase extract arxiv:1706.03762 --output-json` - Output in JSON format for parsing
+
+**Requirements:**
+- LLM must be configured in `config/paperbase.yaml` (base_url + model + api_key)
+- Use `paperbase config check-llm` to verify LLM configuration
+
+**Extracted Entities:**
+- `methods`: Algorithms, models, techniques
+- `datasets`: Training/evaluation datasets
+- `domains`: Application areas
+- `platforms`: Hardware/software platforms
+- `constraints`: Key limitations
+
+### Configuration Management
+
+Manage and diagnose PaperBase configuration:
+
+```
+/paperbase config show
+/paperbase config check-llm
+/paperbase config path
+```
+
+**Examples:**
+- `/paperbase config show` - Display current configuration (LLM, graph, adapters)
+- `/paperbase config check-llm` - Verify LLM configuration and test connection
+- `/paperbase config path` - Show configuration file path
+
+**Output (config show):**
+```
+配置文件: F:\__PaperBase__\config\paperbase.yaml
+
+LLM 配置:
+  enabled: True
+  base_url: https://api.openai.com/v1
+  model: gpt-4o-mini
+  timeout: 60
+  max_input_tokens: 4000
+
+知识图谱配置:
+  auto_update: on_entity_change
+  mode: incremental
+```
+
+**Output (config check-llm):**
+```
+✓ 配置文件存在
+✓ LLM 已启用
+✓ PAPERBASE_LLM_BASE_URL: https://api.openai.com/v1
+✓ PAPERBASE_LLM_API_KEY: sk-xxxxx...xxxx
+✓ PAPERBASE_LLM_MODEL: gpt-4o-mini
+✓ 初始化成功
+✓ 配置检查通过
+```
 
 ### Diagnostics
 

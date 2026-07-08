@@ -55,14 +55,24 @@ paperbase/
 ## 工作流状态机
 
 ```
-DISCOVERED → RESOLVED → SOURCE_READY → CONVERTED → NORMALIZED → VALIDATED → GRAPHED → READY
+NORMALIZED → VALIDATED → READY
 ```
 
-异常状态：
+**主流程状态：**
+- `NORMALIZED`: 论文已摄入并规范化
+- `VALIDATED`: 实体已提取并验证
+- `READY`: 已加入图谱，可供查询
+
+**异常状态：**
 - `NEEDS_REVIEW`: 需要人工审核
-- `BLOCKED`: 阻塞（缺依赖）
-- `FAILED_RETRYABLE`: 可重试失败
+- `BLOCKED`: 处理被阻塞
+- `FAILED_RETRYABLE`: 临时失败，可重试
 - `FAILED_PERMANENT`: 永久失败
+
+**状态转换触发：**
+- `ingest` → `NORMALIZED`
+- `extract` / `update` → `VALIDATED`
+- `graph update` / `graph build-entities` → `READY`
 
 ## Commands
 

@@ -40,4 +40,5 @@ def test_ingest_routes_non_file_identifier_to_online_adapter(monkeypatch, tmp_pa
     assert calls["query"] == "10.1234/example"
     assert calls["base_dir"] == tmp_path
     assert "doi:10.1234/example" in result.output
-    assert "p_example" in result.output
+    # 新的用户友好输出不再显示 storage_id
+    assert "论文标识" in result.output or "论文已成功添加" in result.output
