@@ -203,6 +203,58 @@ paperbase/
 
 ## 📋 使用方法
 
+### LLM 配置（可选）
+
+PaperBase 可在**无 LLM** 的情况下正常工作（由外部 AI Agent 提供智能）。启用内部 LLM 仅用于**自动实体提取**功能。
+
+#### **快速配置（3 步）**
+
+**1. 创建配置文件**
+```bash
+# 复制示例配置
+cp .env.example .env
+
+# 编辑 .env，填入你的 API Key
+nano .env  # 或使用其他编辑器
+```
+
+**2. 修改 `config/paperbase.yaml`**
+```yaml
+llm:
+  enabled: true  # 改为 true
+  auto_extract_on_ingest: true  # 摄入时自动提取实体
+```
+
+**3. 验证配置**
+```bash
+uv run paperbase doctor
+
+# 预期输出：
+# ✅ LLM Configuration      enabled (gpt-4o-mini)
+```
+
+#### **支持的 LLM 服务**
+
+| 服务 | 成本 | 配置复杂度 | 推荐场景 |
+|------|------|----------|---------|
+| **OpenAI** | ~$0.15/100 篇 | 低 | 生产环境 |
+| **Ollama** | 免费（本地） | 中 | 预算有限 |
+| **Azure OpenAI** | 按用量 | 中 | 企业环境 |
+| **国内 API** | 按用量 | 低 | 国内用户 |
+
+详细配置见 [`.env.example`](.env.example)。
+
+#### **成本估算（OpenAI gpt-4o-mini）**
+- 单篇论文摄入：~$0.0015（仅处理摘要前 4000 字符）
+- 100 篇论文：~$0.15
+- 1000 篇论文：~$1.50
+
+**省钱技巧：**
+- 使用 Ollama 本地推理（免费）
+- 仅对重要论文启用自动提取（手动模式：`paperbase update <paper_id> --json '{...}'`）
+
+---
+
 ### 联网获取能力（可选）
 
 启用 `online-fetch` 后，`paperbase ingest` 可以接收 DOI、论文 URL 或标题查询，并通过 `paper-fetch-skill` 获取结构化元数据、干净 Markdown 全文、引用和图表资源：
