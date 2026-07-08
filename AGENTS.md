@@ -72,6 +72,22 @@ NORMALIZED → READY
 - `ingest` → `NORMALIZED`
 - `graph update` → `READY`
 
+## 查询双轨系统
+
+**Registry (结构化查询)**：
+- 精确匹配：doi、paper_id
+- 状态筛选：state
+- 元数据查询：year、author
+- 后端：SQLite 索引
+
+**Graph (语义查询)**：
+- 概念关联
+- 路径推理
+- 社区发现
+- 后端：Graphify 知识图谱
+
+**统一入口**：/paperbase skill 自动路由
+
 ## Commands
 
 ```bash

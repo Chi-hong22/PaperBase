@@ -43,7 +43,7 @@ PDF → Markdown → 知识图谱 → 搜索/分析
 | 工具 | 定位 | 典型场景 |
 |------|------|----------|
 | **Zotero** | 文献管理器（管理 PDF + 引用） | 📚 阅读论文、插入引文到 Word |
-| **PaperBase** | 知识库（提取结构化知识） | 🔬 实体提取、图谱可视化、深度检索 |
+| **PaperBase** | 知识库（提取结构化知识） | 🔬 图谱可视化、语义关联、深度检索 |
 
 **5 秒决策：**
 - ✅ 如果你只需要"整理论文 + 生成参考文献" → **用 Zotero**
@@ -52,7 +52,7 @@ PDF → Markdown → 知识图谱 → 搜索/分析
 
 **核心概念速览：**
 - **Canonical Markdown**：每篇论文对应一个 `paper.md`，这是唯一真相源（source of truth），所有索引、图谱、分块都可从它重建
-- **状态机管理**：论文处理分 8 个状态（下载 → 转换 → 规范化 → ...），可随时中断和恢复，所有操作可追溯
+- **状态机管理**：论文处理分 6 个状态（摄入 → 规范化 → 图谱化），可随时中断和恢复，所有操作可追溯
 - **双检索系统**：SQLite FTS5 用于关键词搜索（"找到包含 transformer 的论文"），Graphify 用于关系查询（"这篇论文的引用脉络"）
 
 ## ✨ 核心特性
@@ -139,7 +139,7 @@ Location:    library/papers/p_a7f3b2c1d4e5/paper.md
 Next steps:
   - View paper: cat library/papers/p_a7f3b2c1d4e5/paper.md
   - Search: uv run paperbase search "attention mechanism"
-  - Update graph: uv run paperbase graph update
+  - Build graph: uv run paperbase graph update
 ```
 
 **摄入时间说明：**
@@ -205,7 +205,7 @@ paperbase/
 
 ### LLM 配置（可选）
 
-PaperBase 可在**无 LLM** 的情况下正常工作（由外部 AI Agent 提供智能）。启用内部 LLM 仅用于**自动实体提取**功能。
+PaperBase 可在**无 LLM** 的情况下正常工作（由外部 AI Agent 提供智能）。启用内部 LLM 仅用于**graphify 语义图谱构建**功能。
 
 #### **快速配置（3 步）**
 
@@ -333,16 +333,16 @@ uv run paperbase search --zotero "quantum computing"
 
 ```bash
 # 提取单篇论文
-uv run paperbase extract doi:10.1038/nature12373
+# extract 命令已移除
 
 # 提取所有未处理的论文
-uv run paperbase extract --all
+# extract 命令已移除
 
 # 强制重新提取
-uv run paperbase extract --all --force
+# extract 命令已移除 --force
 
 # 输出为 JSON 格式
-uv run paperbase extract doi:10.1038/nature12373 --output-json
+# extract 命令已移除 --output-json
 ```
 
 ### 知识图谱
