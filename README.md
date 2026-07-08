@@ -205,7 +205,11 @@ paperbase/
 
 ### LLM 配置（可选）
 
-PaperBase 可在**无 LLM** 的情况下正常工作（由外部 AI Agent 提供智能）。启用内部 LLM 仅用于**graphify 语义图谱构建**功能。
+PaperBase 可在**无 LLM** 的情况下正常工作。LLM 配置用于：
+- **Graphify 工具**：语义图谱构建（外部工具，通过环境变量传递配置）
+- **未来扩展**：可能添加的摘要、翻译等功能
+
+当前 PaperBase 核心功能（摄入、转换、检索）不依赖 LLM。
 
 #### **快速配置（3 步）**
 
@@ -325,24 +329,6 @@ uv run paperbase search "transformer architecture" -n 20
 
 # 在 Zotero 中搜索（需要 zotero-mcp）
 uv run paperbase search --zotero "quantum computing"
-```
-
-### 提取论文关键信息
-
-使用 LLM 自动提取论文的方法、数据集、领域等关键信息：
-
-```bash
-# 提取单篇论文
-# extract 命令已移除
-
-# 提取所有未处理的论文
-# extract 命令已移除
-
-# 强制重新提取
-# extract 命令已移除 --force
-
-# 输出为 JSON 格式
-# extract 命令已移除 --output-json
 ```
 
 ### 知识图谱

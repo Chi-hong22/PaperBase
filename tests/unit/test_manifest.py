@@ -13,7 +13,7 @@ def test_create_manifest():
     )
     assert manifest.paper_id == "doi:10.1234/test"
     assert manifest.storage_id == "p_abc123"
-    assert manifest.state == PaperState.DISCOVERED
+    assert manifest.state == PaperState.NORMALIZED
 
 
 def test_save_and_load_manifest(tmp_path):

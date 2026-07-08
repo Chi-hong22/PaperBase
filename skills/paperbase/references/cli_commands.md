@@ -33,9 +33,12 @@ paperbase ingest "https://www.nature.com/articles/..."
 # 本地 PDF
 paperbase ingest --file ~/Downloads/paper.pdf
 
-# 批量摄入（延迟图谱更新）
+# 批量摄入（推荐使用 --no-graph 延迟图谱更新）
 paperbase ingest --batch papers.txt --no-graph
 paperbase graph update  # 统一更新图谱
+
+# 注意：--batch 模式本身不会跳过图谱更新，需要显式加 --no-graph
+# 建议：批量摄入时总是使用 --no-graph，最后统一更新图谱（性能提升 3-5 倍）
 ```
 
 ---
@@ -230,7 +233,14 @@ paperbase remove <paper_id> --confirm   # 跳过确认
 - 删除 `source PDF`
 - 删除 `manifest.json`
 - 删除 registry 记录
-- **不会自动更新图谱**（需手动运行 `graph update --force`）
+- **不会自动更新图谱**
+
+**重要**：删除后图谱中仍保留该论文的节点和边关系。这可能导致：
+- 语义查询返回已删除论文的引用
+- 图谱统计数据不准确
+- 关系推理出现死链接
+
+**解决方法**：删除论文后，必须运行 `paperbase graph update --force` 重建图谱。
 
 **示例**：
 ```bash

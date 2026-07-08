@@ -86,9 +86,10 @@ def run_graphify(
             # graphify 使用 OpenAI SDK，映射到 OPENAI_API_KEY
             env["OPENAI_API_KEY"] = api_key
 
-            # 如果 base_url 不是标准 OpenAI endpoint，设置自定义 base_url
-            if base_url and "api.openai.com" not in base_url:
-                env["OPENAI_BASE_URL"] = base_url
+        # 如果配置了 base_url（无论是否为 OpenAI），都设置环境变量
+        # 让 graphify 的 OpenAI SDK 使用自定义 endpoint
+        if base_url:
+            env["OPENAI_BASE_URL"] = base_url
 
     try:
         # 运行 graphify，传入修改后的环境变量

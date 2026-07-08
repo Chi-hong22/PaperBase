@@ -73,7 +73,7 @@ def check_library() -> Tuple[bool, str]:
 
 def check_registry() -> Tuple[bool, str]:
     """Check registry database"""
-    registry_path = Path("registry/papers.sqlite")
+    registry_path = Path("registry/papers.db")
     if registry_path.exists():
         size = registry_path.stat().st_size / 1024  # KB
         return True, f"Registry database found ({size:.1f} KB)"
