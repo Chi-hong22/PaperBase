@@ -1,4 +1,7 @@
-"""PaperBase 统一查询 skill"""
+"""PaperBase 查询路由模块
+
+提供智能查询路由功能，自动分发到 Registry 或 Graphify
+"""
 import re
 import subprocess
 from pathlib import Path
@@ -50,7 +53,7 @@ def query_registry(query: str, base_dir: Path) -> str:
 
         # state 查询
         elif 'state:' in query.lower():
-            state_str = query.split('state:', 1)[1].strip()
+            state_str = query.split('state:', 1)[1].strip().lower()
             try:
                 state = PaperState(state_str)
                 papers = registry.list_papers(state=state)
@@ -98,19 +101,19 @@ def query_graph(query: str, base_dir: Path) -> str:
             ['graphify', 'query', query],
             capture_output=True,
             text=True,
-            cwd=base_dir / "library",
-            timeout=30
+            timeout=30,
+            cwd=base_dir
         )
 
         if result.returncode == 0:
-            return result.stdout.strip() or "查询成功但无结果"
+            return result.stdout.strip() or "查询成功，但未找到结果"
         else:
-            return f"Graphify 查询失败: {result.stderr.strip()}"
+            return f"Graphify 查询失败: {result.stderr}"
 
-    except FileNotFoundError:
-        return "graphify 未安装，请运行 'uv tool install graphifyy'"
     except subprocess.TimeoutExpired:
-        return "查询超时（30秒）"
+        return "查询超时（>30秒）"
+    except FileNotFoundError:
+        return "graphify 未安装，请运行: uv tool install graphify"
     except Exception as e:
         return f"查询出错: {str(e)}"
 
@@ -135,15 +138,21 @@ def format_papers(papers: list, title: str = "查询结果") -> str:
         return f"{title}: 未找到论文"
 
     output = [f"{title}: 找到 {len(papers)} 篇论文\n"]
-
     for i, paper in enumerate(papers[:10], 1):
-        output.append(f"{i}. {paper.get('title', 'N/A')} ({paper.get('year', 'N/A')})")
-        output.append(f"   State: {paper.get('state', 'N/A')}")
-        if paper.get('authors'):
-            authors = ', '.join(paper['authors'][:2])
-            output.append(f"   Authors: {authors}")
+        authors = paper.get('authors', [])
+        valid_authors = [a for a in authors if a][:2]
+        authors_str = ', '.join(valid_authors) if valid_authors else 'N/A'
+
+        output.append(f"{i}. {paper.get('title', 'N/A')}")
+        output.append(f"   Authors: {authors_str}")
+        output.append(f"   Year: {paper.get('year', 'N/A')}, State: {paper.get('state', 'N/A')}")
+        output.append(f"   ID: {paper.get('paper_id', 'N/A')}\n")
 
     if len(papers) > 10:
-        output.append(f"\n... 及其他 {len(papers) - 10} 篇论文")
+        output.append(f"... 还有 {len(papers) - 10} 篇论文")
 
     return '\n'.join(output)
+
+
+# 导出接口
+__all__ = ['paperbase_query', 'is_structured_query', 'query_registry', 'query_graph']
