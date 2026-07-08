@@ -110,8 +110,9 @@ def update(ctx, force: bool, incremental: bool):
     updated_count = 0
     now = datetime.now(UTC).isoformat() + "Z"
 
-    if not incremental:
-        registry = PaperRegistry(registry_path)
+    # 打开 registry（所有模式都需要）
+    registry_path = base_dir / "registry" / "papers.db"
+    registry = PaperRegistry(registry_path)
 
     try:
         for paper in normalized_papers:
@@ -136,12 +137,11 @@ def update(ctx, force: bool, incremental: bool):
                     manifest.state = PaperState.READY
                     save_manifest(manifest, paths.manifest_json)
 
-                    if not incremental:
-                        registry.update_state(paper_id, PaperState.READY)
+                    # 更新 registry 状态（所有模式）
+                    registry.update_state(paper_id, PaperState.READY)
                     updated_count += 1
     finally:
-        if not incremental:
-            registry.close()
+        registry.close()
 
     console.print(f"[green]✓ 索引更新完成[/green]")
     console.print(f"   已索引: {updated_count} 篇论文")
