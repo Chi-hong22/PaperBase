@@ -78,3 +78,6 @@ scripts/verify_*.py
 # Agent workspace
 .agents/
 .codex/
+
+# Technical debt tracking (internal only)
+TECHNICAL_DEBT.md
