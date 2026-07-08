@@ -6,8 +6,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-77%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-198%20passed-brightgreen.svg)](tests/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Security](https://img.shields.io/badge/security-11%20fixes-orange.svg)](#security-improvements)
 
 English | [中文文档](README.md)
 
@@ -188,6 +189,26 @@ For full documentation, see [README.md (Chinese)](README.md).
 ## 📜 License
 
 MIT License
+
+## 🙏 Acknowledgments
+
+This project benefits from the following open-source tools and projects:
+
+### Core Dependencies
+- [markitdown](https://github.com/microsoft/markitdown) - Microsoft's Markdown conversion tool
+- [PyMuPDF](https://pymupdf.readthedocs.io/) - PDF processing library
+- [Pydantic](https://docs.pydantic.dev/) - Data validation and schema management
+- [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - Online paper fetching and conversion
+
+### External Tool Integration
+- [uv](https://github.com/astral-sh/uv) - Fast Python package manager by Astral
+- [Graphify](https://github.com/graphify-ai/graphify) - Knowledge graph construction tool
+- [Zotero](https://www.zotero.org/) - Reference management software
+- [Zotero MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/zotero) - Zotero MCP integration service
+
+### Development Tools
+- [Ruff](https://github.com/astral-sh/ruff) - Extremely fast Python linter and formatter
+- [pytest](https://docs.pytest.org/) - Python testing framework
 
 ---
 
