@@ -55,8 +55,9 @@ def check_document(file_path: Path):
     else:
         print(f"✓ 无未完成标记")
 
-    # 6. 检查中英文混排空格
-    mixed = re.findall(r'[一-龥][a-zA-Z]|[a-zA-Z][一-龥]', content)
+    # 6. 检查中英文混排空格（扩展 Unicode 范围）
+    # CJK 统一汉字基本区 + 扩展 A
+    mixed = re.findall(r'[一-鿿㐀-䶿][a-zA-Z]|[a-zA-Z][一-鿿㐀-䶿]', content)
     if len(mixed) > 50:
         issues.append(f"⚠️  中英文混排较多（{len(mixed)} 处），建议检查是否需要空格")
 

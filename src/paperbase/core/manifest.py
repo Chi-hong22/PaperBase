@@ -12,7 +12,7 @@ def create_manifest(paper_id: str, storage_id: str) -> ManifestSchema:
     return ManifestSchema(
         paper_id=paper_id,
         storage_id=storage_id,
-        state=PaperState.DISCOVERED,
+        state=PaperState.NORMALIZED,
         created_at=now,
         updated_at=now
     )

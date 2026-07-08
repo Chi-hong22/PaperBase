@@ -23,7 +23,7 @@ def test_register_paper(registry):
     registry.register_paper(
         paper_id="doi:10.1234/test",
         storage_id="p_abc123",
-        state=PaperState.DISCOVERED,
+        state=PaperState.NORMALIZED,
         title="Test Paper",
         authors=["John Smith"],
         year=2026
@@ -32,7 +32,7 @@ def test_register_paper(registry):
     paper = registry.get_paper("doi:10.1234/test")
     assert paper is not None
     assert paper["paper_id"] == "doi:10.1234/test"
-    assert paper["state"] == "discovered"
+    assert paper["state"] == "normalized"
     assert paper["title"] == "Test Paper"
 
 
@@ -47,7 +47,7 @@ def test_update_state(registry):
     registry.register_paper(
         paper_id="doi:10.1234/test",
         storage_id="p_abc123",
-        state=PaperState.DISCOVERED,
+        state=PaperState.NORMALIZED,
         title="Test",
         authors=[],
         year=2026
@@ -72,7 +72,7 @@ def test_list_papers_by_state(registry):
     registry.register_paper(
         paper_id="doi:10.1234/test2",
         storage_id="p_abc124",
-        state=PaperState.DISCOVERED,
+        state=PaperState.NORMALIZED,
         title="Test2",
         authors=[],
         year=2026

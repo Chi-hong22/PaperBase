@@ -76,7 +76,13 @@ def query_registry(query: str, base_dir: Path) -> str:
         elif 'author:' in query.lower():
             author_name = query.split('author:', 1)[1].strip().strip('"\'')
             all_papers = registry.list_papers()
-            papers = [p for p in all_papers if any(author_name.lower() in author.lower() for author in p.get('authors', []) if author)]
+            papers = [
+                p for p in all_papers
+                if any(
+                    author and author_name.lower() in author.lower()
+                    for author in p.get('authors', [])
+                )
+            ]
             return format_papers(papers, f"作者包含 {author_name}")
 
         # list 查询
@@ -90,12 +96,16 @@ def query_registry(query: str, base_dir: Path) -> str:
 
 def query_graph(query: str, base_dir: Path) -> str:
     """执行 Graphify 语义查询"""
-    graph_dir = base_dir / "library" / "graphify-out"
+    graph_dir = base_dir / "graph"
 
     if not graph_dir.exists() or not (graph_dir / "graph.json").exists():
         return "图谱不存在，请先运行 'paperbase graph update' 构建图谱"
 
     try:
+        # 验证 query 不包含命令行选项（防止参数注入）
+        if query.strip().startswith('-'):
+            return "查询内容不能以 - 开头（可能被误解析为命令参数）"
+
         # 调用 graphify query
         result = subprocess.run(
             ['graphify', 'query', query],
