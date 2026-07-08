@@ -79,12 +79,19 @@ Ingest academic papers into the knowledge base:
 /paperbase ingest <identifier> --no-graph
 ```
 
-**Examples:**
-- `/paperbase ingest 10.1038/nature12373` - Ingest by DOI
-- `/paperbase ingest arxiv:2301.07041` - Ingest by arXiv ID
-- `/paperbase ingest --file paper.pdf` - Ingest local PDF
-- `/paperbase ingest --batch papers.txt` - Batch ingest from file list
-- `/paperbase ingest doi:10.1038/nature --no-graph` - Skip graph update
+**Online Fetch (requires `online-fetch` extra):**
+- `/paperbase ingest 10.1038/nature12373` - Ingest by DOI (online)
+- `/paperbase ingest arxiv:2301.07041` - Ingest by arXiv ID (online)
+- `/paperbase ingest https://www.nature.com/articles/...` - Ingest by URL (online)
+
+**Local PDF:**
+- `/paperbase ingest --file paper.pdf` - Ingest local PDF file
+
+**Batch Mode:**
+- `/paperbase ingest --batch papers.txt` - Batch ingest (supports paths, DOIs, URLs)
+
+**Options:**
+- `--no-graph` - Skip automatic graph update (useful for continuous ingestion)
 
 ### Search Papers
 
