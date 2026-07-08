@@ -55,12 +55,11 @@ paperbase/
 ## 工作流状态机
 
 ```
-NORMALIZED → VALIDATED → READY
+NORMALIZED → READY
 ```
 
 **主流程状态：**
 - `NORMALIZED`: 论文已摄入并规范化
-- `VALIDATED`: 实体已提取并验证
 - `READY`: 已加入图谱，可供查询
 
 **异常状态：**
@@ -71,8 +70,7 @@ NORMALIZED → VALIDATED → READY
 
 **状态转换触发：**
 - `ingest` → `NORMALIZED`
-- `extract` / `update` → `VALIDATED`
-- `graph update` / `graph build-entities` → `READY`
+- `graph update` → `READY`
 
 ## Commands
 
