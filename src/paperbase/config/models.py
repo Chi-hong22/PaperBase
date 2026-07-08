@@ -3,7 +3,7 @@
 import os
 from typing import Literal
 from pathlib import Path
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator, Field
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,9 +35,6 @@ class LLMConfig(BaseModel):
     # 向后兼容旧格式
     enabled: bool | None = None
     provider: str | None = None  # 向后兼容，但不再使用
-    auto_extract_on_ingest: bool | None = None
-    extract_timeout: int | None = None
-    max_content_length: int | None = None
 
     @model_validator(mode="after")
     def validate_and_migrate(self):
@@ -53,12 +50,6 @@ class LLMConfig(BaseModel):
         if self.provider is not None:
             logger.warning("provider field is deprecated. Use base_url directly.")
             # 不再自动推导，用户需要明确设置 base_url
-
-        # 迁移旧的高级配置
-        if self.extract_timeout is not None:
-            self.advanced.timeout = self.extract_timeout
-        if self.max_content_length is not None:
-            self.advanced.max_input_tokens = self.max_content_length
 
         # 验证：如果配置了 base_url，必须配置 model
         if self.base_url and not self.model:
@@ -88,12 +79,6 @@ class LLMConfig(BaseModel):
     def get_max_input_tokens(self) -> int:
         """获取最大输入长度"""
         return self.advanced.max_input_tokens
-
-    def should_auto_extract(self) -> bool:
-        """是否自动提取"""
-        if self.auto_extract_on_ingest is not None:
-            return self.auto_extract_on_ingest
-        return self.is_enabled()
 
 
 class GraphAdvancedConfig(BaseModel):
@@ -225,20 +210,20 @@ class PaperBaseConfig(BaseModel):
     """PaperBase 完整配置"""
 
     # 项目元信息
-    project: dict = {}
+    project: dict = Field(default_factory=dict)
 
     # 核心配置
     llm: LLMConfig = LLMConfig()
     graph: GraphConfig = GraphConfig()
 
     # Adapter 配置
-    adapters: dict = {}
+    adapters: dict = Field(default_factory=dict)
 
     # 向后兼容字段
-    paths: dict = {}
-    storage: dict = {}
-    state_machine: dict = {}
-    terminology: dict = {}
+    paths: dict = Field(default_factory=dict)
+    storage: dict = Field(default_factory=dict)
+    state_machine: dict = Field(default_factory=dict)
+    terminology: dict = Field(default_factory=dict)
     graphify: GraphifyConfig = GraphifyConfig()
 
     @model_validator(mode="after")
