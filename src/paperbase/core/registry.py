@@ -5,9 +5,12 @@
 
 import sqlite3
 import json
+import logging
 from pathlib import Path
 from datetime import datetime, UTC
 from paperbase.schemas.manifest import PaperState
+
+logger = logging.getLogger(__name__)
 
 
 class PaperRegistry:
@@ -93,9 +96,9 @@ class PaperRegistry:
             if result["authors"]:
                 try:
                     result["authors"] = json.loads(result["authors"])
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError) as e:
                     # 如果不是 JSON，保持原样（兼容旧数据）
-                    pass
+                    logger.warning(f"Failed to parse authors JSON for paper {paper_id}: {e}, keeping raw string")
             return result
         return None
 
@@ -127,9 +130,9 @@ class PaperRegistry:
             if result["authors"]:
                 try:
                     result["authors"] = json.loads(result["authors"])
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError) as e:
                     # 如果不是 JSON，保持原样（兼容旧数据）
-                    pass
+                    logger.warning(f"Failed to parse authors JSON for paper {result['paper_id']}: {e}, keeping raw string")
             results.append(result)
         return results
 
