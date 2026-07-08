@@ -24,6 +24,8 @@ def check_uv() -> Tuple[bool, str]:
     if shutil.which("uv"):
         try:
             result = subprocess.run(["uv", "--version"], capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                return False, f"uv command failed: {result.stderr.strip()}"
             version = result.stdout.strip().replace("uv ", "")
             return True, f"uv {version}"
         except Exception:
@@ -35,6 +37,8 @@ def check_graphify() -> Tuple[bool, str]:
     if shutil.which("graphify"):
         try:
             result = subprocess.run(["graphify", "--version"], capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                return False, f"graphify command failed: {result.stderr.strip()}"
             version = result.stdout.strip()
             return True, f"graphify {version}"
         except Exception:

@@ -67,12 +67,26 @@ def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
 
 
 def _parse_year(value: str | None) -> int:
+    """Parse year from date string with validation.
+
+    Returns current year as fallback for missing/invalid dates.
+    Rejects placeholder years like 9999.
+    """
+    from datetime import datetime
+
+    current_year = datetime.now().year
+
     if not value:
-        return 2025
+        return current_year
+
     for token in value.replace("/", "-").split("-"):
         if token.isdigit() and len(token) == 4:
-            return int(token)
-    return 2025
+            year = int(token)
+            # Validate year is in reasonable range (1000-current_year+1)
+            if 1000 <= year <= current_year + 1:
+                return year
+
+    return current_year
 
 
 def _map_references(article: Any) -> list[FetchedReference]:

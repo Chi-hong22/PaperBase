@@ -46,8 +46,8 @@ def _write_references(path: Path, fetched: FetchedPaper) -> None:
             f.write(json.dumps(reference.__dict__, ensure_ascii=False) + "\n")
 
 
-def _copy_assets(paths: PaperPaths, fetched: FetchedPaper) -> list[SourceArtifact]:
-    acquired_at = datetime.now(UTC).isoformat()
+def _copy_assets(paths: PaperPaths, fetched: FetchedPaper, acquired_at: str) -> list[SourceArtifact]:
+    """Copy assets with unified timestamp."""
     artifacts: list[SourceArtifact] = []
     for index, asset in enumerate(fetched.assets, start=1):
         if asset.source_path is None or not asset.source_path.exists():
@@ -57,6 +57,11 @@ def _copy_assets(paths: PaperPaths, fetched: FetchedPaper) -> list[SourceArtifac
         suffix = asset.source_path.suffix or ".bin"
         target = paths.assets_dir / f"{safe_kind}-{index:03d}{suffix}"
         shutil.copy2(asset.source_path, target)
+
+        # Verify write completed successfully by checking file size
+        if target.exists() and target.stat().st_size != asset.source_path.stat().st_size:
+            raise IOError(f"Asset copy incomplete: {target} size mismatch")
+
         artifacts.append(
             SourceArtifact(
                 path=f"./assets/{target.name}",
@@ -76,10 +81,11 @@ def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestR
     paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
     paths.create_directories()
 
-    asset_artifacts = _copy_assets(paths, fetched)
-    _write_references(paths.references_jsonl, fetched)
-
+    # Use unified timestamp for all operations
     now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+    asset_artifacts = _copy_assets(paths, fetched, now)
+    _write_references(paths.references_jsonl, fetched)
 
     # Step 1: Generate preliminary canonical markdown without hash in metadata
     preliminary_metadata_dict = {
