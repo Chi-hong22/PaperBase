@@ -14,7 +14,6 @@ from paperbase.core.manifest import load_manifest, save_manifest
 from paperbase.core.paths import PaperPaths
 from paperbase.schemas.manifest import PaperState, GraphInfo
 from paperbase.core.graph_updater import detect_changed_papers
-from paperbase.core.entity_graph_builder import EntityGraphBuilder
 
 
 @click.group()
@@ -102,37 +101,9 @@ def update(ctx, force: bool, incremental: bool):
     )
 
     if not result["success"]:
-        console.print(f"[yellow]graphify 失败: {result['error']}[/yellow]")
-        console.print("[dim]尝试使用备用方案（EntityGraphBuilder）...[/dim]")
-
-        # 降级到 EntityGraphBuilder
-        builder = EntityGraphBuilder(base_dir=base_dir)
-        entities_dict = builder.extract_all_entities(library_dir)
-
-        if not entities_dict:
-            console.print("[red]备用方案也失败：没有找到已提取的实体[/red]")
-            console.print("提示: 先运行 [cyan]paperbase extract --all[/cyan] 提取实体")
-            raise click.Abort()
-
-        # 构建简化图谱
-        nodes = builder.build_entity_nodes(entities_dict)
-        edges = builder.build_entity_edges(entities_dict)
-        output_path = graph_dir / "entities.jsonl"
-        builder.export_to_jsonl(nodes, edges, output_path)
-
-        console.print(f"[green]✓ 已使用备用方案构建关联图谱[/green]")
-        console.print(f"   输出: {output_path}")
-        console.print(f"   信息点: {len(nodes)} 个")
-        console.print(f"   关联: {len(edges)} 条")
-        console.print("[dim]提示: 修复网络配置后运行 'paperbase graph update --force' 获取完整语义图谱[/dim]")
-
-        # 从 registry 获取所有论文（而不是只获取 normalized 状态的）
-        registry_path = base_dir / "registry" / "papers.db"
-        registry = PaperRegistry(registry_path)
-        # 获取所有在 entities_dict 中的论文
-        all_papers = registry.list_papers()
-        normalized_papers = [p for p in all_papers if p["paper_id"] in entities_dict]
-        registry.close()
+        console.print(f"[red]graphify 失败: {result['error']}[/red]")
+        console.print("提示: 检查网络配置和 LLM API 设置")
+        raise click.Abort()
 
     # Step 4: 更新状态
     stats = get_graph_stats(graph_dir)
@@ -151,8 +122,8 @@ def update(ctx, force: bool, incremental: bool):
             if paths.manifest_json.exists():
                 manifest = load_manifest(paths.manifest_json)
 
-                # 只处理 NORMALIZED 或 VALIDATED 状态的论文
-                if manifest.state in [PaperState.NORMALIZED, PaperState.VALIDATED]:
+                # 只处理 NORMALIZED 状态的论文
+                if manifest.state == PaperState.NORMALIZED:
                     content_sha256 = manifest.canonical_md.sha256 if manifest.canonical_md else None
 
                     manifest.graph = GraphInfo(
@@ -199,114 +170,3 @@ def status(ctx):
         for f in stats['files']:
             console.print(f"    - {f}")
 
-
-@graph.command()
-@click.option(
-    "--output",
-    type=click.Path(),
-    default=None,
-    help="输出文件路径（默认: graph/entities.jsonl）"
-)
-@click.option(
-    "--no-state-update",
-    is_flag=True,
-    help="不更新论文状态"
-)
-@click.pass_context
-def build_entities(ctx, output: str | None, no_state_update: bool):
-    """构建关键信息关联图谱"""
-    console = Console()
-    base_dir = ctx.obj["base_dir"]
-
-    console.print("[cyan]构建关键信息关联...[/cyan]")
-
-    # Step 1: 设置输出路径
-    if output:
-        output_path = Path(output)
-    else:
-        output_path = base_dir / "graph" / "entities.jsonl"
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Step 2: 收集信息
-    library_dir = base_dir / "library"
-
-    if not library_dir.exists():
-        console.print("[red]知识库为空[/red]")
-        raise click.Abort()
-
-    builder = EntityGraphBuilder(base_dir=base_dir)
-    entities_dict = builder.extract_all_entities(library_dir)
-
-    if not entities_dict:
-        console.print("[yellow]没有找到已分析的论文[/yellow]")
-        console.print("提示: 先运行 [cyan]paperbase extract --all[/cyan] 分析论文内容")
-        return
-
-    console.print(f"收集了 {len(entities_dict)} 篇论文的信息")
-
-    # Step 3: 构建关联
-    nodes = builder.build_entity_nodes(entities_dict)
-    edges = builder.build_entity_edges(entities_dict)
-
-    # Step 4: 导出
-    builder.export_to_jsonl(nodes, edges, output_path)
-
-    # 统计信息
-    console.print(f"[green]✓ 关联图谱已生成[/green]")
-    console.print(f"   输出: {output_path}")
-    console.print(f"   信息点: {len(nodes)} 个")
-    console.print(f"   关联: {len(edges)} 条")
-
-    # 显示类别分布
-    category_stats = {}
-    for node in nodes:
-        category = node["category"]
-        category_stats[category] = category_stats.get(category, 0) + 1
-
-    if category_stats:
-        console.print(f"\n   信息类别:")
-        for category, count in sorted(category_stats.items()):
-            console.print(f"     - {category}: {count}")
-
-    # Step 5: 更新论文状态（如果启用）
-    if not no_state_update:
-        from datetime import datetime, UTC
-
-        registry_path = base_dir / "registry" / "papers.db"
-        if registry_path.exists():
-            registry = PaperRegistry(registry_path)
-            updated_count = 0
-            now = datetime.now(UTC).isoformat() + "Z"
-
-            try:
-                # 更新所有参与图谱的论文状态
-                for paper_id in entities_dict.keys():
-                    paper = registry.get_paper(paper_id)
-                    if paper:
-                        storage_id = paper["storage_id"]
-                        paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
-
-                        if paths.manifest_json.exists():
-                            manifest = load_manifest(paths.manifest_json)
-
-                            # 只处理 NORMALIZED 或 VALIDATED 状态的论文
-                            if manifest.state in [PaperState.NORMALIZED, PaperState.VALIDATED]:
-                                manifest.graph = GraphInfo(
-                                    indexed=True,
-                                    updated_at=now,
-                                    content_sha256_at_index=manifest.canonical_md.sha256 if manifest.canonical_md else None
-                                )
-
-                                # 推进到 READY
-                                manifest.state = PaperState.READY
-                                save_manifest(manifest, paths.manifest_json)
-
-                                # 更新 registry
-                                registry.update_state(paper_id, PaperState.READY)
-                                updated_count += 1
-
-                if updated_count > 0:
-                    console.print(f"\n[green]✓ 已更新 {updated_count} 篇论文状态为 ready[/green]")
-            finally:
-                registry.close()
