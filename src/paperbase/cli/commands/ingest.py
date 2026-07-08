@@ -9,38 +9,44 @@ from paperbase.core.registry import PaperRegistry
 from paperbase.core.manifest import create_manifest, save_manifest
 from paperbase.adapters.pdf_extractor import extract_pdf_metadata, extract_pdf_text
 from paperbase.adapters.pdf_converter import convert_pdf_to_markdown
+from paperbase.adapters.paper_fetch_adapter import PaperFetchAdapter, PaperFetchUnavailable
 from paperbase.core.normalizer import normalize_paper
+from paperbase.core.online_ingest import ingest_fetched_paper
 from paperbase.schemas.manifest import PaperState, SourcePDF, CanonicalMD, PipelineInfo
 from paperbase.utils.hash import sha256_file, sha256_string
 from paperbase.utils.markdown import generate_canonical_markdown
 import shutil
 
 
-@click.command()
-@click.argument("pdf_path", type=click.Path(exists=True, path_type=Path), required=False)
-@click.option("--no-graph", is_flag=True, help="跳过图谱更新")
-@click.option("--batch", type=click.Path(exists=True, path_type=Path), help="批量摄入文件列表（每行一个路径）")
-@click.pass_context
-def ingest(ctx, pdf_path: Path | None, no_graph: bool, batch: Path | None):
-    """摄入论文 PDF"""
+def _target_is_local_file(target: str | None) -> bool:
+    if not target:
+        return False
+    return Path(target).expanduser().exists()
+
+
+def _ingest_online(ctx, query: str, no_graph: bool):
+    console = Console()
+    base_dir = ctx.obj["base_dir"]
+    try:
+        fetched = PaperFetchAdapter().fetch(query)
+    except PaperFetchUnavailable as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise click.Abort() from exc
+
+    result = ingest_fetched_paper(base_dir=base_dir, fetched=fetched)
+    console.print("[green]✓ Online paper ingested successfully[/green]")
+    console.print(f"Paper ID:    {result.paper_id}")
+    console.print(f"Storage ID:  {result.storage_id}")
+    if no_graph:
+        console.print("[dim]Graph update skipped by --no-graph[/dim]")
+    return result
+
+
+def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
+    """摄入本地 PDF 文件"""
     console = Console()
     base_dir = ctx.obj["base_dir"]
 
-    # 互斥检查
-    if pdf_path and batch:
-        console.print("[red]❌ 不能同时使用 PDF_PATH 和 --batch[/red]")
-        raise click.Abort()
-
-    if not pdf_path and not batch:
-        console.print("[red]❌ 必须提供 PDF_PATH 或 --batch[/red]")
-        raise click.Abort()
-
-    # 批量模式
-    if batch:
-        _ingest_batch(ctx, batch, no_graph)
-        return
-
-    # 单文件模式
     console.print(f"[cyan]开始摄入论文:[/cyan] {pdf_path.name}")
 
     try:
@@ -202,6 +208,45 @@ def ingest(ctx, pdf_path: Path | None, no_graph: bool, batch: Path | None):
         raise
 
 
+@click.command()
+@click.argument("target", required=False)
+@click.option("--file", "file_path", type=click.Path(exists=True, path_type=Path), help="本地 PDF 文件路径")
+@click.option("--no-graph", is_flag=True, help="跳过图谱更新")
+@click.option("--batch", type=click.Path(exists=True, path_type=Path), help="批量摄入文件列表（每行一个路径、DOI、URL 或标题）")
+@click.pass_context
+def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, batch: Path | None):
+    """摄入论文：本地 PDF 或 DOI/URL/title"""
+    console = Console()
+
+    # 互斥检查
+    if sum([bool(target), bool(file_path), bool(batch)]) > 1:
+        console.print("[red]❌ 只能指定一个输入源：TARGET、--file 或 --batch[/red]")
+        raise click.Abort()
+
+    if not target and not file_path and not batch:
+        console.print("[red]❌ 必须提供输入源：TARGET、--file 或 --batch[/red]")
+        raise click.Abort()
+
+    # 批量模式
+    if batch:
+        _ingest_batch(ctx, batch, no_graph)
+        return
+
+    # 本地文件模式
+    if file_path is not None:
+        _ingest_local_pdf(ctx, file_path, no_graph)
+        return
+
+    if target and _target_is_local_file(target):
+        _ingest_local_pdf(ctx, Path(target), no_graph)
+        return
+
+    # 在线查询模式
+    if target:
+        _ingest_online(ctx, target, no_graph)
+        return
+
+
 def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
     """批量摄入论文"""
     console = Console()
@@ -211,28 +256,30 @@ def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
 
     # 读取文件列表
     try:
-        pdf_paths = []
+        targets = []
         with open(batch_file, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):
-                    pdf_path = Path(line)
-                    if not pdf_path.exists():
-                        console.print(f"[yellow]⚠️  跳过不存在的文件: {line}[/yellow]")
-                        continue
-                    pdf_paths.append(pdf_path)
+                    targets.append(line)
 
-        console.print(f"[cyan]找到 {len(pdf_paths)} 个有效 PDF 文件[/cyan]\n")
+        console.print(f"[cyan]找到 {len(targets)} 个目标（文件/DOI/URL）[/cyan]\n")
 
         # 逐个摄入（跳过图谱）
         success_count = 0
         failed_count = 0
 
-        for i, pdf_path in enumerate(pdf_paths, 1):
-            console.print(f"[cyan]--- [{i}/{len(pdf_paths)}] {pdf_path.name} ---[/cyan]")
+        for i, target in enumerate(targets, 1):
+            # 判断是本地文件还是在线查询
+            if _target_is_local_file(target):
+                display_name = Path(target).name
+            else:
+                display_name = target[:50] + "..." if len(target) > 50 else target
+
+            console.print(f"[cyan]--- [{i}/{len(targets)}] {display_name} ---[/cyan]")
             try:
-                # 调用单文件摄入逻辑，强制跳过图谱
-                ctx.invoke(ingest, pdf_path=pdf_path, no_graph=True, batch=None)
+                # 调用主 ingest 命令，让它自动路由
+                ctx.invoke(ingest, target=target, no_graph=True, batch=None)
                 success_count += 1
             except Exception as e:
                 console.print(f"[red]❌ 摄入失败: {e}[/red]")

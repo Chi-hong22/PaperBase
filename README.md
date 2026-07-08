@@ -202,6 +202,22 @@ paperbase/
 
 ## 📋 使用方法
 
+### 联网获取能力（可选）
+
+启用 `online-fetch` 后，`paperbase ingest` 可以接收 DOI、论文 URL 或标题查询，并通过 `paper-fetch-skill` 获取结构化元数据、干净 Markdown 全文、引用和图表资源：
+
+```bash
+uv sync --extra online-fetch
+uv run paperbase ingest "10.1038/s41586-026-10265-5"
+uv run paperbase ingest "https://www.nature.com/articles/s41586-026-10265-5"
+```
+
+本地 PDF 仍使用原有路径：
+
+```bash
+uv run paperbase ingest --file paper.pdf
+```
+
 ### 摄入论文
 
 ```bash

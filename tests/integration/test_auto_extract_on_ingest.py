@@ -28,14 +28,16 @@ def mock_pdf_processing():
     with patch("paperbase.adapters.pdf_extractor.pymupdf.open") as mock_pymupdf, \
          patch("paperbase.adapters.pdf_converter.MarkItDown") as mock_markitdown:
 
-        # Mock PyMuPDF
+        # Mock PyMuPDF - context manager pattern
         mock_doc = MagicMock()
         mock_doc.metadata = {
             "title": "Test Paper",
             "author": "Alice",
             "creationDate": "D:20240101"
         }
-        mock_pymupdf.return_value = mock_doc
+        # Fix: pymupdf.open() returns a context manager
+        mock_pymupdf.return_value.__enter__.return_value = mock_doc
+        mock_pymupdf.return_value.__exit__.return_value = None
 
         # Mock MarkItDown
         mock_md_instance = MagicMock()
@@ -61,7 +63,7 @@ def test_ingest_without_llm_skips_auto_extract(runner, sample_pdf, tmp_path, moc
         result = runner.invoke(main, [
             "--base-dir", str(tmp_path),
             "ingest",
-            str(sample_pdf),
+            "--file", str(sample_pdf),
             "--no-graph"
         ])
 
@@ -91,7 +93,7 @@ def test_ingest_with_llm_extracts_entities(runner, sample_pdf, tmp_path, mock_pd
         result = runner.invoke(main, [
             "--base-dir", str(tmp_path),
             "ingest",
-            str(sample_pdf),
+            "--file", str(sample_pdf),
             "--no-graph"
         ])
 
@@ -120,7 +122,7 @@ def test_ingest_auto_extract_failure_does_not_block(runner, sample_pdf, tmp_path
         result = runner.invoke(main, [
             "--base-dir", str(tmp_path),
             "ingest",
-            str(sample_pdf),
+            "--file", str(sample_pdf),
             "--no-graph"
         ])
 
@@ -151,7 +153,7 @@ def test_ingest_auto_extract_returns_empty(runner, sample_pdf, tmp_path, mock_pd
         result = runner.invoke(main, [
             "--base-dir", str(tmp_path),
             "ingest",
-            str(sample_pdf),
+            "--file", str(sample_pdf),
             "--no-graph"
         ])
 
