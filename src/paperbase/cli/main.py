@@ -10,8 +10,6 @@ from paperbase.cli.commands.search import search
 from paperbase.cli.commands.query import query
 from paperbase.cli.commands.doctor import doctor
 from paperbase.cli.commands.remove import remove
-from paperbase.cli.commands.update import update
-from paperbase.cli.commands.extract import extract
 from paperbase.cli.commands.config import config
 
 # 加载 .env 文件（如果存在）
@@ -41,8 +39,6 @@ main.add_command(search)
 main.add_command(query)
 main.add_command(doctor)
 main.add_command(remove)
-main.add_command(update)
-main.add_command(extract)
 main.add_command(config)
 
 
