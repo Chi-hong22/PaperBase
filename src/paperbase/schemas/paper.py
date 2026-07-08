@@ -177,9 +177,6 @@ class PaperMetadata(BaseModel):
     chunks: PaperChunks | None = None
     quality: PaperQuality = Field(default_factory=PaperQuality)
 
-    # 实体字段（核心扩展）
-    entities: dict[str, list[PaperEntity]] = Field(default_factory=dict)
-
     @field_validator("year")
     @classmethod
     def validate_year(cls, v: int) -> int:
