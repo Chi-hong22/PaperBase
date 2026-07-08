@@ -40,6 +40,13 @@ class PaperAuthor(BaseModel):
     orcid: str | None = None
     affiliation: str | None = None
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("作者姓名不能为空")
+        return v.strip()
+
 
 class PaperVenue(BaseModel):
     """发表venue"""
@@ -162,6 +169,18 @@ class PaperMetadata(BaseModel):
     authors: list[PaperAuthor]
     year: int
     published_at: str | None = None
+
+    @field_validator("authors")
+    @classmethod
+    def validate_authors(cls, v: list[PaperAuthor]) -> list[PaperAuthor]:
+        """验证作者列表不为空且不含 None"""
+        if not v:
+            raise ValueError("作者列表不能为空")
+        # Pydantic 已确保列表中每个元素都是 PaperAuthor 实例
+        # 这里额外检查确保没有空项
+        if any(author is None for author in v):
+            raise ValueError("作者列表不能包含 None 值")
+        return v
 
     venue: PaperVenue | None = None
     identifiers: PaperIdentifiers | None = None
