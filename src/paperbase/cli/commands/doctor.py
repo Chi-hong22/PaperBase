@@ -24,6 +24,8 @@ def check_uv() -> Tuple[bool, str]:
     if shutil.which("uv"):
         try:
             result = subprocess.run(["uv", "--version"], capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                return False, f"uv command failed: {result.stderr.strip()}"
             version = result.stdout.strip().replace("uv ", "")
             return True, f"uv {version}"
         except Exception:
@@ -35,6 +37,8 @@ def check_graphify() -> Tuple[bool, str]:
     if shutil.which("graphify"):
         try:
             result = subprocess.run(["graphify", "--version"], capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                return False, f"graphify command failed: {result.stderr.strip()}"
             version = result.stdout.strip()
             return True, f"graphify {version}"
         except Exception:
@@ -85,6 +89,14 @@ def check_graph() -> Tuple[bool, str]:
         return True, "Knowledge graph directory exists (empty)"
     return False, "Knowledge graph not found (run 'graph update' to create)"
 
+def check_paper_fetch() -> Tuple[bool, str]:
+    """Check if paper-fetch-skill is available"""
+    try:
+        import paper_fetch  # noqa: F401
+        return True, "installed"
+    except ImportError:
+        return False, "not installed; run `uv sync --extra online-fetch`"
+
 def main():
     print("🔍 PaperBase Doctor - Environment Diagnostics\n")
     print("=" * 60)
@@ -93,6 +105,7 @@ def main():
         ("Python Version", check_python_version()),
         ("uv Package Manager", check_uv()),
         ("graphify (optional)", check_graphify()),
+        ("paper-fetch (optional)", check_paper_fetch()),
         ("SQLite Version", check_sqlite_version()),
         ("PaperBase Library", check_library()),
         ("Registry Database", check_registry()),

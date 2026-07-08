@@ -21,6 +21,11 @@ state_machine:
 adapters:
   paper_fetch:
     enabled: true
+    artifact_mode: "markdown-assets"
+    asset_profile: "body"
+    include_refs: "all"
+    max_tokens: "full_text"
+    allow_metadata_only: false
   zotero:
     enabled: true
     local_mode: true
