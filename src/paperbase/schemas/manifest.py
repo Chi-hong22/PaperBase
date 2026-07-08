@@ -29,7 +29,6 @@ class PaperState(str, Enum):
 
     简化状态机（2026-07-08）：
     - NORMALIZED: 论文已摄入并规范化
-    - VALIDATED: 实体已提取并验证
     - READY: 已加入图谱，可供查询
 
     异常状态：
@@ -40,7 +39,6 @@ class PaperState(str, Enum):
     """
     # 主流程状态
     NORMALIZED = "normalized"
-    VALIDATED = "validated"
     READY = "ready"
 
     # 异常状态
