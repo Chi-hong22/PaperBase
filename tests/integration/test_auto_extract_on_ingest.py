@@ -28,14 +28,16 @@ def mock_pdf_processing():
     with patch("paperbase.adapters.pdf_extractor.pymupdf.open") as mock_pymupdf, \
          patch("paperbase.adapters.pdf_converter.MarkItDown") as mock_markitdown:
 
-        # Mock PyMuPDF
+        # Mock PyMuPDF - context manager pattern
         mock_doc = MagicMock()
         mock_doc.metadata = {
             "title": "Test Paper",
             "author": "Alice",
             "creationDate": "D:20240101"
         }
-        mock_pymupdf.return_value = mock_doc
+        # Fix: pymupdf.open() returns a context manager
+        mock_pymupdf.return_value.__enter__.return_value = mock_doc
+        mock_pymupdf.return_value.__exit__.return_value = None
 
         # Mock MarkItDown
         mock_md_instance = MagicMock()

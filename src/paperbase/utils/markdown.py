@@ -19,6 +19,11 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
     Raises:
         ValueError: frontmatter 格式错误或 YAML 无效
     """
+    # Limit input size to prevent DoS via billion laughs or similar attacks
+    MAX_FRONTMATTER_SIZE = 1_000_000  # 1 MB
+    if len(content) > MAX_FRONTMATTER_SIZE:
+        raise ValueError(f"Content exceeds maximum size ({MAX_FRONTMATTER_SIZE} bytes)")
+
     parts = content.split("---\n")
 
     if len(parts) < 3:
