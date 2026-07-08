@@ -143,46 +143,9 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         console.print(f"\n[green]✓ 论文已保存到知识库[/green]")
         console.print(f"   路径: {paths.paper_dir}")
 
-        # Step 9.5: 提取论文实体（如果已配置 LLM）
-        console.print("\n[cyan]正在提取实体...[/cyan]")
-        try:
-            from paperbase.core.entity_manager import EntityManager
-
-            entity_manager = EntityManager(base_dir=base_dir)
-
-            if entity_manager.llm_client.enabled:
-                console.print("  [dim]使用 LLM 提取实体...[/dim]")
-
-                try:
-                    entities = entity_manager.auto_extract_entities(paper_id, storage_id)
-
-                    if entities:
-                        console.print("[green]✓ 实体提取完成[/green]")
-                        for category, items in entities.items():
-                            if items:
-                                names = [e.get("name", "") for e in items]
-                                console.print(f"   {category}: {', '.join(names[:3])}")
-                                if len(names) > 3:
-                                    console.print(f"      ... 及其他 {len(names) - 3} 项")
-                    else:
-                        console.print("[yellow]⚠ 实体提取未返回结果[/yellow]")
-                        console.print("   论文已保存，可稍后手动补充")
-
-                except Exception as e:
-                    console.print(f"[yellow]⚠ 实体提取失败: {e}[/yellow]")
-                    console.print("   论文已保存，可稍后手动补充")
-            else:
-                console.print("[dim]跳过实体提取（LLM 未配置）[/dim]")
-                console.print("   [dim]如需自动提取实体，请配置 config/paperbase.yaml[/dim]")
-
-        except ImportError as e:
-            console.print(f"[yellow]⚠ 无法加载实体管理模块: {e}[/yellow]")
-        except Exception as e:
-            console.print(f"[yellow]⚠ 实体提取检查失败: {e}[/yellow]")
-
-        # Step 10: 更新知识库索引（可选）
+        # Step 9: 更新知识库索引（可选）
         if not no_graph:
-            console.print("\n[yellow]10. 更新知识库索引...[/yellow]")
+            console.print("\n[yellow]9. 更新知识库索引...[/yellow]")
             try:
                 from paperbase.cli.commands.graph import update as graph_update
                 # 调用 graph update 命令
