@@ -124,13 +124,19 @@ def check_llm(ctx):
     base_url = llm_config.get("base_url")
     model = llm_config.get("model")
 
-    # 展开环境变量
+    # 展开环境变量（支持 ${VAR} 和 $VAR）
     if base_url and base_url.startswith("${"):
         env_var = base_url[2:-1]
+        base_url = os.getenv(env_var, "")
+    elif base_url and base_url.startswith("$"):
+        env_var = base_url[1:]
         base_url = os.getenv(env_var, "")
 
     if model and model.startswith("${"):
         env_var = model[2:-1]
+        model = os.getenv(env_var, "")
+    elif model and model.startswith("$"):
+        env_var = model[1:]
         model = os.getenv(env_var, "")
 
     enabled = bool(base_url and model)
@@ -197,6 +203,7 @@ def check_llm(ctx):
 def _expand_env_vars_for_display(config: dict) -> dict:
     """展开环境变量用于显示"""
     import copy
+    import re
     config = copy.deepcopy(config)
 
     if "llm" in config:
@@ -204,8 +211,12 @@ def _expand_env_vars_for_display(config: dict) -> dict:
         for key in ["base_url", "api_key", "model"]:
             if key in llm and isinstance(llm[key], str):
                 value = llm[key]
+                # 支持 ${VAR} 和 $VAR 格式
                 if value.startswith("${") and value.endswith("}"):
                     env_var = value[2:-1]
+                    llm[key] = os.getenv(env_var, f"(环境变量 {env_var} 未设置)")
+                elif value.startswith("$"):
+                    env_var = value[1:]
                     llm[key] = os.getenv(env_var, f"(环境变量 {env_var} 未设置)")
 
     return config
@@ -213,6 +224,8 @@ def _expand_env_vars_for_display(config: dict) -> dict:
 
 def _mask_secret(value: str) -> str:
     """脱敏显示密钥"""
-    if not value or len(value) < 10:
+    if not value:
+        return "(未设置)"
+    if len(value) < 10:
         return "(已设置)"
     return f"{value[:8]}...{value[-4:]}"
