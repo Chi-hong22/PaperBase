@@ -120,38 +120,42 @@ def update(ctx, force: bool, incremental: bool):
 
     # Step 5: 更新 manifest 和 registry
     console.print("[yellow]5. 更新论文状态...[/yellow]")
-    if not incremental:
-        registry = PaperRegistry(registry_path)
     updated_count = 0
     now = datetime.now(UTC).isoformat() + "Z"
 
-    for paper in normalized_papers:
-        storage_id = paper["storage_id"]
-        paper_id = paper["paper_id"]
-
-        # 更新 manifest
-        paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
-        if paths.manifest_json.exists():
-            manifest = load_manifest(paths.manifest_json)
-            manifest.state = PaperState.GRAPHED
-
-            # 记录图谱化时的内容 SHA256
-            content_sha256 = manifest.canonical_md.sha256 if manifest.canonical_md else None
-
-            manifest.graph = GraphInfo(
-                indexed=True,
-                updated_at=now,
-                content_sha256_at_index=content_sha256
-            )
-            save_manifest(manifest, paths.manifest_json)
-
-        # 更新 registry
-        if not incremental:
-            registry.update_state(paper_id, PaperState.GRAPHED)
-        updated_count += 1
-
+    # Use context manager to ensure registry is closed even on exception
     if not incremental:
-        registry.close()
+        registry = PaperRegistry(registry_path)
+
+    try:
+        for paper in normalized_papers:
+            storage_id = paper["storage_id"]
+            paper_id = paper["paper_id"]
+
+            # 更新 manifest
+            paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
+            if paths.manifest_json.exists():
+                manifest = load_manifest(paths.manifest_json)
+                manifest.state = PaperState.GRAPHED
+
+                # 记录图谱化时的内容 SHA256
+                content_sha256 = manifest.canonical_md.sha256 if manifest.canonical_md else None
+
+                manifest.graph = GraphInfo(
+                    indexed=True,
+                    updated_at=now,
+                    content_sha256_at_index=content_sha256
+                )
+                save_manifest(manifest, paths.manifest_json)
+
+            # 更新 registry
+            if not incremental:
+                registry.update_state(paper_id, PaperState.GRAPHED)
+            updated_count += 1
+    finally:
+        if not incremental:
+            registry.close()
+
     console.print(f"   ✓ 更新了 {updated_count} 篇论文")
 
     console.print(f"\n[green]✅ 知识图谱更新完成![/green]")

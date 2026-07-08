@@ -36,7 +36,8 @@ class OnlineIngestResult:
 def _paper_id_for_fetched(fetched: FetchedPaper) -> str:
     if fetched.doi:
         return normalize_paper_id(fetched.doi)
-    return normalize_paper_id(f"fallback:{sha256_string(fetched.title)[:16]}")
+    # Use full SHA256 hash to prevent collisions
+    return normalize_paper_id(f"fallback:{sha256_string(fetched.title)}")
 
 
 def _write_references(path: Path, fetched: FetchedPaper) -> None:
@@ -51,8 +52,10 @@ def _copy_assets(paths: PaperPaths, fetched: FetchedPaper) -> list[SourceArtifac
     for index, asset in enumerate(fetched.assets, start=1):
         if asset.source_path is None or not asset.source_path.exists():
             continue
+        # Sanitize asset.kind to prevent directory traversal
+        safe_kind = asset.kind.replace("/", "_").replace("\\", "_").replace("..", "_")
         suffix = asset.source_path.suffix or ".bin"
-        target = paths.assets_dir / f"{asset.kind}-{index:03d}{suffix}"
+        target = paths.assets_dir / f"{safe_kind}-{index:03d}{suffix}"
         shutil.copy2(asset.source_path, target)
         artifacts.append(
             SourceArtifact(
@@ -77,37 +80,52 @@ def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestR
     _write_references(paths.references_jsonl, fetched)
 
     now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    metadata = PaperMetadata(
-        schema_version="1.0",
-        paper_id=paper_id,
-        storage_id=storage_id,
-        title=fetched.title,
-        authors=[PaperAuthor(name=name) for name in fetched.authors],
-        year=fetched.year,
-        abstract=fetched.abstract or "No abstract available",
-        source=PaperSource(
-            discovery="search",
-            fulltext_provider=fetched.provider,
-            original_url=fetched.original_url,
-        ),
-        provenance=PaperProvenance(
-            ingested_at=now,
-            converter={"name": "paper-fetch-skill", "version": "3.0.1"},
-            normalizer={"name": "paperbase-online-ingest", "version": "1.0.0"},
-            canonical_content_sha256=sha256_string(fetched.markdown),
-        ),
-        references=PaperReferences(
-            path="./references.jsonl",
-            count=len(fetched.references),
-        ),
-        quality=PaperQuality(
-            fulltext=fetched.has_fulltext,
-            metadata_complete=bool(fetched.title and fetched.authors),
-            references_parsed=bool(fetched.references),
-            needs_review=not fetched.has_fulltext,
-        ),
+
+    # Step 1: Generate preliminary canonical markdown without hash in metadata
+    preliminary_metadata_dict = {
+        "schema_version": "1.0",
+        "paper_id": paper_id,
+        "storage_id": storage_id,
+        "title": fetched.title,
+        "authors": [{"name": name} for name in fetched.authors],
+        "year": fetched.year,
+        "abstract": fetched.abstract or "No abstract available",
+        "source": {
+            "discovery": "search",
+            "fulltext_provider": fetched.provider,
+            "original_url": fetched.original_url,
+        },
+        "provenance": {
+            "ingested_at": now,
+            "converter": {"name": "paper-fetch-skill", "version": "3.0.1"},
+            "normalizer": {"name": "paperbase-online-ingest", "version": "1.0.0"},
+            # canonical_content_sha256 will be added after computing hash
+        },
+        "references": {
+            "path": "./references.jsonl",
+            "count": len(fetched.references),
+        },
+        "quality": {
+            "fulltext": fetched.has_fulltext,
+            "metadata_complete": bool(fetched.title and fetched.authors),
+            "references_parsed": bool(fetched.references),
+            "needs_review": not fetched.has_fulltext,
+        },
+    }
+
+    preliminary_canonical_md = generate_canonical_markdown(
+        preliminary_metadata_dict,
+        fetched.markdown,
     )
 
+    # Step 2: Compute hash of the preliminary canonical markdown
+    canonical_sha256 = sha256_string(preliminary_canonical_md)
+
+    # Step 3: Create final metadata with the computed hash
+    preliminary_metadata_dict["provenance"]["canonical_content_sha256"] = canonical_sha256
+
+    # Step 4: Generate final canonical markdown and validate with PaperMetadata
+    metadata = PaperMetadata(**preliminary_metadata_dict)
     canonical_md = generate_canonical_markdown(
         metadata.model_dump(mode="json", exclude_none=True),
         fetched.markdown,
