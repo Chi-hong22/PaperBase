@@ -6,8 +6,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-77%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-198%20passed-brightgreen.svg)](tests/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Security](https://img.shields.io/badge/security-11%20fixes-orange.svg)](#security-improvements)
 
 [English](README_EN.md) | 中文文档
 
@@ -701,8 +702,23 @@ MIT License
 
 ## 🙏 致谢
 
+本项目受益于以下开源工具和项目：
+
+### 核心依赖
 - [markitdown](https://github.com/microsoft/markitdown) - Microsoft 的 Markdown 转换工具
 - [PyMuPDF](https://pymupdf.readthedocs.io/) - PDF 处理库
+- [Pydantic](https://docs.pydantic.dev/) - 数据验证和 Schema 管理
+- [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - 在线论文获取和转换
+
+### 外部工具集成
+- [uv](https://github.com/astral-sh/uv) - Astral 团队的快速 Python 包管理器
+- [Graphify](https://github.com/graphify-ai/graphify) - 知识图谱构建工具
+- [Zotero](https://www.zotero.org/) - 文献管理软件
+- [Zotero MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/zotero) - Zotero MCP 集成服务
+
+### 开发工具
+- [Ruff](https://github.com/astral-sh/ruff) - 极速 Python linter 和 formatter
+- [pytest](https://docs.pytest.org/) - Python 测试框架
 
 ---
 
