@@ -73,7 +73,7 @@ def query_registry(query: str, base_dir: Path) -> str:
         elif 'author:' in query.lower():
             author_name = query.split('author:', 1)[1].strip().strip('"\'')
             all_papers = registry.list_papers()
-            papers = [p for p in all_papers if any(author_name.lower() in author.lower() for author in p.get('authors', []))]
+            papers = [p for p in all_papers if any(author_name.lower() in author.lower() for author in p.get('authors', []) if author)]
             return format_papers(papers, f"作者包含 {author_name}")
 
         # list 查询
@@ -117,11 +117,14 @@ def query_graph(query: str, base_dir: Path) -> str:
 
 def format_paper(paper: dict) -> str:
     """格式化单个论文"""
+    authors = paper.get('authors', [])
+    valid_authors = [a for a in authors if a][:3]
+    authors_str = ', '.join(valid_authors) if valid_authors else 'N/A'
     return f"""论文信息:
   Title: {paper.get('title', 'N/A')}
   Year: {paper.get('year', 'N/A')}
   State: {paper.get('state', 'N/A')}
-  Authors: {', '.join(paper.get('authors', [])[:3])}
+  Authors: {authors_str}
   DOI: {paper.get('doi', 'N/A')}
   Paper ID: {paper.get('paper_id', 'N/A')}"""
 
