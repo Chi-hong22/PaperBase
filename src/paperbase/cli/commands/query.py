@@ -177,7 +177,7 @@ def topic(ctx, topic: str):
 @click.argument("entity_filter")
 @click.pass_context
 def entity(ctx, entity_filter: str):
-    """按实体查找论文
+    """按关键信息查找论文
 
     ENTITY_FILTER 格式: category:name
 
@@ -220,13 +220,13 @@ def entity(ctx, entity_filter: str):
         return
 
     if not matched_papers:
-        console.print(f"[yellow]未找到使用实体 '{entity_filter}' 的论文[/yellow]")
+        console.print(f"[yellow]未找到包含 '{entity_filter}' 的论文[/yellow]")
         return
 
     # 获取论文元数据
     registry = PaperRegistry(registry_path)
 
-    table = Table(title=f"实体查询: {entity_filter}")
+    table = Table(title=f"关键信息查询: {entity_filter}")
     table.add_column("Paper ID", style="magenta", width=25)
     table.add_column("Title", style="white", width=60)
     table.add_column("Authors", style="cyan", width=30)

@@ -1,10 +1,14 @@
 """LLM 客户端（支持任何 OpenAI-compatible API，完全可选）"""
 
-import os
 from pathlib import Path
-import yaml
 from typing import Any
 import logging
+from dotenv import load_dotenv
+
+from paperbase.config import load_config, PaperBaseConfig, ConfigError
+
+# 确保 .env 被加载（幂等操作）
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -12,78 +16,61 @@ logger = logging.getLogger(__name__)
 class LLMClient:
     """LLM 客户端（内部使用，可选）"""
 
-    def __init__(self, config: dict | None = None, config_path: Path | None = None):
+    def __init__(self, config: PaperBaseConfig | dict | None = None, config_path: Path | None = None):
         """
         初始化 LLM 客户端
 
         Args:
-            config: 配置字典（优先）
+            config: 配置对象（PaperBaseConfig）或字典（向后兼容）
             config_path: 配置文件路径（fallback）
         """
+        # 加载配置
         if config is None:
-            config = self._load_config(config_path)
+            self.config = load_config(config_path)
+        elif isinstance(config, PaperBaseConfig):
+            self.config = config
+        elif isinstance(config, dict):
+            # 向后兼容：从字典加载（旧代码路径）
+            self.config = self._load_config_from_dict(config)
         else:
-            # 展开传入的 config 中的环境变量
-            self._expand_env_vars(config)
+            raise ConfigError(f"Invalid config type: {type(config)}")
 
-        self.config = config
-        self.enabled = config.get("llm", {}).get("enabled", False)
+        self.enabled = self.config.llm.is_enabled()
         self.client = None
         self.model = None
 
         if self.enabled:
             self._init_client()
 
-    def _load_config(self, config_path: Path | None) -> dict:
-        """加载配置文件"""
-        if config_path is None:
-            config_path = Path(__file__).parent.parent.parent / "config" / "paperbase.yaml"
-
-        if not config_path.exists():
-            return {"llm": {"enabled": False}}
-
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = yaml.safe_load(f) or {}
-        except Exception as e:
-            logger.warning(f"Failed to load config: {e}")
-            return {"llm": {"enabled": False}}
+    def _load_config_from_dict(self, config: dict) -> PaperBaseConfig:
+        """从字典加载配置（向后兼容）"""
+        from paperbase.config.loader import expand_env_vars
 
         # 展开环境变量
-        self._expand_env_vars(config)
+        expand_env_vars(config)
 
-        return config
-
-    def _expand_env_vars(self, config: dict):
-        """展开环境变量 ${VAR}"""
-        if "llm" not in config:
-            return
-
-        llm_config = config["llm"]
-        for key in ["base_url", "api_key", "model"]:
-            if key in llm_config and isinstance(llm_config[key], str):
-                value = llm_config[key]
-                if value.startswith("${") and value.endswith("}"):
-                    env_var = value[2:-1]
-                    llm_config[key] = os.getenv(env_var, "")
+        try:
+            return PaperBaseConfig.model_validate(config)
+        except Exception as e:
+            logger.warning(f"Failed to validate config dict: {e}")
+            # Fallback: 返回默认配置
+            return PaperBaseConfig()
 
     def _init_client(self):
         """初始化 OpenAI-compatible 客户端"""
-        llm_config = self.config.get("llm", {})
-        base_url = llm_config.get("base_url", "")
-        api_key = llm_config.get("api_key", "")
-        model = llm_config.get("model", "")
-
-        if not base_url or not model:
-            logger.warning("LLM enabled but base_url or model missing, disabling")
-            self.enabled = False
-            return
-
-        # api_key 可选（本地 LLM 可能不需要）
-        if not api_key or api_key == "not-required":
-            api_key = "not-required"  # OpenAI SDK 需要非空字符串
+        llm_config = self.config.llm
 
         try:
+            base_url = llm_config.get_base_url()
+            api_key = llm_config.get_api_key()
+            model = llm_config.model
+
+            if not base_url or not model:
+                logger.warning("LLM enabled but base_url or model missing, disabling")
+                self.enabled = False
+                return
+
+            # 初始化 OpenAI 客户端
             import openai
             self.client = openai.OpenAI(
                 base_url=base_url,
@@ -91,6 +78,17 @@ class LLMClient:
             )
             self.model = model
             logger.info(f"LLM client initialized: {base_url} / {model}")
+
+        except ConfigError as e:
+            logger.error(f"LLM configuration error: {e}")
+            logger.info("To fix:")
+            logger.info("  1. Edit config/paperbase.yaml")
+            logger.info("  2. Set llm.enabled: true")
+            logger.info("  3. Set llm.base_url (e.g., 'https://api.openai.com/v1')")
+            logger.info("  4. Set llm.model (e.g., 'gpt-4o-mini')")
+            logger.info("  5. Set PAPERBASE_LLM_API_KEY environment variable")
+            self.enabled = False
+            raise
 
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
@@ -110,13 +108,13 @@ class LLMClient:
             return None
 
         # 限制内容长度
-        max_length = self.config.get("llm", {}).get("max_content_length", 4000)
+        max_length = self.config.llm.get_max_input_tokens()
         content = paper_content[:max_length]
 
         prompt = self._build_extraction_prompt(content)
 
         try:
-            timeout = self.config.get("llm", {}).get("extract_timeout", 30)
+            timeout = self.config.llm.get_timeout()
 
             response = self.client.chat.completions.create(
                 model=self.model,

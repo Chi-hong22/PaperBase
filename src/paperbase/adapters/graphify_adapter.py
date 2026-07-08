@@ -21,7 +21,8 @@ def check_graphify_installed() -> bool:
 def run_graphify(
     library_dir: Path,
     graph_dir: Path,
-    force_rebuild: bool = False
+    force_rebuild: bool = False,
+    llm_config: dict | None = None
 ) -> dict:
     """
     运行 graphify 构建知识图谱
@@ -30,6 +31,10 @@ def run_graphify(
         library_dir: library 目录路径
         graph_dir: graph 输出目录路径
         force_rebuild: 是否强制重建（删除现有图谱）
+        llm_config: PaperBase LLM 配置（可选），包含：
+            - api_key: LLM API Key
+            - base_url: LLM API Base URL
+            - model: LLM 模型名称
 
     Returns:
         dict: {
@@ -62,22 +67,38 @@ def run_graphify(
     graph_dir.mkdir(parents=True, exist_ok=True)
 
     # 构建 graphify 命令
-    # graphify 默认扫描当前目录，输出到 .graph/
-    # 我们需要指定输入和输出路径
     cmd = [
         "graphify",
         str(library_dir),
         "--output", str(graph_dir),
     ]
 
+    # 准备环境变量（继承当前环境 + PaperBase LLM 配置）
+    import os
+    env = os.environ.copy()
+
+    # 如果提供了 llm_config，映射为 graphify 识别的环境变量
+    if llm_config:
+        api_key = llm_config.get("api_key", "")
+        base_url = llm_config.get("base_url", "")
+
+        if api_key:
+            # graphify 使用 OpenAI SDK，映射到 OPENAI_API_KEY
+            env["OPENAI_API_KEY"] = api_key
+
+            # 如果 base_url 不是标准 OpenAI endpoint，设置自定义 base_url
+            if base_url and "api.openai.com" not in base_url:
+                env["OPENAI_BASE_URL"] = base_url
+
     try:
-        # 运行 graphify
+        # 运行 graphify，传入修改后的环境变量
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=300,  # 5 分钟超时
-            cwd=library_dir.parent  # 在 base_dir 运行
+            cwd=library_dir.parent,  # 在 base_dir 运行
+            env=env  # 传递环境变量
         )
 
         return {

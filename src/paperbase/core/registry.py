@@ -89,7 +89,13 @@ class PaperRegistry:
         row = cursor.fetchone()
         if row:
             result = dict(row)
-            result["authors"] = json.loads(result["authors"])
+            # 处理 authors 字段：可能是 JSON 数组或普通字符串（向后兼容）
+            if result["authors"]:
+                try:
+                    result["authors"] = json.loads(result["authors"])
+                except (json.JSONDecodeError, TypeError):
+                    # 如果不是 JSON，保持原样（兼容旧数据）
+                    pass
             return result
         return None
 
@@ -117,7 +123,13 @@ class PaperRegistry:
         results = []
         for row in cursor.fetchall():
             result = dict(row)
-            result["authors"] = json.loads(result["authors"])
+            # 处理 authors 字段：可能是 JSON 数组或普通字符串（向后兼容）
+            if result["authors"]:
+                try:
+                    result["authors"] = json.loads(result["authors"])
+                except (json.JSONDecodeError, TypeError):
+                    # 如果不是 JSON，保持原样（兼容旧数据）
+                    pass
             results.append(result)
         return results
 

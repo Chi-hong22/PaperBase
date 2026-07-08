@@ -13,12 +13,12 @@ from paperbase.core.registry import PaperRegistry
     "--json",
     "json_input",
     required=True,
-    help="实体 JSON 字符串"
+    help="关键信息 JSON 字符串"
 )
 @click.option(
     "--merge",
     is_flag=True,
-    help="合并模式（追加到现有实体）"
+    help="合并模式（追加到现有信息）"
 )
 @click.option(
     "--output-json",
@@ -27,21 +27,21 @@ from paperbase.core.registry import PaperRegistry
 )
 @click.pass_context
 def update(ctx, paper_id: str, json_input: str, merge: bool, output_json: bool):
-    """更新论文实体"""
+    """更新论文的关键信息"""
     console = Console()
     base_dir = ctx.obj["base_dir"]
     registry_path = base_dir / "registry" / "papers.db"
 
-    # 检查 registry 是否存在
+    # 检查知识库
     if not registry_path.exists():
         if output_json:
             result = {
                 "success": False,
-                "error": "Registry not found"
+                "error": "Knowledge base not found"
             }
             click.echo(json.dumps(result, ensure_ascii=False))
         else:
-            console.print("[red]Registry 不存在，请先摄入论文[/red]")
+            console.print("[red]知识库为空，请先添加论文[/red]")
         ctx.exit(1)
 
     # 解析 JSON
@@ -55,10 +55,10 @@ def update(ctx, paper_id: str, json_input: str, merge: bool, output_json: bool):
             }
             click.echo(json.dumps(result, ensure_ascii=False))
         else:
-            console.print(f"[red]JSON 解析失败: {e}[/red]")
+            console.print(f"[red]JSON 格式错误: {e}[/red]")
         ctx.exit(1)
 
-    # 从 registry 获取 storage_id
+    # 查找论文
     registry = PaperRegistry(registry_path)
     paper = registry.get_paper(paper_id)
     registry.close()
@@ -76,8 +76,8 @@ def update(ctx, paper_id: str, json_input: str, merge: bool, output_json: bool):
 
     storage_id = paper["storage_id"]
 
-    # 更新实体
-    entity_manager = EntityManager(base_dir)
+    # 更新信息
+    entity_manager = EntityManager(base_dir, registry_path=registry_path)
 
     try:
         entity_manager.update_entities(
@@ -97,9 +97,7 @@ def update(ctx, paper_id: str, json_input: str, merge: bool, output_json: bool):
             click.echo(json.dumps(result, ensure_ascii=False))
         else:
             mode_str = "合并" if merge else "替换"
-            console.print(f"[green]成功更新实体 ({mode_str}模式)[/green]")
-            console.print(f"[dim]Paper ID: {paper_id}[/dim]")
-            console.print(f"[dim]Storage ID: {storage_id}[/dim]")
+            console.print(f"[green]✓ 已更新论文信息 ({mode_str}模式)[/green]")
 
     except FileNotFoundError as e:
         if output_json:
@@ -120,7 +118,7 @@ def update(ctx, paper_id: str, json_input: str, merge: bool, output_json: bool):
             }
             click.echo(json.dumps(result, ensure_ascii=False))
         else:
-            console.print(f"[red]验证失败: {e}[/red]")
+            console.print(f"[red]数据验证失败: {e}[/red]")
         ctx.exit(1)
 
     except Exception as e:

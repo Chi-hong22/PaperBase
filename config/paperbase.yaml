@@ -4,95 +4,100 @@ project:
   name: "PaperBase"
   version: "0.1.0"
 
+# 路径配置
 paths:
-  library: "library"
-  registry: "registry"
-  graph: "graph"
-  skills: "skills"
+  library: "library"    # 论文库目录
+  registry: "registry"  # 数据库索引目录
+  graph: "graph"        # 知识图谱目录
+  skills: "skills"      # Skills 目录
 
+# 存储配置
 storage:
-  pdf_content_addressed: true
-  sha256_sharding: true  # ab/abcdef...pdf
+  pdf_content_addressed: true  # PDF 使用内容寻址存储
+  sha256_sharding: true        # 使用 SHA256 分片
 
+# 状态机配置
 state_machine:
-  initial_state: "discovered"
-  final_state: "ready"
+  initial_state: "discovered"  # 初始状态
+  final_state: "ready"         # 最终状态
 
+# === LLM 配置（可选） ===
+# 用于自动提取论文关键信息（方法、数据集、领域等）
+llm:
+  # OpenAI-compatible API 端点（从环境变量或者.env读取）
+  # 示例: https://api.openai.com/v1 (OpenAI)
+  #       http://localhost:11434/v1 (Ollama)
+  #       https://api.anthropic.com/v1 (Anthropic via proxy)
+  base_url: ${PAPERBASE_LLM_BASE_URL}
+
+  # API 密钥（从环境变量或者.env读取）
+  api_key: ${PAPERBASE_LLM_API_KEY}
+
+  # 模型名称（从环境变量或者.env读取）
+  # OpenAI 示例: gpt-4o-mini, gpt-4o
+  # Anthropic 示例: claude-3-5-sonnet-20241022
+  # Ollama 示例: llama3.2, qwen2.5
+  model: ${PAPERBASE_LLM_MODEL}
+
+  # 可选: 高级配置
+  advanced:
+    timeout: 60              # 超时时间（秒）
+    max_input_tokens: 4000   # 最大输入长度
+    retry_on_failure: true   # 失败时是否重试
+
+# === 知识图谱配置 ===
+graph:
+  # 自动更新策略
+  # 选项: never / on_ingest / on_entity_change / always
+  # - never: 从不自动更新，需要手动执行
+  # - on_ingest: 新论文摄入时更新
+  # - on_entity_change: 论文关键信息变化时更新（推荐）
+  # - always: 任何变化都更新
+  auto_update: on_entity_change
+
+  # 可选: 高级配置
+  advanced:
+    mode: incremental        # 更新模式: incremental (增量) / full (全量)
+    ignore_patterns:         # 忽略的文件模式
+      - "sources/"
+      - "registry/"
+      - "**/source/"
+      - "**/*.pdf"
+
+# === Adapter 配置 ===
 adapters:
+  # Paper Fetch Adapter（在线论文获取）
   paper_fetch:
     enabled: true
-    artifact_mode: "markdown-assets"
-    asset_profile: "body"
-    include_refs: "all"
-    max_tokens: "full_text"
-    allow_metadata_only: false
+
+    # 获取质量等级
+    # 选项: minimal / standard / high
+    # - minimal: 仅元数据（标题、作者、年份）
+    # - standard: 元数据 + 摘要
+    # - high: 全文 + 引用 + 资源（推荐）
+    quality: high
+
+    # 可选: 自定义配置（覆盖 quality 自动推导）
+    # advanced:
+    #   artifact_mode: "markdown-assets"
+    #   asset_profile: "body"
+    #   include_refs: "all"
+    #   max_tokens: "full_text"
+
+  # Zotero Adapter
   zotero:
     enabled: true
-    local_mode: true
+    local_mode: true  # 本地模式
+
+  # ScanSci Adapter
   scansci:
     enabled: false
     scihub_enabled: false
     require_authorized_access: true
 
-llm:
-  # 内部 LLM 配置（可选）
-  # 如果不配置，PaperBase 仍可正常使用（由外部 Agent 提供 LLM）
-  enabled: false  # 是否启用内部 LLM
-
-  # OpenAI-compatible API 配置
-  # 支持：OpenAI、Anthropic (via proxy)、Ollama、vLLM、LM Studio 等
-  base_url: ${PAPERBASE_LLM_BASE_URL}  # API 端点
-  api_key: ${PAPERBASE_LLM_API_KEY}    # API 密钥（本地 LLM 可留空或设为 "not-required"）
-  model: ${PAPERBASE_LLM_MODEL}        # 模型名称
-
-  # 提取配置
-  auto_extract_on_ingest: false  # ingest 时是否自动提取实体
-  extract_timeout: 30  # 超时（秒）
-
-  # 提取范围（降低成本）
-  max_content_length: 4000  # 最大输入长度（字符）
-
-# 示例配置：
-#
-# OpenAI:
-#   export PAPERBASE_LLM_BASE_URL="https://api.openai.com/v1"
-#   export PAPERBASE_LLM_API_KEY="sk-xxx"
-#   export PAPERBASE_LLM_MODEL="gpt-4o-mini"
-#
-# Anthropic (通过 OpenAI-compatible proxy):
-#   export PAPERBASE_LLM_BASE_URL="https://anthropic-proxy.example.com/v1"
-#   export PAPERBASE_LLM_API_KEY="sk-ant-xxx"
-#   export PAPERBASE_LLM_MODEL="claude-3-5-sonnet-20241022"
-#
-# Ollama 本地:
-#   export PAPERBASE_LLM_BASE_URL="http://localhost:11434/v1"
-#   export PAPERBASE_LLM_API_KEY="not-required"
-#   export PAPERBASE_LLM_MODEL="llama3.2"
-#
-# vLLM / LM Studio:
-#   export PAPERBASE_LLM_BASE_URL="http://localhost:8000/v1"
-#   export PAPERBASE_LLM_API_KEY="not-required"
-#   export PAPERBASE_LLM_MODEL="meta-llama/Llama-2-7b-hf"
-
 # 术语库配置
 terminology:
-  fuzzy_matching: true
-  custom_aliases: []  # 用户自定义别名
+  fuzzy_matching: true     # 是否启用模糊匹配
+  custom_aliases: []       # 自定义别名
 
-graphify:
-  auto_update: true
-  ignore_patterns:
-    - "sources/"
-    - "registry/"
-    - "**/source/"
-    - "**/*.pdf"
-    - "**/chunks.jsonl"
-    - "**/references.jsonl"
 
-# 图谱更新配置
-graph:
-  auto_update: true           # 默认自动更新
-  update_mode: incremental    # 默认增量更新（也可设为 full）
-  auto_update_on:
-    - entity_change           # entities 字段修改时触发
-    - paper_ingest            # 新论文摄入时触发

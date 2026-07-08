@@ -34,11 +34,10 @@ def _ingest_online(ctx, query: str, no_graph: bool):
         raise click.Abort() from exc
 
     result = ingest_fetched_paper(base_dir=base_dir, fetched=fetched)
-    console.print("[green]✓ Online paper ingested successfully[/green]")
-    console.print(f"Paper ID:    {result.paper_id}")
-    console.print(f"Storage ID:  {result.storage_id}")
+    console.print("[green]✓ 论文已成功添加到知识库[/green]")
+    console.print(f"论文标识: {result.paper_id}")
     if no_graph:
-        console.print("[dim]Graph update skipped by --no-graph[/dim]")
+        console.print("[dim]跳过索引更新（--no-graph）[/dim]")
     return result
 
 
@@ -86,8 +85,8 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         candidate_md = convert_pdf_to_markdown(pdf_path)
         console.print(f"   长度: {len(candidate_md)} 字符")
 
-        # Step 6: 规范化
-        console.print("[yellow]6. 规范化论文数据...[/yellow]")
+        # Step 6: 整理论文信息
+        console.print("[yellow]6. 整理论文信息...[/yellow]")
         paper_metadata = normalize_paper(
             candidate_md=candidate_md,
             metadata=metadata,
@@ -96,16 +95,16 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
             source_provider="markitdown"
         )
 
-        # Step 7: 生成 Canonical Markdown
-        console.print("[yellow]7. 生成 Canonical Markdown...[/yellow]")
+        # Step 7: 生成标准格式文档
+        console.print("[yellow]7. 生成标准格式文档...[/yellow]")
         # 转换 PaperMetadata 为字典
         metadata_dict = paper_metadata.model_dump(mode="json", exclude_none=True)
         canonical_md = generate_canonical_markdown(metadata_dict, candidate_md)
         paths.paper_md.write_text(canonical_md, encoding="utf-8")
         canonical_sha256 = sha256_string(canonical_md)
 
-        # Step 8: 创建 manifest
-        console.print("[yellow]8. 创建 manifest...[/yellow]")
+        # Step 8: 保存元数据
+        console.print("[yellow]8. 保存元数据...[/yellow]")
         manifest = create_manifest(paper_id, storage_id)
         manifest.state = PaperState.NORMALIZED
         manifest.source_pdf = SourcePDF(
@@ -125,8 +124,8 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         )
         save_manifest(manifest, paths.manifest_json)
 
-        # Step 9: 注册到 registry
-        console.print("[yellow]9. 注册到 registry...[/yellow]")
+        # Step 9: 记录到知识库
+        console.print("[yellow]9. 记录到知识库...[/yellow]")
         registry_path = base_dir / "registry" / "papers.db"
         registry_path.parent.mkdir(exist_ok=True)
         registry = PaperRegistry(registry_path)
@@ -141,25 +140,24 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         )
         registry.close()
 
-        console.print(f"\n[green]✅ 论文已注册到知识库[/green]")
+        console.print(f"\n[green]✓ 论文已保存到知识库[/green]")
         console.print(f"   路径: {paths.paper_dir}")
-        console.print(f"   状态: {PaperState.NORMALIZED.value}")
 
-        # Step 9.5: 自动提取实体（如果 LLM 已配置）
-        console.print("\n[cyan]检查实体提取...[/cyan]")
+        # Step 9.5: 提取论文实体（如果已配置 LLM）
+        console.print("\n[cyan]正在提取实体...[/cyan]")
         try:
             from paperbase.core.entity_manager import EntityManager
 
             entity_manager = EntityManager(base_dir=base_dir)
 
             if entity_manager.llm_client.enabled:
-                console.print("  [yellow]内部 LLM 已启用，正在提取实体...[/yellow]")
+                console.print("  [dim]使用 LLM 提取实体...[/dim]")
 
                 try:
                     entities = entity_manager.auto_extract_entities(paper_id, storage_id)
 
                     if entities:
-                        console.print("[green]✅ 实体已自动提取（内部 LLM）[/green]")
+                        console.print("[green]✓ 实体提取完成[/green]")
                         for category, items in entities.items():
                             if items:
                                 names = [e.get("name", "") for e in items]
@@ -167,40 +165,37 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
                                 if len(names) > 3:
                                     console.print(f"      ... 及其他 {len(names) - 3} 项")
                     else:
-                        console.print("[yellow]⚠️  实体提取失败或返回空[/yellow]")
-                        console.print("   论文已摄入，可稍后手动填充实体")
+                        console.print("[yellow]⚠ 实体提取未返回结果[/yellow]")
+                        console.print("   论文已保存，可稍后手动补充")
 
                 except Exception as e:
-                    console.print(f"[yellow]⚠️  实体提取异常: {e}[/yellow]")
-                    console.print("   论文已摄入，可稍后手动填充实体")
+                    console.print(f"[yellow]⚠ 实体提取失败: {e}[/yellow]")
+                    console.print("   论文已保存，可稍后手动补充")
             else:
-                console.print("[yellow]ℹ️  内部 LLM 未配置，跳过自动提取[/yellow]")
-                console.print("   提示：")
-                console.print("   1. 配置内部 LLM: 编辑 config/paperbase.yaml")
-                console.print("   2. 使用外部 Agent: 让 Claude Code/Codex 调用 'paperbase update'")
-                console.print("   3. 手动填充: paperbase update <paper_id> --json '{{...}}'")
+                console.print("[dim]跳过实体提取（LLM 未配置）[/dim]")
+                console.print("   [dim]如需自动提取实体，请配置 config/paperbase.yaml[/dim]")
 
         except ImportError as e:
-            console.print(f"[yellow]⚠️  无法导入 EntityManager: {e}[/yellow]")
+            console.print(f"[yellow]⚠ 无法加载实体管理模块: {e}[/yellow]")
         except Exception as e:
-            console.print(f"[yellow]⚠️  实体提取检查失败: {e}[/yellow]")
+            console.print(f"[yellow]⚠ 实体提取检查失败: {e}[/yellow]")
 
-        # Step 10: 更新图谱（可选）
+        # Step 10: 更新知识库索引（可选）
         if not no_graph:
-            console.print("\n[yellow]10. 更新知识图谱...[/yellow]")
+            console.print("\n[yellow]10. 更新知识库索引...[/yellow]")
             try:
                 from paperbase.cli.commands.graph import update as graph_update
                 # 调用 graph update 命令
                 ctx.invoke(graph_update, force=False)
             except Exception as e:
-                console.print(f"[yellow]⚠️  图谱更新失败: {e}[/yellow]")
+                console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
                 console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
         else:
-            console.print("\n[yellow]ℹ️  跳过图谱更新（--no-graph）[/yellow]")
+            console.print("\n[dim]跳过索引更新（--no-graph）[/dim]")
             console.print("   稍后可运行: [cyan]paperbase graph update[/cyan]")
 
         # 摄入流程完成
-        console.print(f"\n[green]✅ 摄入完成![/green]")
+        console.print(f"\n[green]✓ 摄入完成[/green]")
         console.print(f"   论文已成功添加到知识库")
 
     except Exception as e:
@@ -252,7 +247,7 @@ def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
     console = Console()
     base_dir = ctx.obj["base_dir"]
 
-    console.print(f"[cyan]批量摄入模式:[/cyan] {batch_file.name}")
+    console.print(f"[cyan]批量摄入:[/cyan] {batch_file.name}")
 
     # 读取文件列表
     try:
@@ -263,7 +258,7 @@ def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
                 if line and not line.startswith("#"):
                     targets.append(line)
 
-        console.print(f"[cyan]找到 {len(targets)} 个目标（文件/DOI/URL）[/cyan]\n")
+        console.print(f"[cyan]找到 {len(targets)} 篇论文[/cyan]\n")
 
         # 逐个摄入（跳过图谱）
         success_count = 0
@@ -276,35 +271,35 @@ def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
             else:
                 display_name = target[:50] + "..." if len(target) > 50 else target
 
-            console.print(f"[cyan]--- [{i}/{len(targets)}] {display_name} ---[/cyan]")
+            console.print(f"[cyan][{i}/{len(targets)}] {display_name}[/cyan]")
             try:
                 # 调用主 ingest 命令，让它自动路由
                 ctx.invoke(ingest, target=target, no_graph=True, batch=None)
                 success_count += 1
             except Exception as e:
-                console.print(f"[red]❌ 摄入失败: {e}[/red]")
+                console.print(f"[red]✗ 失败: {e}[/red]")
                 failed_count += 1
 
             console.print()  # 空行分隔
 
         # 统计
-        console.print(f"[cyan]批量摄入完成:[/cyan]")
+        console.print(f"[cyan]批量摄入完成[/cyan]")
         console.print(f"  成功: {success_count} 篇")
         console.print(f"  失败: {failed_count} 篇")
 
         # 统一更新图谱
         if not no_graph and success_count > 0:
-            console.print("\n[yellow]开始统一更新知识图谱...[/yellow]")
+            console.print("\n[yellow]更新知识库索引...[/yellow]")
             try:
                 from paperbase.cli.commands.graph import update as graph_update
                 ctx.invoke(graph_update, force=False)
             except Exception as e:
-                console.print(f"[yellow]⚠️  图谱更新失败: {e}[/yellow]")
+                console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
                 console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
         elif no_graph:
-            console.print("\n[yellow]ℹ️  跳过图谱更新（--no-graph）[/yellow]")
+            console.print("\n[dim]跳过索引更新（--no-graph）[/dim]")
             console.print("   稍后可运行: [cyan]paperbase graph update[/cyan]")
 
     except Exception as e:
-        console.print(f"[red]❌ 批量摄入失败: {e}[/red]")
+        console.print(f"[red]✗ 批量摄入失败: {e}[/red]")
         raise

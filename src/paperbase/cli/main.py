@@ -2,6 +2,7 @@
 
 import click
 from pathlib import Path
+from dotenv import load_dotenv
 from paperbase.cli.commands.status import status
 from paperbase.cli.commands.ingest import ingest
 from paperbase.cli.commands.graph import graph
@@ -10,6 +11,11 @@ from paperbase.cli.commands.query import query
 from paperbase.cli.commands.doctor import doctor
 from paperbase.cli.commands.remove import remove
 from paperbase.cli.commands.update import update
+from paperbase.cli.commands.extract import extract
+from paperbase.cli.commands.config import config
+
+# 加载 .env 文件（如果存在）
+load_dotenv()
 
 
 @click.group()
@@ -36,6 +42,8 @@ main.add_command(query)
 main.add_command(doctor)
 main.add_command(remove)
 main.add_command(update)
+main.add_command(extract)
+main.add_command(config)
 
 
 if __name__ == "__main__":

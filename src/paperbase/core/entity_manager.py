@@ -6,22 +6,25 @@ from paperbase.core.paths import PaperPaths
 from paperbase.core.manifest import load_manifest, save_manifest
 from paperbase.core.llm_client import LLMClient
 from paperbase.schemas.paper import PaperMetadata, PaperEntity
+from paperbase.schemas.manifest import PaperState
 from paperbase.utils.hash import sha256_string
 
 
 class EntityManager:
     """管理论文实体（methods/datasets/domains/platforms/constraints）"""
 
-    def __init__(self, base_dir: Path, llm_client: LLMClient | None = None):
+    def __init__(self, base_dir: Path, llm_client: LLMClient | None = None, registry_path: Path | None = None):
         """
         初始化 EntityManager
 
         Args:
             base_dir: 项目根目录
             llm_client: LLM 客户端（可选，默认创建禁用的客户端）
+            registry_path: Registry 数据库路径（可选，用于同步状态更新）
         """
         self.base_dir = Path(base_dir)
         self.llm_client = llm_client or LLMClient()
+        self.registry_path = registry_path
 
     def update_entities(
         self,
@@ -80,6 +83,9 @@ class EntityManager:
 
         # 更新 manifest.json 的 sha256
         self._update_manifest_hash(paths, new_content)
+
+        # 更新状态：normalized → validated
+        self._update_state(paper_id, storage_id, PaperState.VALIDATED)
 
     def auto_extract_entities(
         self,
@@ -224,3 +230,29 @@ class EntityManager:
 
         # 保存 manifest
         save_manifest(manifest, paths.manifest_json)
+
+    def _update_state(self, paper_id: str, storage_id: str, new_state: PaperState) -> None:
+        """
+        更新论文状态（manifest + registry）
+
+        Args:
+            paper_id: 论文 ID
+            storage_id: 存储 ID
+            new_state: 新状态
+        """
+        paths = PaperPaths(storage_id=storage_id, base_dir=self.base_dir)
+
+        # 更新 manifest.json
+        if paths.manifest_json.exists():
+            manifest = load_manifest(paths.manifest_json)
+            manifest.state = new_state
+            save_manifest(manifest, paths.manifest_json)
+
+        # 更新 registry（如果提供了 registry_path）
+        if self.registry_path and self.registry_path.exists():
+            from paperbase.core.registry import PaperRegistry
+            registry = PaperRegistry(self.registry_path)
+            try:
+                registry.update_state(paper_id, new_state)
+            finally:
+                registry.close()

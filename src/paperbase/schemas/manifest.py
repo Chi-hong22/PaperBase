@@ -25,15 +25,25 @@ def validate_iso8601_timestamp(v: str | None) -> str | None:
 
 
 class PaperState(str, Enum):
-    """论文处理状态"""
-    DISCOVERED = "discovered"
-    RESOLVED = "resolved"
-    SOURCE_READY = "source_ready"
-    CONVERTED = "converted"
+    """论文处理状态
+
+    简化状态机（2026-07-08）：
+    - NORMALIZED: 论文已摄入并规范化
+    - VALIDATED: 实体已提取并验证
+    - READY: 已加入图谱，可供查询
+
+    异常状态：
+    - NEEDS_REVIEW: 需要人工审核
+    - BLOCKED: 处理被阻塞
+    - FAILED_RETRYABLE: 临时失败，可重试
+    - FAILED_PERMANENT: 永久失败
+    """
+    # 主流程状态
     NORMALIZED = "normalized"
     VALIDATED = "validated"
-    GRAPHED = "graphed"
     READY = "ready"
+
+    # 异常状态
     NEEDS_REVIEW = "needs_review"
     BLOCKED = "blocked"
     FAILED_RETRYABLE = "failed_retryable"

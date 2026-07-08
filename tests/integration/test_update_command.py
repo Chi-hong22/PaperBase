@@ -108,7 +108,7 @@ def test_update_replace_mode(runner, test_paper):
     ])
 
     assert result.exit_code == 0
-    assert "成功更新实体" in result.output
+    assert "已更新论文信息" in result.output or "成功更新" in result.output
 
     # 验证 paper.md 被更新
     paths = test_paper["paths"]

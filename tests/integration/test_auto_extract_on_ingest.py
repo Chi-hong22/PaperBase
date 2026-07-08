@@ -69,7 +69,7 @@ def test_ingest_without_llm_skips_auto_extract(runner, sample_pdf, tmp_path, moc
 
         # 验证
         assert result.exit_code == 0, f"Exit code: {result.exit_code}, Output: {result.output}"
-        assert "内部 LLM 未配置" in result.output or "跳过自动提取" in result.output
+        assert "LLM 未配置" in result.output or "跳过实体提取" in result.output
         assert "配置内部 LLM" in result.output
 
         # 确保没有调用 auto_extract_entities
