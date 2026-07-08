@@ -1,4 +1,11 @@
-"""query 命令实现"""
+"""query 命令实现
+
+CLI 高级用户参数化查询接口。
+
+与 /paperbase skill 的区别：
+- query CLI: 显式子命令 + 参数控制（如 --depth），适合终端手动操作
+- /paperbase skill: 自动路由 + 自然语言，适合 AI Agent 工作流
+"""
 
 import click
 from rich.console import Console
@@ -10,7 +17,10 @@ from paperbase.core.registry import PaperRegistry
 
 @click.group()
 def query():
-    """图谱查询论文"""
+    """图谱查询论文（高级用户参数化控制）
+
+    AI Agent 请使用 /paperbase skill 进行自然语言查询。
+    """
     pass
 
 
