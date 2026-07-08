@@ -60,6 +60,33 @@ class SourcePDF(BaseModel):
         return validate_iso8601_timestamp(v)
 
 
+class SourceArtifact(BaseModel):
+    """Non-PDF source artifact produced by an acquisition adapter."""
+
+    path: str
+    kind: str
+    acquired_at: str
+    provider: str | None = None
+    original_url: str | None = None
+    sha256: str | None = None
+
+    @field_validator("acquired_at")
+    @classmethod
+    def validate_acquired_at(cls, v: str) -> str:
+        return validate_iso8601_timestamp(v)
+
+    @field_validator("sha256")
+    @classmethod
+    def validate_sha256(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        import re
+
+        if not re.match(r"^[a-f0-9]{64}$", v):
+            raise ValueError(f"SHA256 必须是 64 位小写十六进制，收到: {v}")
+        return v
+
+
 class CanonicalMD(BaseModel):
     """规范化 Markdown 信息"""
     path: str
@@ -88,6 +115,7 @@ class ManifestSchema(BaseModel):
     state: PaperState
 
     source_pdf: SourcePDF | None = None
+    source_artifacts: list[SourceArtifact] = Field(default_factory=list)
     canonical_md: CanonicalMD | None = None
     pipeline: PipelineInfo | None = None
     graph: GraphInfo | None = None
