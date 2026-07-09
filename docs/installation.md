@@ -66,7 +66,9 @@ uv run paperbase ingest --file /path/to/paper.pdf
 
 ### graphify（知识图谱）
 
-**作用：** 构建论文之间的语义关联网络
+**定位**: 外部 CLI 工具
+**职责**: 构建论文之间的语义关联网络
+**要求**: 需要配置 LLM API
 
 **安装：**
 ```bash
@@ -76,13 +78,33 @@ uv tool install graphify
 **验证：**
 ```bash
 graphify --version
+# 应显示: graphify 0.9.10+
 ```
 
-**配置（需要 LLM API）：**
+**配置 LLM（必需）：**
+
+graphify 需要 LLM 进行语义抽取，必须配置以下环境变量：
+
 ```bash
+# 方式 1: 使用 OpenAI 兼容 API
 export PAPERBASE_LLM_BASE_URL="https://api.openai.com/v1"
 export PAPERBASE_LLM_API_KEY="sk-..."
 export PAPERBASE_LLM_MODEL="gpt-4o-mini"
+
+# 方式 2: 使用其他提供商（如 Anthropic、Gemini 等）
+export PAPERBASE_LLM_BASE_URL="https://api.anthropic.com/v1"
+export PAPERBASE_LLM_API_KEY="sk-ant-..."
+export PAPERBASE_LLM_MODEL="claude-3-5-sonnet-20241022"
+```
+
+**重要说明：**
+- PaperBase 会自动将配置传递给 graphify（通过 `--backend openai --model <model>`）
+- 必须使用支持的模型名称（不能使用默认的 `gpt-4.1-mini`）
+- 配置存储在 `config/paperbase.yaml` 中
+
+**验证配置：**
+```bash
+uv run paperbase config check-llm
 ```
 
 ---

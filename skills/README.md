@@ -9,18 +9,20 @@ PaperBase 使用**外部黑盒工具**架构，核心功能通过 CLI 调用独�
 ### paper-fetch-skill
 - **定位**: 外部 CLI 工具（黑盒调用）
 - **安装位置**: 全局（`~/.local/bin/paper-fetch`）
-- **调用方式**: CLI (`paper-fetch` 命令)
+- **调用方式**: CLI (`paper-fetch --format both`)
 - **职责**: 论文获取、元数据提取、PDF 处理
 - **安装**: `uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git`
-- **验证**: `paper-fetch --version`
+- **验证**: `paper-fetch --version`（应显示 3.0.1）
+- **数据流**: `subprocess → JSON → PaperBase Adapter → Canonical Markdown`
 
 ### graphify
 - **定位**: 外部 CLI 工具
 - **安装位置**: 全局（`~/.local/bin/graphify`）
-- **调用方式**: CLI (`graphify` 命令)
+- **调用方式**: CLI (`graphify extract <path> --backend openai --model <model>`)
 - **职责**: 知识图谱构建、语义分析
 - **安装**: `uv tool install graphify`
-- **验证**: `graphify --version`
+- **验证**: `graphify --version`（应显示 0.9.10+）
+- **要求**: 需要配置 LLM（OPENAI_API_KEY, OPENAI_BASE_URL, model）
 
 ### zotero-mcp
 - **定位**: 外部 MCP 服务
@@ -56,6 +58,28 @@ PaperBase 遵循 **Unix 哲学**：每个工具做好一件事。
 **正确的安装位置：**
 - ✅ 全局 CLI 工具：`~/.local/bin/` (通过 `uv tool install`)
 - ✅ 只要命令在 PATH 中，PaperBase 就能调用
+
+## 目录结构验证
+
+**最终确认的立体结构：**
+```
+library/papers/
+  ├── p_a7f3b2c1d4e5/
+  │   ├── paper.md           # Canonical Markdown（唯一真相源）
+  │   ├── manifest.json      # 元数据和状态
+  │   ├── references.jsonl   # 引用数据
+  │   ├── source/            # 原始 PDF
+  │   │   └── source.pdf
+  │   └── assets/            # 图片资源
+  │       ├── figure-001.png
+  │       └── ...
+  └── ...
+```
+
+**验证结果：**
+- ✅ graphify 能正确扫描立体结构（29 nodes, 28 edges）
+- ✅ 立体结构优于扁平化（更好的文件组织 + 更多图谱节点）
+- ✅ 修复 `.gitignore` 后完全可行
 
 ## 相关文档
 
