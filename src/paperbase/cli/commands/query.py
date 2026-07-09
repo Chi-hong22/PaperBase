@@ -60,30 +60,44 @@ def related(ctx, paper_id: str, depth: int):
         console.print("[yellow]Registry 不存在，请先摄入论文[/yellow]")
         return
 
-    # 执行查询
+    # 将 paper_id 转换为 storage_id
+    registry = PaperRegistry(registry_path)
+    paper_info = registry.get_paper(paper_id)
+
+    if not paper_info:
+        console.print(f"[red]未找到论文: {paper_id}[/red]")
+        registry.close()
+        return
+
+    storage_id = paper_info["storage_id"]
+
+    # 执行查询（使用 storage_id）
     try:
-        related_papers = find_related_papers(graph_dir, paper_id, depth)
+        related_storage_ids = find_related_papers(graph_dir, storage_id, depth)
     except FileNotFoundError as e:
         console.print(f"[red]错误: {e}[/red]")
+        registry.close()
         return
 
-    if not related_papers:
+    if not related_storage_ids:
         console.print(f"[yellow]未找到与 {paper_id} 相关的论文[/yellow]")
+        registry.close()
         return
 
-    # 获取论文元数据
-    registry = PaperRegistry(registry_path)
-
+    # 将 storage_id 转换回 paper_id 并获取元数据
     table = Table(title=f"相关论文: {paper_id} (depth={depth})")
     table.add_column("Paper ID", style="magenta", width=25)
     table.add_column("Title", style="white", width=60)
     table.add_column("Authors", style="cyan", width=30)
     table.add_column("Year", style="green", width=6)
 
-    for pid in related_papers:
-        paper = registry.get_paper(pid)
+    for sid in related_storage_ids:
+        # 通过 storage_id 查找 paper
+        papers = registry.list_papers()
+        paper = next((p for p in papers if p["storage_id"] == sid), None)
 
         if paper:
+            pid = paper["paper_id"]
             title = paper["title"] if paper["title"] else "N/A"
             authors = paper["authors"] if paper["authors"] else "N/A"
             year = str(paper["year"]) if paper["year"] else "N/A"
@@ -98,11 +112,11 @@ def related(ctx, paper_id: str, depth: int):
 
             table.add_row(pid, title, authors, year)
         else:
-            # 论文不在 registry 中
-            table.add_row(pid, "[dim]N/A[/dim]", "[dim]N/A[/dim]", "[dim]N/A[/dim]")
+            # storage_id 不在 registry 中
+            table.add_row(sid, "[dim]N/A[/dim]", "[dim]N/A[/dim]", "[dim]N/A[/dim]")
 
     console.print(table)
-    console.print(f"\n[dim]找到 {len(related_papers)} 个相关论文[/dim]")
+    console.print(f"\n[dim]找到 {len(related_storage_ids)} 个相关论文[/dim]")
 
     registry.close()
 
@@ -136,18 +150,18 @@ def topic(ctx, topic: str):
         console.print("[yellow]Registry 不存在，请先摄入论文[/yellow]")
         return
 
-    # 执行查询
+    # 执行查询（返回 storage_id）
     try:
-        matched_papers = find_papers_by_topic(graph_dir, topic)
+        matched_storage_ids = find_papers_by_topic(graph_dir, topic)
     except FileNotFoundError as e:
         console.print(f"[red]错误: {e}[/red]")
         return
 
-    if not matched_papers:
+    if not matched_storage_ids:
         console.print(f"[yellow]未找到主题为 '{topic}' 的论文[/yellow]")
         return
 
-    # 获取论文元数据
+    # 将 storage_id 转换为 paper_id 并获取元数据
     registry = PaperRegistry(registry_path)
 
     table = Table(title=f"主题查询: {topic}")
@@ -156,10 +170,13 @@ def topic(ctx, topic: str):
     table.add_column("Authors", style="cyan", width=30)
     table.add_column("Year", style="green", width=6)
 
-    for pid in matched_papers:
-        paper = registry.get_paper(pid)
+    for sid in matched_storage_ids:
+        # 通过 storage_id 查找 paper
+        papers = registry.list_papers()
+        paper = next((p for p in papers if p["storage_id"] == sid), None)
 
         if paper:
+            pid = paper["paper_id"]
             title = paper["title"] if paper["title"] else "N/A"
             authors = paper["authors"] if paper["authors"] else "N/A"
             year = str(paper["year"]) if paper["year"] else "N/A"
@@ -174,10 +191,10 @@ def topic(ctx, topic: str):
 
             table.add_row(pid, title, authors, year)
         else:
-            # 论文不在 registry 中
-            table.add_row(pid, "[dim]N/A[/dim]", "[dim]N/A[/dim]", "[dim]N/A[/dim]")
+            # storage_id 不在 registry 中
+            table.add_row(sid, "[dim]N/A[/dim]", "[dim]N/A[/dim]", "[dim]N/A[/dim]")
 
     console.print(table)
-    console.print(f"\n[dim]找到 {len(matched_papers)} 个论文[/dim]")
+    console.print(f"\n[dim]找到 {len(matched_storage_ids)} 个论文[/dim]")
 
     registry.close()
