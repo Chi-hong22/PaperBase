@@ -69,7 +69,7 @@ def run_graphify(
     # 确保 graph 目录存在
     graph_dir.mkdir(parents=True, exist_ok=True)
 
-    # graphify 不能递归扫描 library/papers/，需要扫描所有论文子目录
+    # 检查 papers 目录
     papers_dir = library_dir / "papers"
     if not papers_dir.exists():
         return {
@@ -78,22 +78,12 @@ def run_graphify(
             "error": f"Papers 目录不存在: {papers_dir}"
         }
 
-    # 收集所有论文目录（p_xxx 格式）
-    paper_dirs = [d for d in papers_dir.iterdir() if d.is_dir() and d.name.startswith("p_")]
-
-    if not paper_dirs:
-        return {
-            "success": False,
-            "output": "",
-            "error": "未找到任何论文目录（p_xxx 格式）"
-        }
-
-    # 构建 graphify 命令：扫描所有论文目录
-    # 格式：graphify extract <path1> <path2> ... --backend <name> --model <name>
+    # 平面结构：graphify 可以直接扫描 papers/ 目录下的所有 .md 文件
+    # 格式：graphify extract <path> --backend <name> --model <name>
     cmd = [
         "graphify",
         "extract",  # 使用 extract 子命令
-    ] + [str(d) for d in paper_dirs] + [  # 所有论文目录
+        str(papers_dir),  # 扫描 papers 目录（会自动识别所有 .md 文件）
         "--backend", "openai",  # 明确指定 backend
     ]
 
