@@ -207,7 +207,7 @@ Agent:
     - 状态: READY
   
   完成！Paper ID: doi:10.48550/arxiv.1706.03762
-  路径: library/papers/p_a7f3b2c1/paper.md
+  路径: library/papers/p_a7f3b2c1.md
 ```
 
 ### 工作流 2: 批量研究

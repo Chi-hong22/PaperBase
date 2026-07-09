@@ -490,14 +490,14 @@ Author name, year, or title incorrect
 
 **Solution**:
 
-1. Edit `paper.md` frontmatter:
+1. Edit canonical markdown frontmatter:
 ```bash
-nano library/papers/p_xxxxx/paper.md
+nano library/papers/p_xxxxx.md
 ```
 
 2. Update SHA256 in manifest:
 ```bash
-sha256sum library/papers/p_xxxxx/paper.md
+sha256sum library/papers/p_xxxxx.md
 # Copy hash to manifest.json canonical_md.sha256
 ```
 
