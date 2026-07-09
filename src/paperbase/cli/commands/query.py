@@ -99,14 +99,16 @@ def related(ctx, paper_id: str, depth: int):
         if paper:
             pid = paper["paper_id"]
             title = paper["title"] if paper["title"] else "N/A"
-            authors = paper["authors"] if paper["authors"] else "N/A"
+            authors = paper["authors"] if paper["authors"] else []
             year = str(paper["year"]) if paper["year"] else "N/A"
 
             # 截断过长的 title
             if len(title) > 50:
                 title = title[:47] + "..."
 
-            # 截断过长的 authors
+            # 转换 authors list 为字符串并截断
+            if isinstance(authors, list):
+                authors = ", ".join(authors)
             if len(authors) > 25:
                 authors = authors[:22] + "..."
 
@@ -178,14 +180,16 @@ def topic(ctx, topic: str):
         if paper:
             pid = paper["paper_id"]
             title = paper["title"] if paper["title"] else "N/A"
-            authors = paper["authors"] if paper["authors"] else "N/A"
+            authors = paper["authors"] if paper["authors"] else []
             year = str(paper["year"]) if paper["year"] else "N/A"
 
             # 截断过长的 title
             if len(title) > 50:
                 title = title[:47] + "..."
 
-            # 截断过长的 authors
+            # 转换 authors list 为字符串并截断
+            if isinstance(authors, list):
+                authors = ", ".join(authors)
             if len(authors) > 25:
                 authors = authors[:22] + "..."
 
