@@ -161,6 +161,7 @@ paperbase search "SLAM" -n 20
 ```bash
 paperbase query related <paper_id> --depth <N>  # 查找相关论文
 paperbase query topic "<topic>"                 # 按主题查找
+paperbase query topic "<topic>" --include-refs  # 包含引用文献
 ```
 
 **示例**：
@@ -171,10 +172,25 @@ paperbase query related "doi:10.1038/nature01"
 # 查找二度相关的论文
 paperbase query related "arxiv:1706.03762" --depth 2
 
-# 按主题查找
+# 按主题查找（仅本地论文）
 paperbase query topic "deep learning"
 paperbase query topic "underwater navigation"
+
+# 扩展到引用文献
+paperbase query topic "attention" --include-refs
+# 输出：本地论文: 1 篇, 引用文献: 2 篇
 ```
+
+**query topic 说明**：
+- 支持多词查询（如 "deep learning"），任意词匹配即返回
+- 默认只返回本地论文
+- 使用 `--include-refs` 扩展到引用的外部文献
+- 大小写不敏感
+
+**query related 说明**：
+- 基于知识图谱查找相关论文
+- `--depth` 控制遍历深度（1=直接相关，2=二度相关）
+- 结果包含本地论文和引用文献
 
 ---
 

@@ -128,21 +128,39 @@ Agent: [语义查询] → 返回 15 篇 + 关联路径
 人类: "深度学习和计算机视觉的交叉研究"
 Agent: [图谱推理] → 返回概念交集论文
 
-# 全文检索（FTS5）- NEW
+# 全文检索（FTS5）
 人类: "搜索提到 transformer 的论文"
 Agent: [FTS5 检索] → 返回 7 篇 + 匹配片段
+
+# 主题查询（NEW - 图谱标签匹配）
+人类: "查找 attention mechanism 相关的论文"
+Agent: [query topic] → 本地论文: 2 篇
+
+人类: "包含引用文献一起查"
+Agent: [query topic --include-refs] → 本地: 2 篇, 引用: 3 篇
+
+# 关联查询（图谱遍历）
+人类: "找出与 BERT 论文相关的研究"
+Agent: [query related] → 直接相关: 5 篇, 二度相关: 12 篇
 ```
 
 **关键命令**：
 ```bash
 paperbase status                       # 列出所有论文
 paperbase status <paper_id>            # 查询单篇
-paperbase status --year <year>         # 按年份筛选（NEW）
-paperbase status --state <state>       # 按状态筛选（NEW）
-paperbase search "<query>"             # 全文检索（NEW）
-paperbase query related <id> --depth N # 相关论文
-paperbase query topic "<topic>"        # 主题查找
+paperbase status --year <year>         # 按年份筛选
+paperbase status --state <state>       # 按状态筛选
+paperbase search "<query>"             # 全文检索
+paperbase query related <id> --depth N # 相关论文（图谱遍历）
+paperbase query topic "<topic>"        # 主题查找（图谱标签）
+paperbase query topic "<topic>" --include-refs  # 包含引用文献
 ```
+
+**NEW - query topic 增强**：
+- ✅ 覆盖率 100%（支持所有节点格式）
+- ✅ 分词匹配（"deep learning" 自动分词）
+- ✅ 引用扩展（`--include-refs` 显示外部文献）
+- ✅ 自动去重（多节点映射同一论文）
 
 ---
 
