@@ -203,15 +203,13 @@ paperbase/
 
 ## 📋 使用方法
 
-### LLM 配置（可选）
+### LLM 配置（为 Graphify 准备）
 
-PaperBase 核心功能（摄入、转换、检索）**不依赖 LLM**。
+PaperBase 核心功能（摄入、转换、SQLite FTS5 检索）**不依赖 LLM**。
 
-LLM 配置仅用于将环境变量传递给外部 Graphify 工具。如果你：
-- 不使用 Graphify 语义图谱功能
-- 或 Graphify 已通过其他方式配置（如系统环境变量）
+**Graphify 知识图谱功能是 PaperBase 的必需组件**，而 LLM 配置用于将环境变量传递给 Graphify。
 
-则可以完全跳过此配置。
+如果你已通过系统环境变量配置 Graphify 的 LLM（如 `OPENAI_API_KEY`），可以跳过此步骤。否则，请按以下方式配置。
 
 #### **配置步骤（仅在需要时）**
 
@@ -267,13 +265,16 @@ uv run paperbase ingest "arxiv:2301.07041"
 uv run paperbase ingest --file paper.pdf
 ```
 
-#### 2. Graphify（语义图谱构建）
+#### 2. Graphify（知识图谱构建，必需）
 
-用于构建和查询语义知识图谱。
+**Graphify 是 PaperBase 知识图谱功能的必需组件**，用于构建和查询语义知识图谱、引用关系网络。
 
 **安装方式**：
 ```bash
-# 访问项目仓库按照说明安装
+# 方式 1：通过 uv 全局安装（推荐）
+uv tool install graphify
+
+# 方式 2：访问项目仓库按照说明安装
 # https://github.com/Graphify-Labs/graphify
 ```
 
@@ -507,24 +508,33 @@ uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
 - 在 Zotero 中管理论文和阅读
 - 通过 MCP 导入到 PaperBase 进行深度分析
 
-### Q2: graphify 是必需的吗？不装会怎样？
+### Q2: Graphify 是必需的吗？
 
-**非必需**，但功能受限：
+**是必需的**。Graphify 是 PaperBase 知识图谱功能的核心组件。
 
-| 功能 | 不装 graphify | 安装 graphify |
-|------|--------------|--------------|
-| 摄入论文 | ✅ 正常 | ✅ 正常 |
-| 搜索内容 | ✅ 正常 | ✅ 正常 |
-| 状态管理 | ✅ 正常 | ✅ 正常 |
-| **知识图谱** | ❌ `graph update` 命令不可用 | ✅ 完整功能 |
-| **引用关系查询** | ❌ 不可用 | ✅ 可用 |
+| 功能 | 说明 |
+|------|------|
+| 摄入论文 | ✅ 不需要 Graphify |
+| 关键词搜索（FTS5） | ✅ 不需要 Graphify |
+| **知识图谱构建** | ❌ **需要 Graphify** |
+| **引用关系查询** | ❌ **需要 Graphify** |
+| **语义检索** | ❌ **需要 Graphify** |
+
+**LLM 配置灵活性**：
+- Graphify 本身需要 LLM 才能工作
+- 你可以选择任意兼容的 LLM 提供商（OpenAI、Anthropic、本地模型等）
+- 配置方式：通过 `config/paperbase.yaml` 或系统环境变量
 
 **安装命令**：
 ```bash
 uv tool install graphify
 ```
 
-如果安装失败，可以跳过，后续需要时再安装。
+**如果不想使用知识图谱功能**：
+PaperBase 仍可用于论文摄入、存储和 FTS5 关键词检索，但会失去：
+- 引用关系网络可视化
+- 语义相似论文推荐
+- 领域知识图谱构建
 
 ### Q3: 为什么用 uv 而不是 pip？
 
