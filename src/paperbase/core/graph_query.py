@@ -4,6 +4,7 @@
 """
 
 import json
+import re
 from pathlib import Path
 from typing import List, Set, Dict, Any
 
@@ -160,6 +161,7 @@ def find_papers_by_topic(
     Args:
         graph_dir: graph 目录路径
         topic: 主题关键词（大小写不敏感）
+               支持多词查询（如 "deep learning"），会分词匹配
 
     Returns:
         list[str]: 匹配的 storage_id 列表
@@ -172,10 +174,13 @@ def find_papers_by_topic(
     nodes = graph.get("nodes", [])
 
     # 规范化主题（小写）
-    topic_lower = topic.lower()
+    topic_lower = topic.lower().strip()
+
+    # 分词：按空格分割，过滤空字符串
+    keywords = [kw for kw in topic_lower.split() if kw]
 
     # 查找匹配的论文节点
-    matched_papers = []
+    matched_papers = set()
 
     for node in nodes:
         # 只处理 paper 类型的节点
@@ -184,11 +189,36 @@ def find_papers_by_topic(
             continue
 
         node_id = node.get("id")
+
+        # 只保留标准格式的论文节点 (p_xxxxxxxxxxxx)
+        # 过滤引用节点 (p_xxx_ref_N) 和引用论文节点 (p_xxx_paper_name)
+        if not node_id or not re.match(r'^p_[0-9a-f]{12}$', node_id):
+            continue
         label = node.get("label", "")
         norm_label = node.get("norm_label", "")
 
-        # 在 label 或 norm_label 中搜索关键词
-        if topic_lower in label.lower() or topic_lower in norm_label.lower():
-            matched_papers.append(node_id)
+        # 构建搜索文本（合并多个字段）
+        search_text = " ".join([
+            label.lower(),
+            norm_label.lower(),
+        ])
 
-    return sorted(matched_papers)
+        # 匹配策略：
+        # 1. 如果只有一个关键词，直接子串匹配
+        # 2. 如果有多个关键词，任意一个匹配即算匹配
+        matched = False
+        if len(keywords) == 1:
+            # 单词查询：完整子串匹配
+            if keywords[0] in search_text:
+                matched = True
+        else:
+            # 多词查询：任意词匹配
+            for kw in keywords:
+                if kw in search_text:
+                    matched = True
+                    break
+
+        if matched:
+            matched_papers.add(node_id)
+
+    return sorted(list(matched_papers))

@@ -37,8 +37,23 @@ def _ingest_online(ctx, query: str, no_graph: bool):
     result = ingest_fetched_paper(base_dir=base_dir, fetched=fetched)
     console.print("[green]✓ 论文已成功添加到知识库[/green]")
     console.print(f"论文标识: {result.paper_id}")
-    if no_graph:
+
+    # 更新全文检索索引
+    if not no_graph:
+        console.print("[yellow]更新全文检索索引...[/yellow]")
+        try:
+            from paperbase.core.search_engine import SearchEngine
+            index_path = base_dir / "index" / "fts.db"
+            library_path = base_dir / "library" / "papers"
+            with SearchEngine(index_path, library_path) as engine:
+                engine.build_index()
+            console.print("[green]✓ 索引更新完成[/green]")
+        except Exception as e:
+            console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
+            console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
+    else:
         console.print("[dim]跳过索引更新（--no-graph）[/dim]")
+
     return result
 
 
@@ -151,19 +166,31 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         console.print(f"\n[green]✓ 论文已保存到知识库[/green]")
         console.print(f"   路径: {paths.paper_dir}")
 
-        # Step 9: 更新知识库索引（可选）
+        # Step 10: 更新全文检索索引和知识图谱（可选）
         if not no_graph:
-            console.print("\n[yellow]9. 更新知识库索引...[/yellow]")
+            console.print("\n[yellow]10. 更新全文检索索引...[/yellow]")
+            try:
+                from paperbase.core.search_engine import SearchEngine
+                index_path = base_dir / "index" / "fts.db"
+                library_path = base_dir / "library" / "papers"
+                with SearchEngine(index_path, library_path) as engine:
+                    engine.build_index()
+                console.print("[green]   ✓ 全文检索索引更新完成[/green]")
+            except Exception as e:
+                console.print(f"[yellow]   ⚠ 索引更新失败: {e}[/yellow]")
+                console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
+
+            console.print("\n[yellow]11. 更新知识图谱...[/yellow]")
             try:
                 from paperbase.cli.commands.graph import update as graph_update
                 # 调用 graph update 命令
                 ctx.invoke(graph_update, force=False)
             except Exception as e:
-                console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
+                console.print(f"[yellow]   ⚠ 知识图谱更新失败: {e}[/yellow]")
                 console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
         else:
             console.print("\n[dim]跳过索引更新（--no-graph）[/dim]")
-            console.print("   稍后可运行: [cyan]paperbase graph update[/cyan]")
+            console.print("   稍后可运行: [cyan]paperbase index[/cyan] 和 [cyan]paperbase graph update[/cyan]")
 
         # 摄入流程完成
         console.print(f"\n[green]✓ 摄入完成[/green]")
@@ -258,18 +285,30 @@ def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
         console.print(f"  成功: {success_count} 篇")
         console.print(f"  失败: {failed_count} 篇")
 
-        # 统一更新图谱
+        # 统一更新索引
         if not no_graph and success_count > 0:
-            console.print("\n[yellow]更新知识库索引...[/yellow]")
+            console.print("\n[yellow]更新全文检索索引...[/yellow]")
+            try:
+                from paperbase.core.search_engine import SearchEngine
+                index_path = base_dir / "index" / "fts.db"
+                library_path = base_dir / "library" / "papers"
+                with SearchEngine(index_path, library_path) as engine:
+                    engine.build_index()
+                console.print("[green]✓ 全文检索索引更新完成[/green]")
+            except Exception as e:
+                console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
+                console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
+
+            console.print("\n[yellow]更新知识图谱...[/yellow]")
             try:
                 from paperbase.cli.commands.graph import update as graph_update
                 ctx.invoke(graph_update, force=False)
             except Exception as e:
-                console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
+                console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
                 console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
         elif no_graph:
             console.print("\n[dim]跳过索引更新（--no-graph）[/dim]")
-            console.print("   稍后可运行: [cyan]paperbase graph update[/cyan]")
+            console.print("   稍后可运行: [cyan]paperbase index[/cyan] 和 [cyan]paperbase graph update[/cyan]")
 
     except Exception as e:
         console.print(f"[red]✗ 批量摄入失败: {e}[/red]")
