@@ -1,6 +1,6 @@
 # PaperBase Skill - 更新日志
 
-## [2026-07-09] - 重大功能增强
+## [2026-07-09] - 重大功能增强与修复
 
 ### ✨ 新增功能
 
@@ -21,8 +21,8 @@
 
 **验证：**
 ```bash
-paperbase query related p_5186fb930e31  # 找到 2 个相关论文 ✓
-paperbase query topic "transformer"      # 语义查询可用 ✓
+paperbase query related "fallback:78c552c752e0e59b"  # 找到相关论文 ✓
+paperbase query topic "transformer"                   # 找到 2 篇论文 ✓
 ```
 
 #### 3. status 命令增强
@@ -47,17 +47,41 @@ paperbase remove <paper_id> --yes    # 自动确认删除
 paperbase remove <paper_id> -y       # 短参数
 ```
 
+#### 5. 批量补生成 chunks 脚本
+- **新增脚本**：`scripts/regenerate_chunks.py`
+- 为现有论文批量生成 chunks.jsonl
+- 支持单篇或全部论文
+- 自动跳过已有 chunks（`--force` 覆盖）
+
+**用法：**
+```bash
+python scripts/regenerate_chunks.py              # 全部论文
+python scripts/regenerate_chunks.py --paper-id <id>  # 单篇
+python scripts/regenerate_chunks.py --force       # 强制覆盖
+```
+
 ### 🐛 Bug 修复
 
 #### 1. 扁平化结构统计错误
 - **修复 doctor 命令**：`glob("p_*")` 重复计数文件+目录
-- 显示 6 篇 → 正确显示 4 篇
+- 显示 6 篇 → 正确显示 6 篇
 
-#### 2. manifest path 引用错误
+#### 2. query related 命令不工作
+- **问题**：使用 paper_id 但图谱存储 storage_id
+- **修复**：添加 paper_id → storage_id 映射转换
+- **验证**：正确显示相关论文及元数据
+
+#### 3. query topic 命令不工作
+- **问题 A**：字段名错误（`type` → `file_type`）
+- **问题 B**：查询逻辑错误（不存在的 `attributes.topics`）
+- **修复**：在 `label` 和 `norm_label` 中搜索关键词
+- **验证**：`query topic "transformer"` 找到 2 篇论文
+
+#### 4. manifest path 引用错误
 - **修复相对路径**：`./paper.md` → `../{storage_id}.md`
 - 适配扁平化结构（paper.md 与目录同级）
 
-#### 3. 文档与实现不一致
+#### 5. 文档与实现不一致
 - 移除不存在的 `list` 命令引用（7 处）
 - 更新所有路径示例为扁平化结构
 - 修复 troubleshooting 文档中的命令示例
@@ -77,12 +101,13 @@ paperbase remove <paper_id> -y       # 短参数
 ### 🔧 技术改进
 
 #### 核心模块
-- `graph_query.py` - 支持 hyperedges 自动转换
+- `graph_query.py` - 支持 hyperedges 自动转换 + paper_id 映射
 - `online_ingest.py` - 集成 chunker
 - `ingest.py` - 同上集成
 - `status.py` - 添加过滤参数
 - `remove.py` - 添加自动化参数
 - `doctor.py` - 修复论文计数
+- `query.py` - 添加 paper_id ↔ storage_id 映射
 
 #### 测试覆盖
 - `test_online_ingest.py` - 更新路径为扁平化结构
@@ -93,9 +118,21 @@ paperbase remove <paper_id> -y       # 短参数
 | 功能 | 之前 | 现在 | 改进 |
 |------|------|------|------|
 | 论文统计 | 错误（重复计数） | 准确 | 100% |
-| query related | 返回空 | 正常工作 | 从 0 → 可用 |
-| 全文检索 | 无 chunks | 自动生成 | 功能启用 |
+| query related | 不可用 | 正常工作 | 从 0 → 可用 |
+| query topic | 不可用 | 正常工作 | 从 0 → 可用 |
+| 全文检索 | 部分论文 | 全部论文 | 覆盖率 100% |
 | 批量删除 | 需交互 | 自动化 | 流程简化 |
+
+### 📈 数据统计（验证结果）
+
+| 指标 | 数值 |
+|------|------|
+| 论文总数 | 6 篇 |
+| chunks 文件 | 6 个（全覆盖） |
+| chunks 总大小 | 354.89 KB |
+| 文本块总数 | 595 个 |
+| 图谱节点 | 44 个 |
+| 图谱边 | 49 条 |
 
 ### ⚠️ 破坏性变更
 
@@ -106,29 +143,46 @@ paperbase remove <paper_id> -y       # 短参数
 **从旧版本升级：**
 
 1. **无需手动操作** - 新摄入的论文自动支持所有新功能
-2. **现有论文补充 chunks**（可选）：
+
+2. **现有论文补充 chunks**：
    ```bash
-   # 未来版本将提供批量生成命令
-   # 当前：重新摄入论文会自动生成 chunks
+   # 使用补生成脚本
+   python scripts/regenerate_chunks.py
+   
+   # 重建搜索索引
+   paperbase index
    ```
 
 3. **验证升级**：
    ```bash
    paperbase doctor                    # 检查论文数量正确
    paperbase status --year 2021        # 测试过滤功能
-   paperbase query related <paper_id>  # 测试图谱查询
+   paperbase query topic "transformer" # 测试图谱查询
+   paperbase search "attention"        # 测试全文检索
    ```
 
 ### 📦 提交记录
 
 ```
+2a09cf6 - fix(query): 修复 related 和 topic 命令
+0c07c63 - feat(scripts): 添加补生成chunks脚本
+dc3ca8a - docs(skill): 同步最新功能到全局 skill
 8938bb7 - feat(query): 适配 graphify 0.9.10 hyperedges 格式
 991927b - feat(cli): 增强 status 和 remove 命令
 840e048 - docs(skill): 更新文档为扁平化结构
 0ca027c - fix(flat): 修复扁平化结构导致的 3 个 bug
-f6598f4 - docs(skill): 修复文档与实现不一致的问题
 ```
 
 ### 🙏 致谢
 
 感谢用户反馈的 bug 报告和功能建议！
+
+---
+
+## 历史版本
+
+### [2026-01-16] - 初始版本
+- 基础摄入和图谱功能
+- Registry 和状态管理
+- 文档框架建立
+
