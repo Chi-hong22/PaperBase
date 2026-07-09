@@ -175,11 +175,15 @@ def topic(ctx, topic: str, include_refs: bool):
     for nid in matched_node_ids:
         # 判断是否为标准节点（本地论文）
         import re
-        is_local = re.match(r'^p_[0-9a-f]{12}$', nid)
+        # 支持两种格式：p_xxx 或 p_xxx_paper
+        is_local = re.match(r'^p_[0-9a-f]{12}(_paper)?$', nid)
 
         if is_local:
+            # 提取 storage_id（去除 _paper 后缀）
+            storage_id = nid.replace('_paper', '') if nid.endswith('_paper') else nid
+
             # 本地论文：从 registry 查找
-            paper = next((p for p in papers if p["storage_id"] == nid), None)
+            paper = next((p for p in papers if p["storage_id"] == storage_id), None)
             if paper:
                 local_papers.append({
                     "id": paper["paper_id"],
