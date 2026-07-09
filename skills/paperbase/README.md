@@ -51,7 +51,6 @@ paperbase-wrapper.sh status
 
 **结构化查询** → Registry:
 - `doi:`, `paper_id:`, `state:`, `year:`, `author:`
-- `list`, `show all`
 
 **语义查询** → Graphify:
 - 自然语言查询

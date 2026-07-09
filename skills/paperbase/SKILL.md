@@ -109,7 +109,6 @@ paperbase graph status                # 查看统计
 | `state:` | `state:ready` | Registry |
 | `year:` | `year:2024` | Registry |
 | `author:` | `author:Zhang` | Registry |
-| `list` | `list all` | Registry |
 | 自然语言 | `SLAM 相关论文` | Graphify |
 
 **典型对话**：
@@ -300,7 +299,7 @@ PaperBase/
 
 ```python
 # 结构化模式 → Registry
-doi:, paper_id:, state:, year:, author:, list
+doi:, paper_id:, state:, year:, author:
 
 # 语义模式 → Graphify
 自然语言、概念关联、主题探索
