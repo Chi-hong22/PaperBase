@@ -1,15 +1,21 @@
-"""Adapter boundary for Dictation354/paper-fetch-skill."""
+"""Adapter boundary for Dictation354/paper-fetch-skill.
+
+paper-fetch-skill 作为外部黑盒工具，通过 CLI 调用。
+PaperBase 不关心其安装方式（MCP/Python包/全局命令），只关心输入输出契约。
+"""
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 from dataclasses import dataclass, field
-from importlib import import_module
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 
 class PaperFetchUnavailable(RuntimeError):
-    """Raised when optional paper-fetch support is not installed."""
+    """Raised when paper-fetch CLI is not available."""
 
 
 @dataclass(frozen=True)
@@ -48,14 +54,43 @@ class FetchedPaper:
     assets: list[FetchedAsset] = field(default_factory=list)
 
 
-def _load_fetch_paper() -> Callable[..., Any]:
-    try:
-        service = import_module("paper_fetch.service")
-    except ImportError as exc:
+def _check_paper_fetch_available() -> bool:
+    """Check if paper-fetch CLI is available in PATH."""
+    return shutil.which("paper-fetch") is not None
+
+
+def _call_paper_fetch_cli(query: str) -> dict[str, Any]:
+    """Call paper-fetch CLI and return parsed JSON result.
+
+    Args:
+        query: DOI, URL, arXiv ID, or paper title
+
+    Returns:
+        Parsed JSON output from paper-fetch --format both
+
+    Raises:
+        PaperFetchUnavailable: If paper-fetch CLI is not found
+        subprocess.CalledProcessError: If paper-fetch execution fails
+    """
+    if not _check_paper_fetch_available():
         raise PaperFetchUnavailable(
-            "paper-fetch-skill is not installed. Install with `uv sync --extra online-fetch`."
-        ) from exc
-    return service.fetch_paper
+            "paper-fetch CLI is not available. Install with:\n"
+            "  1. uv tool install paper-fetch-skill (recommended)\n"
+            "  2. Clone to ~/.claude/skills/paper-fetch-skill and add to PATH\n"
+            "  3. Run `uv sync --extra online-fetch` in PaperBase project"
+        )
+
+    # Call paper-fetch with JSON output format
+    result = subprocess.run(
+        ["paper-fetch", "--query", query, "--format", "both"],
+        capture_output=True,
+        text=True,
+        check=True,
+        encoding="utf-8",
+    )
+
+    # Parse JSON output
+    return json.loads(result.stdout)
 
 
 def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
@@ -120,17 +155,30 @@ def _map_assets(article: Any) -> list[FetchedAsset]:
 
 
 class PaperFetchAdapter:
-    """Fetch DOI/URL/title queries through paper-fetch-skill."""
+    """Fetch DOI/URL/title queries through paper-fetch-skill CLI.
 
-    def __init__(self, fetch_paper_fn: Callable[..., Any] | None = None):
-        self._fetch_paper_fn = fetch_paper_fn or _load_fetch_paper()
+    paper-fetch-skill 作为外部黑盒工具，通过 CLI 调用。
+    输入：DOI、URL、arXiv ID 或标题
+    输出：JSON 格式的论文数据
+    """
 
     def fetch(self, query: str) -> FetchedPaper:
-        envelope = self._fetch_paper_fn(
-            query,
-            modes={"article", "markdown", "metadata"},
-            render=None,
-        )
+        """Fetch paper metadata and content via paper-fetch CLI.
+
+        Args:
+            query: DOI, URL, arXiv ID, or paper title
+
+        Returns:
+            FetchedPaper with normalized data
+
+        Raises:
+            PaperFetchUnavailable: If paper-fetch CLI is not available
+            subprocess.CalledProcessError: If paper-fetch execution fails
+        """
+        # Call paper-fetch CLI
+        envelope = _call_paper_fetch_cli(query)
+
+        # Extract fields from JSON response
         article = _get_attr(envelope, "article")
         metadata = _get_attr(envelope, "metadata") or _get_attr(article, "metadata")
         markdown = _get_attr(envelope, "markdown", "") or ""

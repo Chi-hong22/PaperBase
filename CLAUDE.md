@@ -11,8 +11,12 @@ PaperBase 是论文知识库脚手架，核心理念：
 
 **常见任务：**
 
-1. **摄入新论文**
+1. **摄入新论文**（需要先安装 paper-fetch）
    ```bash
+   # 安装 paper-fetch CLI（首次使用）
+   uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git
+   
+   # 摄入论文
    paperbase ingest "doi:10.1038/nature"
    ```
 
@@ -25,6 +29,22 @@ PaperBase 是论文知识库脚手架，核心理念：
    ```bash
    paperbase graph update
    ```
+
+## 外部工具依赖
+
+**必需：**
+- Python 3.11+
+- uv 包管理器
+
+**可选（按功能）：**
+- **在线论文获取**: `uv tool install paper-fetch-skill`
+  - PaperBase 通过 CLI 调用，作为外部黑盒工具
+  - 职责：从 DOI/arXiv/URL 获取论文内容和元数据
+  - 备选：手动提供本地 PDF，使用 `paperbase ingest --file paper.pdf`
+- **知识图谱**: `uv tool install graphify`
+  - 构建论文语义关联网络
+- **Zotero 集成**: `uv tool install zotero-mcp-server`
+  - 从 Zotero 导入论文
 
 ## Canonical Schema 位置
 

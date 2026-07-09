@@ -129,6 +129,11 @@ paperbase validate
 - **全局工具**（需单独安装）:
   - graphify (`uv tool install graphify`) - 知识图谱构建
   - zotero-mcp (`uv tool install zotero-mcp-server`) - Zotero 集成
-- **依赖项目**:
-  - paper-fetch-skill (论文获取，git clone 到 skills/)
-  - citation-check-skill (引用验证，手动下载到 skills/)
+  - paper-fetch (`uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git`) - 在线论文获取（可选）
+- **外部黑盒工具**:
+  - paper-fetch-skill: PaperBase 通过 CLI 调用，不关心其安装方式
+    - 推荐: `uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git` (全局安装)
+    - 备选: `uv sync --extra online-fetch` (项目依赖)
+    - 职责: 论文抓取、元数据提取、PDF 处理
+    - 接口: CLI (`paper-fetch --query <id> --format both`)
+    - 数据流: 查询 → paper-fetch CLI → JSON 输出 → PaperBase adapter → Canonical Markdown
