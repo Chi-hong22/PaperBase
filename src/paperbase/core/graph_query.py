@@ -18,6 +18,8 @@ def _load_graph(graph_dir: Path) -> Dict[str, Any]:
     Returns:
         dict: 图谱数据 {"nodes": [...], "edges": [...]}
 
+        注意：graphify 0.9.10+ 使用 hyperedges 格式，会自动转换为标准 edges
+
     Raises:
         FileNotFoundError: 如果 graph.json 不存在
     """
@@ -27,7 +29,44 @@ def _load_graph(graph_dir: Path) -> Dict[str, Any]:
         raise FileNotFoundError(f"Graph file not found: {graph_file}")
 
     with open(graph_file, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+
+    # 如果是 graphify 0.9.10+ 的 hyperedges 格式，转换为标准 edges
+    if "edges" not in data and "graph" in data and "hyperedges" in data["graph"]:
+        data["edges"] = _convert_hyperedges_to_edges(data["graph"]["hyperedges"])
+
+    return data
+
+
+def _convert_hyperedges_to_edges(hyperedges: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    将 graphify 0.9.10+ 的 hyperedges 格式转换为标准 edges
+
+    hyperedge 格式：{"nodes": [n1, n2, n3], "relation": "..."}
+    转换为：多条边 [(n1, n2), (n1, n3), (n2, n3)]
+
+    Args:
+        hyperedges: hyperedges 列表
+
+    Returns:
+        list[dict]: 标准 edges 列表
+    """
+    edges = []
+
+    for hedge in hyperedges:
+        nodes = hedge.get("nodes", [])
+        relation = hedge.get("relation", "related")
+
+        # 将 hyperedge 转换为完全图（所有节点两两相连）
+        for i in range(len(nodes)):
+            for j in range(i + 1, len(nodes)):
+                edges.append({
+                    "source": nodes[i],
+                    "target": nodes[j],
+                    "relation": relation
+                })
+
+    return edges
 
 
 def _build_adjacency_list(edges: List[Dict[str, Any]]) -> Dict[str, Set[str]]:
