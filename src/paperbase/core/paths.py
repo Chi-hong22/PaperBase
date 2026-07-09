@@ -22,13 +22,13 @@ class PaperPaths:
 
     @property
     def paper_dir(self) -> Path:
-        """论文目录"""
+        """论文目录（存储 manifest 和资源）"""
         return self.base_dir / "library" / "papers" / self.storage_id
 
     @property
     def paper_md(self) -> Path:
-        """规范化 Markdown"""
-        return self.paper_dir / "paper.md"
+        """规范化 Markdown（平面结构：与目录同级）"""
+        return self.base_dir / "library" / "papers" / f"{self.storage_id}.md"
 
     @property
     def manifest_json(self) -> Path:

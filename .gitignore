@@ -82,3 +82,6 @@ scripts/verify_*.py
 .claude
 # Technical debt tracking (internal only)
 TECHNICAL_DEBT.md
+
+# graphify 缓存
+library/papers/graphify-out/
