@@ -171,16 +171,24 @@ def topic(ctx, topic: str, include_refs: bool):
     # 分离本地论文和引用文献
     local_papers = []
     ref_papers = []
+    seen_storage_ids = set()  # 去重集合
 
     for nid in matched_node_ids:
-        # 判断是否为标准节点（本地论文）
+        # 判断是否为本地论文：所有以 p_ 开头的节点（除了 _ref_ 条目）
         import re
-        # 支持两种格式：p_xxx 或 p_xxx_paper
-        is_local = re.match(r'^p_[0-9a-f]{12}(_paper)?$', nid)
+        is_local = nid.startswith('p_') and '_ref_' not in nid
 
         if is_local:
-            # 提取 storage_id（去除 _paper 后缀）
-            storage_id = nid.replace('_paper', '') if nid.endswith('_paper') else nid
+            # 提取 storage_id（去除可能的后缀）
+            # p_2ddac761b162_paper → p_2ddac761b162
+            # p_c083f6a2c977_attention_is_all_you_need → p_c083f6a2c977
+            storage_id_match = re.match(r'^(p_[0-9a-f]{12})', nid)
+            storage_id = storage_id_match.group(1) if storage_id_match else nid
+
+            # 去重：跳过已处理的 storage_id
+            if storage_id in seen_storage_ids:
+                continue
+            seen_storage_ids.add(storage_id)
 
             # 本地论文：从 registry 查找
             paper = next((p for p in papers if p["storage_id"] == storage_id), None)
