@@ -238,7 +238,7 @@ PAPERBASE_LLM_MODEL="gpt-4o-mini"
 uv run paperbase graph update
 ```
 
-详细配置见 [`.env.example`](.env.example) 和 [docs/graphify-integration-technical-guide.md](docs/graphify-integration-technical-guide.md)。
+详细配置见 [`.env.example`](.env.example) 和 [docs/guides/graphify-integration-guide.md](docs/guides/graphify-integration-guide.md)。
 
 ---
 
@@ -282,7 +282,7 @@ uv run paperbase ingest --file paper.pdf
 uv run paperbase graph update
 ```
 
-技术集成文档：[docs/graphify-integration-technical-guide.md](docs/graphify-integration-technical-guide.md)
+技术集成文档：[docs/guides/graphify-integration-guide.md](docs/guides/graphify-integration-guide.md)
 
 #### 3. Zotero MCP（计划集成）
 
