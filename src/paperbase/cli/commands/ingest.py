@@ -13,6 +13,7 @@ from paperbase.adapters.paper_fetch_adapter import PaperFetchAdapter, PaperFetch
 from paperbase.core.normalizer import normalize_paper
 from paperbase.core.online_ingest import ingest_fetched_paper
 from paperbase.schemas.manifest import PaperState, SourcePDF, CanonicalMD, PipelineInfo
+from paperbase.core.chunker import generate_chunks, write_chunks_jsonl
 from paperbase.utils.hash import sha256_file, sha256_string
 from paperbase.utils.markdown import generate_canonical_markdown
 import shutil
@@ -102,6 +103,13 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         canonical_md = generate_canonical_markdown(metadata_dict, candidate_md)
         paths.paper_md.write_text(canonical_md, encoding="utf-8")
         canonical_sha256 = sha256_string(canonical_md)
+
+        # Step 7.5: 生成分块文件
+        console.print("[yellow]7.5. 生成文本分块...[/yellow]")
+        chunks = generate_chunks(canonical_md, paper_id)
+        if chunks:
+            write_chunks_jsonl(chunks, paths.chunks_jsonl)
+            console.print(f"   ✓ 生成 {len(chunks)} 个文本块")
 
         # Step 8: 保存元数据
         console.print("[yellow]8. 保存元数据...[/yellow]")

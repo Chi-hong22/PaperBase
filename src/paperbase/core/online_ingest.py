@@ -14,6 +14,7 @@ from paperbase.core.manifest import create_manifest, save_manifest
 from paperbase.core.paths import PaperPaths
 from paperbase.core.registry import PaperRegistry
 from paperbase.schemas.manifest import CanonicalMD, ManifestSchema, PaperState, PipelineInfo, SourceArtifact
+from paperbase.core.chunker import generate_chunks, write_chunks_jsonl
 from paperbase.schemas.paper import (
     PaperAuthor,
     PaperMetadata,
@@ -137,6 +138,11 @@ def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestR
         fetched.markdown,
     )
     paths.paper_md.write_text(canonical_md, encoding="utf-8")
+
+    # Step 3.5: Generate chunks for full-text search
+    chunks = generate_chunks(canonical_md, paper_id)
+    if chunks:
+        write_chunks_jsonl(chunks, paths.chunks_jsonl)
 
     manifest = create_manifest(paper_id, storage_id)
     manifest.state = PaperState.NORMALIZED
