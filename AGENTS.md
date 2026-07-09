@@ -46,11 +46,20 @@ paperbase/
 1. **每篇论文必须有唯一 `paper_id`**（doi:xxx 优先）
 2. **每篇论文必须有 `manifest.json`** 记录状态和溯源
 3. **不得通过自动化工作流绕过付费墙**（scansci 必须配置 `scihub_enabled=false`）
-4. **graphify 和 zotero-mcp 使用全局安装**（`uv tool install`），不作为项目依赖
-5. **Graphify 只扫描 `library/papers/**/paper.md`**（用 `.graphifyignore` 排除其他）
-6. **所有资产路径必须是相对路径**（`./assets/fig-001.png`）
-7. **状态转换必须更新 `manifest.json` 的 `updated_at`**
-8. **不修改 `paper.md` 的 frontmatter 必须保持 `canonical_content_sha256` 不变**
+4. **外部工具使用全局安装**（`uv tool install`），不作为项目依赖：
+   - `paper-fetch`: 通过 CLI 调用，作为外部黑盒工具
+   - `graphify`: 知识图谱构建
+   - `zotero-mcp`: Zotero 集成
+5. **目录结构**：
+   - 立体结构：`library/papers/p_xxx/paper.md`（推荐）
+   - 每个 paper 独立文件夹，包含 paper.md、manifest.json、source/、assets/
+6. **Graphify 扫描**：
+   - 扫描 `library/papers/` 及其子目录
+   - `.gitignore` 必须配置为 `library/papers/*/` 只排除子目录，不排除 .md 文件
+   - graphify 需要 `--model` 参数和环境变量（OPENAI_API_KEY, OPENAI_BASE_URL）
+7. **所有资产路径必须是相对路径**（`./assets/fig-001.png`）
+8. **状态转换必须更新 `manifest.json` 的 `updated_at`**
+9. **不修改 `paper.md` 的 frontmatter 必须保持 `canonical_content_sha256` 不变**
 
 ## 工作流状态机
 

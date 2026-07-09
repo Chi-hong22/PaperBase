@@ -20,13 +20,20 @@ description: >
 
 **支持输入**：DOI、arXiv、PMID、URL、本地 PDF、批量文件
 
+**前置条件**：
+- 在线摄入需要安装 `paper-fetch`：
+  ```bash
+  uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git
+  ```
+- 本地 PDF 摄入无需额外工具
+
 **典型对话**：
 ```
 人类: "帮我摄入这篇论文 10.1038/nature"
 Agent: 
-  1. 识别 DOI
-  2. 下载并提取元数据
-  3. 生成 paper.md (状态: NORMALIZED)
+  1. 检查 paper-fetch 是否可用
+  2. 识别 DOI 并调用 paper-fetch CLI
+  3. 提取元数据并生成 paper.md (状态: NORMALIZED)
   4. 更新知识图谱 (状态 → READY)
   完成！论文已加入知识库
 

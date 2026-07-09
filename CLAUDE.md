@@ -37,12 +37,18 @@ PaperBase 是论文知识库脚手架，核心理念：
 - uv 包管理器
 
 **可选（按功能）：**
-- **在线论文获取**: `uv tool install paper-fetch-skill`
-  - PaperBase 通过 CLI 调用，作为外部黑盒工具
-  - 职责：从 DOI/arXiv/URL 获取论文内容和元数据
-  - 备选：手动提供本地 PDF，使用 `paperbase ingest --file paper.pdf`
+- **在线论文获取**: `uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git`
+  - **定位**: 外部 CLI 工具（黑盒调用）
+  - **安装位置**: `~/.local/bin/paper-fetch`（全局 CLI）
+  - **调用方式**: PaperBase 通过 `subprocess` 调用 `paper-fetch --format both`
+  - **职责**: 从 DOI/arXiv/URL 获取论文内容和元数据
+  - **验证**: `paper-fetch --version`（应显示 3.0.1+）
+  - **备选**: 手动提供本地 PDF，使用 `paperbase ingest --file paper.pdf`
 - **知识图谱**: `uv tool install graphify`
-  - 构建论文语义关联网络
+  - **定位**: 外部 CLI 工具
+  - **职责**: 构建论文语义关联网络
+  - **要求**: 需要配置 LLM（OPENAI_API_KEY, OPENAI_BASE_URL, model）
+  - **验证**: `graphify --version`
 - **Zotero 集成**: `uv tool install zotero-mcp-server`
   - 从 Zotero 导入论文
 
