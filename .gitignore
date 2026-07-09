@@ -46,7 +46,8 @@ htmlcov/
 
 # PaperBase specific
 library/sources/
-library/papers/
+library/papers/*/        # 只排除子目录，不排除 .md 文件
+!library/papers/*.md     # 明确包含 .md 文件
 registry/
 graph/
 *.db
@@ -76,8 +77,8 @@ quick_*.py
 scripts/verify_*.py
 
 # Agent workspace
-.agents/
-.codex/
-
+.agents
+.codex
+.claude
 # Technical debt tracking (internal only)
 TECHNICAL_DEBT.md

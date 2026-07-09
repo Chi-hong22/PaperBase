@@ -21,13 +21,29 @@ class PaperPaths:
             raise ValueError("storage_id cannot be empty")
 
     @property
+    def papers_dir(self) -> Path:
+        """Papers 根目录"""
+        return self.base_dir / "library" / "papers"
+
+    @property
     def paper_dir(self) -> Path:
-        """论文目录"""
-        return self.base_dir / "library" / "papers" / self.storage_id
+        """论文子目录（用于存放 source、assets 等）"""
+        return self.papers_dir / self.storage_id
 
     @property
     def paper_md(self) -> Path:
-        """规范化 Markdown"""
+        """
+        规范化 Markdown 文件路径（扁平化结构）
+
+        新结构: library/papers/p_xxx.md
+        旧结构: library/papers/p_xxx/paper.md（向后兼容）
+        """
+        # 优先使用新的扁平化路径
+        flat_path = self.papers_dir / f"{self.storage_id}.md"
+        if flat_path.exists():
+            return flat_path
+
+        # 回退到旧的嵌套路径（向后兼容）
         return self.paper_dir / "paper.md"
 
     @property

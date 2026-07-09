@@ -3,6 +3,7 @@
 调用全局安装的 graphify 命令构建知识图谱
 """
 
+import os
 import subprocess
 from pathlib import Path
 import shutil
@@ -26,6 +27,8 @@ def run_graphify(
 ) -> dict:
     """
     运行 graphify 构建知识图谱
+
+    注意：需要确保 .gitignore 正确配置，允许 graphify 扫描 library/papers/*.md 文件。
 
     Args:
         library_dir: library 目录路径
@@ -66,7 +69,7 @@ def run_graphify(
     # 确保 graph 目录存在
     graph_dir.mkdir(parents=True, exist_ok=True)
 
-    # graphify 需要扫描 library/papers 目录（包含所有 paper.md）
+    # graphify 需要扫描 library/papers 目录（包含所有 p_xxx.md）
     papers_dir = library_dir / "papers"
     if not papers_dir.exists():
         return {
@@ -75,11 +78,12 @@ def run_graphify(
             "error": f"Papers 目录不存在: {papers_dir}"
         }
 
-    # 构建 graphify 命令（扫描 library/papers 而不是 library）
+    # 构建 graphify 命令（扫描 papers 而不是 papers-flat）
     cmd = [
         "graphify",
         str(papers_dir),  # 直接扫描 papers 目录
         "--output", str(graph_dir),
+        "--backend", "openai",  # 明确指定 backend
     ]
 
     # 准备环境变量（继承当前环境 + PaperBase LLM 配置）
@@ -90,6 +94,7 @@ def run_graphify(
     if llm_config:
         api_key = llm_config.get("api_key", "")
         base_url = llm_config.get("base_url", "")
+        model = llm_config.get("model", "")
 
         if api_key:
             # graphify 使用 OpenAI SDK，映射到 OPENAI_API_KEY
@@ -99,6 +104,10 @@ def run_graphify(
         # 让 graphify 的 OpenAI SDK 使用自定义 endpoint
         if base_url:
             env["OPENAI_BASE_URL"] = base_url
+
+        # 如果配置了 model，添加到命令参数
+        if model:
+            cmd.extend(["--model", model])
 
     try:
         # 运行 graphify，传入修改后的环境变量
