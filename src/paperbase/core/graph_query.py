@@ -162,7 +162,7 @@ def find_papers_by_topic(
         topic: 主题关键词（大小写不敏感）
 
     Returns:
-        list[str]: 匹配的 paper_id 列表
+        list[str]: 匹配的 storage_id 列表
 
     Raises:
         FileNotFoundError: 如果 graph.json 不存在
@@ -179,18 +179,16 @@ def find_papers_by_topic(
 
     for node in nodes:
         # 只处理 paper 类型的节点
-        if node.get("type") != "paper":
+        # graphify 0.9.10+ 使用 file_type 字段
+        if node.get("file_type") != "paper":
             continue
 
         node_id = node.get("id")
-        attributes = node.get("attributes", {})
-        topics = attributes.get("topics", [])
+        label = node.get("label", "")
+        norm_label = node.get("norm_label", "")
 
-        # 检查主题列表
-        if isinstance(topics, list):
-            for t in topics:
-                if isinstance(t, str) and topic_lower in t.lower():
-                    matched_papers.append(node_id)
-                    break  # 找到一个匹配即可
+        # 在 label 或 norm_label 中搜索关键词
+        if topic_lower in label.lower() or topic_lower in norm_label.lower():
+            matched_papers.append(node_id)
 
     return sorted(matched_papers)
