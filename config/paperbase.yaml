@@ -22,28 +22,21 @@ state_machine:
   final_state: "ready"         # 最终状态
 
 # === LLM 配置（可选） ===
-# 用于自动提取论文关键信息（方法、数据集、领域等）
+# 仅用于传递给 graphify 工具的环境变量配置
+# PaperBase 核心功能（摄入、转换、检索）不依赖 LLM
+# 如果不使用 graphify，可以跳过此配置
 llm:
-  # OpenAI-compatible API 端点（从环境变量或者.env读取）
-  # 示例: https://api.openai.com/v1 (OpenAI)
-  #       http://localhost:11434/v1 (Ollama)
-  #       https://api.anthropic.com/v1 (Anthropic via proxy)
+  # OpenAI-compatible API 端点
+  # graphify 会通过 OPENAI_BASE_URL 环境变量读取
   base_url: ${PAPERBASE_LLM_BASE_URL}
 
-  # API 密钥（从环境变量或者.env读取）
+  # API 密钥
+  # graphify 会通过 OPENAI_API_KEY 环境变量读取
   api_key: ${PAPERBASE_LLM_API_KEY}
 
-  # 模型名称（从环境变量或者.env读取）
-  # OpenAI 示例: gpt-4o-mini, gpt-4o
-  # Anthropic 示例: claude-3-5-sonnet-20241022
-  # Ollama 示例: llama3.2, qwen2.5
+  # 模型名称
+  # 示例: gpt-4o-mini, gpt-4o, claude-3-5-sonnet-20241022
   model: ${PAPERBASE_LLM_MODEL}
-
-  # 可选: 高级配置
-  advanced:
-    timeout: 60              # 超时时间（秒）
-    max_input_tokens: 4000   # 最大输入长度
-    retry_on_failure: true   # 失败时是否重试
 
 # === 知识图谱配置 ===
 graph:

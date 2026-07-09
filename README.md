@@ -52,7 +52,7 @@ PDF → Markdown → 知识图谱 → 搜索/分析
 
 **核心概念速览：**
 - **Canonical Markdown**：每篇论文对应一个 `paper.md`，这是唯一真相源（source of truth），所有索引、图谱、分块都可从它重建
-- **状态机管理**：论文处理分 6 个状态（摄入 → 规范化 → 图谱化），可随时中断和恢复，所有操作可追溯
+- **简化状态机**：论文处理仅 2 个主状态（摄入后 NORMALIZED → 加入图谱后 READY），可随时中断和恢复
 - **双检索系统**：SQLite FTS5 用于关键词搜索（"找到包含 transformer 的论文"），Graphify 用于关系查询（"这篇论文的引用脉络"）
 
 ## ✨ 核心特性
@@ -186,7 +186,7 @@ paperbase/
 ├── registry/                 # SQLite 查询索引（派生）
 ├── graph/                    # Graphify 知识图谱（派生）
 ├── src/paperbase/           # Python 包
-├── skills/paperbase-skill/  # 全局 AI Agent skill
+├── skills/paperbase/        # 全局 AI Agent skill
 └── tests/                    # 测试套件
 ```
 
@@ -205,80 +205,92 @@ paperbase/
 
 ### LLM 配置（可选）
 
-PaperBase 可在**无 LLM** 的情况下正常工作。LLM 配置用于：
-- **Graphify 工具**：语义图谱构建（外部工具，通过环境变量传递配置）
-- **未来扩展**：可能添加的摘要、翻译等功能
+PaperBase 核心功能（摄入、转换、检索）**不依赖 LLM**。
 
-当前 PaperBase 核心功能（摄入、转换、检索）不依赖 LLM。
+LLM 配置仅用于将环境变量传递给外部 Graphify 工具。如果你：
+- 不使用 Graphify 语义图谱功能
+- 或 Graphify 已通过其他方式配置（如系统环境变量）
 
-#### **快速配置（3 步）**
+则可以完全跳过此配置。
 
-**1. 创建配置文件**
+#### **配置步骤（仅在需要时）**
+
+**1. 创建环境变量文件**
 ```bash
 # 复制示例配置
 cp .env.example .env
 
-# 编辑 .env，填入你的 API Key
-nano .env  # 或使用其他编辑器
+# 编辑 .env
+nano .env
 ```
 
-**2. 修改 `config/paperbase.yaml`**
-```yaml
-llm:
-  base_url: ${PAPERBASE_LLM_BASE_URL}
-  api_key: ${PAPERBASE_LLM_API_KEY}
-  model: ${PAPERBASE_LLM_MODEL}
-```
-
-**3. 验证配置**
+**2. 设置环境变量**
 ```bash
-uv run paperbase config check-llm
-
-# 预期输出：
-# ✓ 配置文件存在
-# ✓ LLM 已启用
-# ✓ 环境变量已设置
-# ✓ 初始化成功
-# ✓ 配置检查通过
+# .env 文件内容
+PAPERBASE_LLM_BASE_URL="https://api.openai.com/v1"
+PAPERBASE_LLM_API_KEY="sk-..."
+PAPERBASE_LLM_MODEL="gpt-4o-mini"
 ```
 
-#### **支持的 LLM 服务**
+**3. 验证 Graphify 可用**
+```bash
+# PaperBase 会将配置传递给 graphify
+uv run paperbase graph update
+```
 
-| 服务 | 成本 | 配置复杂度 | 推荐场景 |
-|------|------|----------|---------|
-| **OpenAI** | ~$0.15/100 篇 | 低 | 生产环境 |
-| **Ollama** | 免费（本地） | 中 | 预算有限 |
-| **Azure OpenAI** | 按用量 | 中 | 企业环境 |
-| **国内 API** | 按用量 | 低 | 国内用户 |
-
-详细配置见 [`.env.example`](.env.example)。
-
-#### **成本估算（OpenAI gpt-4o-mini）**
-- 单篇论文摄入：~$0.0015（仅处理摘要前 4000 字符）
-- 100 篇论文：~$0.15
-- 1000 篇论文：~$1.50
-
-**省钱技巧：**
-- 使用 Ollama 本地推理（免费）
-- 仅对重要论文启用自动提取（手动模式：`paperbase update <paper_id> --json '{...}'`）
+详细配置见 [`.env.example`](.env.example) 和 [docs/graphify-integration-technical-guide.md](docs/graphify-integration-technical-guide.md)。
 
 ---
 
-### 联网获取能力（可选）
+### 外部工具集成（可选）
 
-启用 `online-fetch` 后，`paperbase ingest` 可以接收 DOI、论文 URL 或标题查询，并通过 `paper-fetch-skill` 获取结构化元数据、干净 Markdown 全文、引用和图表资源：
+PaperBase 支持集成外部工具以扩展功能：
 
+#### 1. paper-fetch-skill（在线论文获取）
+
+用于通过 DOI、arXiv ID 或论文 URL 获取结构化元数据和全文。
+
+**安装方式**：
 ```bash
-uv sync --extra online-fetch
-uv run paperbase ingest "10.1038/s41586-026-10265-5"
-uv run paperbase ingest "https://www.nature.com/articles/s41586-026-10265-5"
+# 访问项目仓库按照说明安装
+# https://github.com/Dictation354/paper-fetch-skill
 ```
 
-本地 PDF 仍使用原有路径：
+安装后，`paperbase ingest` 可接收在线标识符：
+```bash
+uv run paperbase ingest "10.1038/s41586-026-10265-5"
+uv run paperbase ingest "arxiv:2301.07041"
+```
 
+本地 PDF 不需要此工具：
 ```bash
 uv run paperbase ingest --file paper.pdf
 ```
+
+#### 2. Graphify（语义图谱构建）
+
+用于构建和查询语义知识图谱。
+
+**安装方式**：
+```bash
+# 访问项目仓库按照说明安装
+# https://github.com/Graphify-Labs/graphify
+```
+
+安装后，可使用图谱功能：
+```bash
+uv run paperbase graph update
+```
+
+技术集成文档：[docs/graphify-integration-technical-guide.md](docs/graphify-integration-technical-guide.md)
+
+#### 3. Zotero MCP（计划集成）
+
+用于与 Zotero 文献管理器集成（即将支持）。
+
+**项目地址**：https://github.com/54yyyu/zotero-mcp
+
+---
 
 ### 摄入论文
 
@@ -326,9 +338,6 @@ uv run paperbase status --state ready
 
 # 全文搜索
 uv run paperbase search "transformer architecture" -n 20
-
-# 在 Zotero 中搜索（需要 zotero-mcp）
-uv run paperbase search --zotero "quantum computing"
 ```
 
 ### 知识图谱
@@ -362,11 +371,11 @@ PaperBase 提供全局 skill，适配 Claude Code 和 Codex：
 
 ```bash
 # 一键安装
-./skills/paperbase-skill/install.sh
+./skills/paperbase/install.sh
 
 # 或手动安装
 # 适用于 Claude Code / Codex:
-cp -r skills/paperbase-skill ~/.claude/skills/
+cp -r skills/paperbase ~/.claude/skills/
 ```
 
 安装后在任意 AI Agent 会话中调用 `/paperbase`：
@@ -377,46 +386,42 @@ cp -r skills/paperbase-skill ~/.claude/skills/
 /paperbase status
 ```
 
-详见 [skills/paperbase-skill/README.md](skills/paperbase-skill/README.md)。
+详见 [skills/paperbase/README.md](skills/paperbase/README.md)。
 
 ## 🏗️ 架构说明
 
 ### 状态机
 
-论文通过状态机处理（定义在 `manifest.json` 中）：
+论文通过简化的状态机处理（定义在 `manifest.json` 中）：
 
 ```mermaid
 graph LR
-    A[DISCOVERED<br/>已发现] --> B[RESOLVED<br/>已解析]
-    B --> C[SOURCE_READY<br/>PDF已下载]
-    C --> D[CONVERTED<br/>已转换]
-    D --> E[NORMALIZED<br/>已规范化]
-    E --> F[VALIDATED<br/>已验证]
-    F --> G[GRAPHED<br/>已图谱化]
-    G --> H[READY<br/>可用]
+    A[NORMALIZED<br/>已规范化] --> B[READY<br/>可用]
     
-    style H fill:#90EE90
-    style A fill:#FFF9C4
-    style C fill:#BBDEFB
-    style E fill:#C5CAE9
-    style G fill:#B2DFDB
+    style B fill:#90EE90
+    style A fill:#C5CAE9
 ```
 
-**状态说明：**
+**主流程状态：**
 
-| 状态 | 英文 | 说明 | 典型耗时 |
+| 状态 | 英文 | 说明 | 触发操作 |
 |------|------|------|---------|
-| 📥 已发现 | DISCOVERED | 识别论文标识（DOI/arXiv/etc） | <1s |
-| 🔍 已解析 | RESOLVED | 获取元数据（标题、作者等） | 1-3s |
-| 📄 PDF已下载 | SOURCE_READY | PDF 已下载到 sources/pdf/ | 5-30s |
-| 📝 已转换 | CONVERTED | PDF 转换为初步 Markdown | 5-15s |
-| ✨ 已规范化 | NORMALIZED | Markdown 已规范化（符合 schema） | 1-2s |
-| ✅ 已验证 | VALIDATED | 通过 Pydantic schema 验证 | <1s |
-| 🔗 已图谱化 | GRAPHED | 已加入知识图谱 | 2-10s |
-| 🎉 可用 | READY | 可用状态（最终状态） | - |
+| ✨ 已规范化 | NORMALIZED | 论文已摄入并转换为 Canonical Markdown | `paperbase ingest` |
+| 🎉 可用 | READY | 已加入知识图谱，可供语义查询 | `paperbase graph update` |
 
-**特殊状态：**
-- ⏸️ **BLOCKED**：处理失败，需手动干预（查看 manifest.json 中的 error_log）
+**异常状态：**
+
+| 状态 | 英文 | 说明 |
+|------|------|------|
+| ⚠️ 需审核 | NEEDS_REVIEW | 需要人工审核（如元数据不完整） |
+| ⏸️ 阻塞 | BLOCKED | 处理被阻塞（如 PDF 加密） |
+| 🔄 可重试失败 | FAILED_RETRYABLE | 临时失败（如网络超时），可重试 |
+| ❌ 永久失败 | FAILED_PERMANENT | 永久失败（如 DOI 不存在） |
+
+**设计理念**：
+- **Canonical Markdown** 是唯一真相源，所有其他数据（registry、graph）可从它重建
+- 状态机简化为 2 个主状态，降低复杂度
+- 详见 [AGENTS.md](AGENTS.md) 的完整状态转换规则
 
 ### 核心模块
 
@@ -758,8 +763,9 @@ MIT License
 
 - [AGENTS.md](AGENTS.md) - Agent 工作指南（必读）
 - [CLAUDE.md](CLAUDE.md) - Claude 特定指南
-- [Graphify](https://github.com/your-org/graphify) - 知识图谱工具
-- [Zotero MCP](https://github.com/your-org/zotero-mcp-server) - Zotero 集成
+- [Graphify](https://github.com/Graphify-Labs/graphify) - 知识图谱工具
+- [Zotero MCP](https://github.com/54yyyu/zotero-mcp) - Zotero 集成
+- [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - 在线论文获取
 
 ## 🙏 致谢
 
@@ -769,13 +775,13 @@ MIT License
 - [markitdown](https://github.com/microsoft/markitdown) - Microsoft 的 Markdown 转换工具
 - [PyMuPDF](https://pymupdf.readthedocs.io/) - PDF 处理库
 - [Pydantic](https://docs.pydantic.dev/) - 数据验证和 Schema 管理
-- [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - 在线论文获取和转换
 
 ### 外部工具集成
 - [uv](https://github.com/astral-sh/uv) - Astral 团队的快速 Python 包管理器
-- [Graphify](https://github.com/graphify-ai/graphify) - 知识图谱构建工具
+- [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - 在线论文获取和转换
+- [Graphify](https://github.com/Graphify-Labs/graphify) - 知识图谱构建工具
 - [Zotero](https://www.zotero.org/) - 文献管理软件
-- [Zotero MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/zotero) - Zotero MCP 集成服务
+- [Zotero MCP Server](https://github.com/54yyyu/zotero-mcp) - Zotero MCP 集成服务
 
 ### 开发工具
 - [Ruff](https://github.com/astral-sh/ruff) - 极速 Python linter 和 formatter
