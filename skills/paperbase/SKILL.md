@@ -99,7 +99,7 @@ paperbase graph status                # 查看统计
 
 ### 3️⃣ 知识检索
 
-双轨查询系统（结构化 + 语义）。
+双轨查询系统（结构化 + 语义）+ 全文检索。
 
 **智能路由**：
 
@@ -110,6 +110,7 @@ paperbase graph status                # 查看统计
 | `year:` | `year:2024` | Registry |
 | `author:` | `author:Zhang` | Registry |
 | 自然语言 | `SLAM 相关论文` | Graphify |
+| 全文关键词 | `transformer` | FTS5 |
 
 **典型对话**：
 ```
@@ -127,17 +128,18 @@ Agent: [语义查询] → 返回 15 篇 + 关联路径
 人类: "深度学习和计算机视觉的交叉研究"
 Agent: [图谱推理] → 返回概念交集论文
 
-# 全文检索
+# 全文检索（FTS5）- NEW
 人类: "搜索提到 transformer 的论文"
-Agent: [FTS5 检索] → 返回 7 篇
+Agent: [FTS5 检索] → 返回 7 篇 + 匹配片段
 ```
 
 **关键命令**：
 ```bash
 paperbase status                       # 列出所有论文
 paperbase status <paper_id>            # 查询单篇
-paperbase status --state <state>       # 按状态筛选
-paperbase search "<query>"             # 全文检索
+paperbase status --year <year>         # 按年份筛选（NEW）
+paperbase status --state <state>       # 按状态筛选（NEW）
+paperbase search "<query>"             # 全文检索（NEW）
 paperbase query related <id> --depth N # 相关论文
 paperbase query topic "<topic>"        # 主题查找
 ```

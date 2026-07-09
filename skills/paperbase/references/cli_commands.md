@@ -80,7 +80,9 @@ paperbase graph update --force
 ```bash
 paperbase status                        # 列出所有论文
 paperbase status <paper_id>             # 查询单篇论文
-paperbase status --state <state>        # 按状态筛选
+paperbase status --year <year>          # 按年份筛选（NEW）
+paperbase status --state <state>        # 按状态筛选（NEW）
+paperbase status --year 2021 --state ready  # 组合过滤（NEW）
 ```
 
 **可用状态**：
@@ -98,6 +100,16 @@ paperbase status
 
 # 查询特定论文
 paperbase status "doi:10.1038/nature12373"
+
+# 按年份筛选（NEW）
+paperbase status --year 2021
+
+# 按状态筛选
+paperbase status --state ready
+
+# 组合过滤（NEW）
+paperbase status --year 2021 --state normalized
+```
 
 # 筛选已就绪的论文
 paperbase status --state ready
@@ -224,16 +236,24 @@ paperbase doctor
 永久删除论文（不可逆）。
 
 ```bash
-paperbase remove <paper_id>             # 删除（需确认）
-paperbase remove <paper_id> --confirm   # 跳过确认
+paperbase remove <paper_id>                # 删除（需确认）
+paperbase remove <paper_id> --yes          # 跳过确认（NEW）
+paperbase remove <paper_id> -y             # 短参数（NEW）
+paperbase remove <paper_id> --force        # 同 --yes（NEW）
+paperbase remove <paper_id> -f             # 短参数（NEW）
 ```
 
 **警告**：此操作将：
-- 删除 `paper.md`
-- 删除 `source PDF`
-- 删除 `manifest.json`
+- 删除论文目录（`p_xxx/`）
+- 删除 canonical markdown（`p_xxx.md`）
+- 删除 source PDF（如果是孤立的）
 - 删除 registry 记录
-- **不会自动更新图谱**
+- **不会自动更新图谱**（需手动运行 `graph update --force`）
+
+**自动化支持（NEW）**：
+- 使用 `--yes` 或 `-y` 跳过交互确认
+- 适合脚本和后台自动化处理
+- `--force` / `-f` 是 `--yes` 的别名
 
 **重要**：删除后图谱中仍保留该论文的节点和边关系。这可能导致：
 - 语义查询返回已删除论文的引用
