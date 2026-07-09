@@ -287,6 +287,79 @@ except Exception as e:
 
 ---
 
+### Query Topic Returns Empty or Incomplete Results
+
+**Symptom**:
+```bash
+paperbase query topic "transformer"
+# 返回: 0 篇或少于预期
+```
+
+**Causes**:
+1. 图谱未更新
+2. 节点 ID 格式不兼容
+3. 关键词未在图谱标签中
+
+**Solutions**:
+
+1. **重建图谱**（推荐）:
+```bash
+paperbase graph update
+```
+
+2. **检查覆盖率**:
+```bash
+# 应返回所有匹配的论文
+paperbase query topic "deep learning"
+```
+
+3. **使用引用扩展**（如果需要引用文献）:
+```bash
+paperbase query topic "attention" --include-refs
+# 输出: 本地论文: 1 篇, 引用文献: 2 篇
+```
+
+4. **验证图谱节点**:
+```bash
+# 检查图谱统计
+paperbase graph status
+```
+
+---
+
+### Query Related Returns Empty
+
+**Symptom**:
+```bash
+paperbase query related "fallback:xxx"
+# 返回: 未找到相关论文
+```
+
+**Causes**:
+1. 论文在图谱中孤立（无连接）
+2. 图谱未更新
+3. Paper ID 格式错误
+
+**Solutions**:
+
+1. **重建图谱**:
+```bash
+paperbase graph update
+```
+
+2. **验证 Paper ID**:
+```bash
+# 使用 status 确认正确的 paper_id
+paperbase status
+```
+
+3. **增加遍历深度**:
+```bash
+paperbase query related "fallback:xxx" --depth 2
+```
+
+---
+
 ### Graphify Query Returns Empty
 
 **Symptom**:
