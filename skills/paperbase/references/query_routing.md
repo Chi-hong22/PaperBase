@@ -49,8 +49,6 @@ def is_structured_query(query: str) -> bool:
 | `state:` | `state:ready` | Registry | Enumerated values |
 | `year:` | `year:2024` | Registry | Numeric filter |
 | `author:` | `author:Zhang` | Registry | String matching |
-| `list` | `list all papers` | Registry | List operation |
-| `show all` | `show all` | Registry | List operation |
 | *other* | `SLAM 相关论文` | Graphify | Semantic |
 
 ---
@@ -115,10 +113,6 @@ query = "year:2024"
 # Author search
 query = "author:Zhang"
 → SELECT * FROM papers WHERE authors LIKE '%Zhang%'
-
-# List all
-query = "list all papers"
-→ SELECT * FROM papers ORDER BY updated_at DESC
 ```
 
 ---
@@ -309,7 +303,6 @@ assert is_structured_query("doi:10.1234/abc") == True
 assert is_structured_query("state:ready") == True
 assert is_structured_query("year:2024") == True
 assert is_structured_query("author:Zhang") == True
-assert is_structured_query("list all") == True
 ```
 
 ### Test Semantic Routing
