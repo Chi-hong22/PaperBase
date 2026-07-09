@@ -259,4 +259,4 @@ uv run paperbase graph status
 
 - [troubleshooting.md](troubleshooting.md) - 完整故障排查指南
 - [cli_commands.md](cli_commands.md) - CLI 命令参考
-- [../installation.md](../../installation.md) - 安装指南
+- [installation.md](installation.md) - 安装指南
