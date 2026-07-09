@@ -1,5 +1,153 @@
 # PaperBase Skill - 更新日志
 
+## [2026-07-09-v2] - 查询系统全面优化
+
+### ✨ 新增功能
+
+#### 1. query topic --include-refs（引用文献扩展）
+- **新增选项**：`--include-refs` 扩展查询范围到引用文献
+- 默认只返回本地论文（向后兼容）
+- 启用后同时显示论文引用的外部文献
+- 分离显示本地论文和引用文献
+
+**示例：**
+```bash
+paperbase query topic "attention"                # 仅本地论文
+paperbase query topic "attention" --include-refs # 包含引用文献
+# 输出：本地论文: 1 篇, 引用文献: 1 篇
+```
+
+#### 2. query topic 分词匹配
+- **改进匹配逻辑**：支持多词查询（如 "deep learning"）
+- 单词查询：完整子串匹配
+- 多词查询：任意词匹配即返回
+- 大小写不敏感
+
+**提升效果：**
+- "deep learning" 从 0 篇 → 1 篇
+- "transformer" 从 0 篇 → 2 篇
+
+### 🐛 Bug 修复（P0 - 严重问题）
+
+#### 1. query topic 覆盖率仅 62.5%
+- **问题**：正则表达式只匹配 `p_xxx` 和 `p_xxx_paper`
+- **遗漏**：自定义后缀节点（如 `p_xxx_vit_paper`）
+- **修复**：改用前缀检查 `node_id.startswith("p_")`（更健壮）
+- **结果**：覆盖率提升至 100%（8/8 篇论文）
+
+#### 2. query topic 结果重复
+- **问题**：多个节点（如 `p_xxx_paper` 和 `p_xxx_vit_paper`）映射到同一 storage_id
+- **修复**：在 CLI 层添加 storage_id 去重逻辑
+- **结果**：每篇论文只显示一次
+
+#### 3. query related 返回空结果（P1）
+- **问题**：CLI 使用 storage_id 查询，但图谱节点有 `_paper` 后缀
+- **修复**：在图谱中查找匹配的节点 ID（支持后缀变体）
+- **增强**：引用文献从图谱提取标题显示，而非 N/A
+
+**验证：**
+```bash
+paperbase query related "fallback:69e64477ae777598"  # 2 篇相关 ✓
+paperbase query related "fallback:c23839e43de0a596"  # 3 篇相关 ✓
+```
+
+#### 4. 新摄入论文未自动索引
+- **问题**：摄入流程缺少索引更新调用
+- **修复**：在 `_ingest_online`、`_ingest_local_pdf`、`_ingest_batch` 添加自动索引
+- **结果**：新论文摄入后立即可搜索
+
+#### 5. 节点格式兼容性
+- **问题**：图谱节点格式从 `p_xxx` 变为 `p_xxx_paper`
+- **修复**：正则改为 `^p_[0-9a-f]{12}(_paper)?$` 兼容两种格式
+- **增强**：映射时自动去除后缀提取 storage_id
+
+### 🔧 技术改进
+
+#### 核心模块优化
+- `graph_query.py`：
+  - 前缀检查代替脆弱的正则匹配
+  - 添加分词逻辑支持多词查询
+  - 支持 `include_refs` 参数
+
+- `query.py`：
+  - 节点 ID 映射逻辑（处理后缀变体）
+  - storage_id 去重机制
+  - 引用文献标题提取和显示
+  - 本地论文与引用文献分离显示
+
+- `ingest.py`：
+  - 3 个摄入路径全部集成自动索引
+
+### 📊 修复前后对比
+
+| 功能 | 修复前 | 修复后 | 改进 |
+|------|--------|--------|------|
+| **query topic 覆盖率** | 62.5% (5/8) | 100% (8/8) | +37.5% |
+| **query topic "deep learning"** | 0 篇 | 1 篇 | 从不可用 → 可用 |
+| **query topic 重复** | 有重复 | 已去重 | ✓ |
+| **query related** | 返回空 | 正常工作 | 从不可用 → 可用 |
+| **新论文索引** | 手动 | 自动 | 流程简化 |
+| **引用文献显示** | N/A | 显示标题 | 信息完整 |
+
+### 🎯 验证结果
+
+#### query topic 测试
+```bash
+paperbase query topic "numpy"        # 1 篇（NumPy）✓
+paperbase query topic "transformer"  # 2 篇（BERT, ViT）✓
+paperbase query topic "protein"      # 1 篇（AlphaFold）✓
+paperbase query topic "attention" --include-refs  # 1 本地 + 1 引用 ✓
+```
+
+#### query related 测试
+```bash
+paperbase query related "fallback:69e64477ae777598"          # 2 篇 ✓
+paperbase query related "fallback:e32543f9588bc9f3" --depth 2 # 2 篇 ✓
+paperbase query related "fallback:c23839e43de0a596"          # 3 篇 ✓
+```
+
+### 📈 最新数据统计
+
+| 指标 | 数值 |
+|------|------|
+| 论文总数 | 8 篇 |
+| query topic 覆盖率 | 100% |
+| 全文检索覆盖率 | 100% (8/8) |
+| 图谱节点 | 29 个 |
+| 图谱 hyperedges | 4 条 |
+
+### 📦 提交记录
+
+```
+5dcd007 - fix(query): 修复 related 查询节点匹配问题
+a2cca51 - fix(query): 提升覆盖率至100%并修复重复问题
+0426536 - fix(query): 支持新旧两种节点格式
+fda002c - feat(query): 支持 --include-refs 扩展查询到引用文献
+7301acf - fix(query): 精确过滤非标准论文节点 + 自动索引
+```
+
+### 🎯 升级指南
+
+**验证新功能：**
+```bash
+# 1. 测试覆盖率提升
+paperbase query topic "numpy"         # 应能找到 NumPy 论文
+
+# 2. 测试引用扩展
+paperbase query topic "attention" --include-refs
+
+# 3. 测试关联查询修复
+paperbase query related "fallback:69e64477ae777598"
+
+# 4. 重建图谱（解决孤立节点）
+paperbase graph update
+
+# 5. 验证自动索引
+paperbase ingest "doi:10.xxxx/xxxx"  # 新论文应立即可搜索
+```
+
+---
+
 ## [2026-07-09] - 重大功能增强与修复
 
 ### ✨ 新增功能
