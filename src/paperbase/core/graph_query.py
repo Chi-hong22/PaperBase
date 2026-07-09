@@ -194,17 +194,16 @@ def find_papers_by_topic(
 
         # 节点过滤逻辑
         if include_refs:
-            # 包含引用文献：匹配标准节点 + 引用论文节点，但排除引用条目节点 (_ref_N)
+            # 包含引用文献：排除引用条目节点 (_ref_N)
             if not node_id or "_ref_" in node_id:
                 continue
-            # 排除无前缀的引用文献（如 attention_is_all_you_need_paper）
-            if not node_id.startswith("p_"):
-                continue
+            # 本地论文必须以 p_ 开头，引用论文可能没有前缀
         else:
-            # 仅本地论文：支持两种格式
-            # 1. 旧格式: p_[0-9a-f]{12}
-            # 2. 新格式: p_[0-9a-f]{12}_paper
-            if not node_id or not re.match(r'^p_[0-9a-f]{12}(_paper)?$', node_id):
+            # 仅本地论文：必须以 p_ 开头（最可靠的标识）
+            if not node_id or not node_id.startswith("p_"):
+                continue
+            # 排除引用条目节点
+            if "_ref_" in node_id:
                 continue
         label = node.get("label", "")
         norm_label = node.get("norm_label", "")
