@@ -153,7 +153,8 @@ def find_related_papers(
 
 def find_papers_by_topic(
     graph_dir: Path,
-    topic: str
+    topic: str,
+    include_refs: bool = False
 ) -> List[str]:
     """
     按主题查找论文
@@ -162,9 +163,10 @@ def find_papers_by_topic(
         graph_dir: graph 目录路径
         topic: 主题关键词（大小写不敏感）
                支持多词查询（如 "deep learning"），会分词匹配
+        include_refs: 是否包含引用文献节点（默认 False，只返回本地论文）
 
     Returns:
-        list[str]: 匹配的 storage_id 列表
+        list[str]: 匹配的 storage_id 列表（本地论文）或节点 ID 列表（包含引用）
 
     Raises:
         FileNotFoundError: 如果 graph.json 不存在
@@ -190,10 +192,15 @@ def find_papers_by_topic(
 
         node_id = node.get("id")
 
-        # 只保留标准格式的论文节点 (p_xxxxxxxxxxxx)
-        # 过滤引用节点 (p_xxx_ref_N) 和引用论文节点 (p_xxx_paper_name)
-        if not node_id or not re.match(r'^p_[0-9a-f]{12}$', node_id):
-            continue
+        # 节点过滤逻辑
+        if include_refs:
+            # 包含引用文献：匹配标准节点 + 引用论文节点，但排除引用条目节点 (_ref_N)
+            if not node_id or "_ref_" in node_id:
+                continue
+        else:
+            # 仅本地论文：只保留标准格式 (p_xxxxxxxxxxxx)
+            if not node_id or not re.match(r'^p_[0-9a-f]{12}$', node_id):
+                continue
         label = node.get("label", "")
         norm_label = node.get("norm_label", "")
 
