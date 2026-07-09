@@ -246,12 +246,18 @@ PaperBase 支持集成外部工具以扩展功能：
 
 #### 1. paper-fetch-skill（在线论文获取）
 
-用于通过 DOI、arXiv ID 或论文 URL 获取结构化元数据和全文。
+**定位**: 外部 CLI 工具，作为黑盒通过命令行调用
+**职责**: 从 DOI、arXiv ID、URL 获取论文元数据和全文
+**接口**: PaperBase 通过 `subprocess` 调用 `paper-fetch` 命令
 
 **安装方式**：
 ```bash
-# 访问项目仓库按照说明安装
-# https://github.com/Dictation354/paper-fetch-skill
+uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git
+```
+
+**验证安装**：
+```bash
+paper-fetch --version  # 应显示: paper-fetch 3.0.1
 ```
 
 安装后，`paperbase ingest` 可接收在线标识符：
@@ -775,7 +781,7 @@ MIT License
 - [CLAUDE.md](CLAUDE.md) - Claude 特定指南
 - [Graphify](https://github.com/Graphify-Labs/graphify) - 知识图谱工具
 - [Zotero MCP](https://github.com/54yyyu/zotero-mcp) - Zotero 集成
-- [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - 在线论文获取
+- [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - 在线论文获取（外部 CLI 工具）
 
 ## 🙏 致谢
 
@@ -788,8 +794,8 @@ MIT License
 
 ### 外部工具集成
 - [uv](https://github.com/astral-sh/uv) - Astral 团队的快速 Python 包管理器
-- [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - 在线论文获取和转换
-- [Graphify](https://github.com/Graphify-Labs/graphify) - 知识图谱构建工具
+- [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - 在线论文获取和转换（外部 CLI 工具）
+- [Graphify](https://github.com/Graphify-Labs/graphify) - 知识图谱构建工具（外部 CLI 工具）
 - [Zotero](https://www.zotero.org/) - 文献管理软件
 - [Zotero MCP Server](https://github.com/54yyyu/zotero-mcp) - Zotero MCP 集成服务
 

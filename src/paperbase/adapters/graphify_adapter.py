@@ -66,10 +66,19 @@ def run_graphify(
     # 确保 graph 目录存在
     graph_dir.mkdir(parents=True, exist_ok=True)
 
-    # 构建 graphify 命令
+    # graphify 需要扫描 library/papers 目录（包含所有 paper.md）
+    papers_dir = library_dir / "papers"
+    if not papers_dir.exists():
+        return {
+            "success": False,
+            "output": "",
+            "error": f"Papers 目录不存在: {papers_dir}"
+        }
+
+    # 构建 graphify 命令（扫描 library/papers 而不是 library）
     cmd = [
         "graphify",
-        str(library_dir),
+        str(papers_dir),  # 直接扫描 papers 目录
         "--output", str(graph_dir),
     ]
 

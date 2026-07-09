@@ -90,12 +90,23 @@ def check_graph() -> Tuple[bool, str]:
     return False, "Knowledge graph not found (run 'graph update' to create)"
 
 def check_paper_fetch() -> Tuple[bool, str]:
-    """Check if paper-fetch-skill is available"""
-    try:
-        import paper_fetch  # noqa: F401
-        return True, "installed"
-    except ImportError:
-        return False, "not installed; run `uv sync --extra online-fetch`"
+    """Check if paper-fetch CLI is available"""
+    if shutil.which("paper-fetch"):
+        try:
+            result = subprocess.run(
+                ["paper-fetch", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                return True, f"paper-fetch {version}"
+            else:
+                return True, "paper-fetch (version unknown)"
+        except Exception:
+            return True, "paper-fetch (version check failed)"
+    return False, "not installed (optional); install with `uv tool install paper-fetch-skill`"
 
 def check_llm_config() -> Tuple[bool, str]:
     """Check LLM configuration"""
