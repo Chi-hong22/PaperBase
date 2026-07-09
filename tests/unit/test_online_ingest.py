@@ -42,7 +42,7 @@ def test_ingest_fetched_paper_writes_canonical_outputs(tmp_path: Path):
 
     result = ingest_fetched_paper(base_dir=tmp_path, fetched=fetched)
 
-    paper_md = tmp_path / "library" / "papers" / result.storage_id / "paper.md"
+    paper_md = tmp_path / "library" / "papers" / f"{result.storage_id}.md"
     manifest_json = tmp_path / "library" / "papers" / result.storage_id / "manifest.json"
     references_jsonl = tmp_path / "library" / "papers" / result.storage_id / "references.jsonl"
     assets_dir = tmp_path / "library" / "papers" / result.storage_id / "assets"

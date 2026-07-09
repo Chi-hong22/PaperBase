@@ -65,7 +65,7 @@ def check_library() -> Tuple[bool, str]:
     if library_path.exists():
         papers_dir = library_path / "papers"
         if papers_dir.exists():
-            paper_count = len(list(papers_dir.glob("p_*")))
+            paper_count = len(list(papers_dir.glob("p_*.md")))
             return True, f"Library found ({paper_count} papers)"
         else:
             return False, "Library exists but papers/ directory missing"
