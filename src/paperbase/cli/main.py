@@ -7,6 +7,7 @@ from paperbase.cli.commands.status import status
 from paperbase.cli.commands.ingest import ingest
 from paperbase.cli.commands.graph import graph
 from paperbase.cli.commands.search import search
+from paperbase.cli.commands.index import index_cmd
 from paperbase.cli.commands.query import query
 from paperbase.cli.commands.doctor import doctor
 from paperbase.cli.commands.remove import remove
@@ -36,6 +37,7 @@ main.add_command(status)
 main.add_command(ingest)
 main.add_command(graph)
 main.add_command(search)
+main.add_command(index_cmd, name="index")
 main.add_command(query)
 main.add_command(doctor)
 main.add_command(remove)

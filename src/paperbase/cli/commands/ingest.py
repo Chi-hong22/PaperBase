@@ -113,7 +113,7 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
             acquired_at=paper_metadata.provenance.ingested_at
         )
         manifest.canonical_md = CanonicalMD(
-            path="./paper.md",
+            path=f"../{storage_id}.md",
             sha256=canonical_sha256,
             schema_version="1.0"
         )

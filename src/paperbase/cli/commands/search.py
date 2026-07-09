@@ -29,8 +29,8 @@ def search(ctx, query: str, limit: int):
 
     # 检查索引是否存在
     if not index_path.exists():
-        console.print("[yellow]搜索索引不存在，需要构建索引[/yellow]")
-        console.print("提示: 索引功能即将推出，当前可使用 'paperbase status' 查看所有论文")
+        console.print("[yellow]搜索索引不存在，需要先构建索引[/yellow]")
+        console.print("提示: 使用 'paperbase index' 命令构建索引")
         return
 
     # 检查 registry 是否存在

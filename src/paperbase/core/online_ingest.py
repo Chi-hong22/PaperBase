@@ -141,7 +141,7 @@ def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestR
     manifest = create_manifest(paper_id, storage_id)
     manifest.state = PaperState.NORMALIZED
     manifest.canonical_md = CanonicalMD(
-        path="./paper.md",
+        path=f"../{storage_id}.md",
         sha256=sha256_string(canonical_md),
         schema_version="1.0",
     )
