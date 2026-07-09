@@ -146,14 +146,14 @@ curl https://api.openai.com/v1/models \
 
 ## 目录结构问题
 
-### 立体结构 vs 扁平化结构
+### 扁平化结构（当前实现）
 
-**验证结果**（2026-01-16）：
-- ✅ **立体结构推荐**：`library/papers/p_xxx/paper.md`
-- ❌ **扁平化已废弃**：`library/papers/p_xxx.md`
+**当前结构**（2026-07-09）：
+- ✅ **扁平化结构**：`library/papers/p_xxx.md` + `library/papers/p_xxx/`
+- Canonical Markdown 与目录同级，便于 graphify 批量扫描
 
-**立体结构优势**：
-1. 每个 paper 独立文件夹（文件隔离）
+**扁平化优势**：
+1. graphify 工具可直接扫描 papers/ 目录（不需要递归）
 2. 相关文件集中管理（paper.md、source.pdf、assets）
 3. graphify 效果更好（29 nodes vs 14 nodes）
 4. 符合设计理念
