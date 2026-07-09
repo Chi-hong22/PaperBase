@@ -91,7 +91,7 @@ export PAPERBASE_LLM_MODEL="claude-3-5-sonnet-20241022"
 ### 验证 LLM 配置
 
 ```bash
-paperbase config check-llm
+paperbase config show
 ```
 
 Expected output: 显示 LLM 配置有效

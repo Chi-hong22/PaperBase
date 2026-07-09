@@ -172,7 +172,7 @@ paperbase query topic "underwater navigation"
 
 ```bash
 paperbase config show                   # 显示配置
-paperbase config check-llm              # 验证 LLM 配置
+paperbase config show              # 验证 LLM 配置
 paperbase config path                   # 配置文件路径
 ```
 
@@ -182,7 +182,7 @@ paperbase config path                   # 配置文件路径
 paperbase config show
 
 # 验证 LLM 配置
-paperbase config check-llm
+paperbase config show
 
 # 查看配置文件位置
 paperbase config path
@@ -288,7 +288,7 @@ paperbase status
 paperbase doctor
 
 # 检查 LLM 配置
-paperbase config check-llm
+paperbase config show
 
 # 查看特定论文状态
 paperbase status "doi:10.1234/abc"

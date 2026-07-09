@@ -176,7 +176,7 @@ Agent:
 ```bash
 paperbase doctor             # 环境诊断
 paperbase config show        # 显示配置
-paperbase config check-llm   # 验证 LLM
+paperbase config show   # 验证 LLM
 paperbase remove <paper_id>  # 删除论文
 ```
 
