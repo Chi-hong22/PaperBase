@@ -69,7 +69,7 @@ def run_graphify(
     # 确保 graph 目录存在
     graph_dir.mkdir(parents=True, exist_ok=True)
 
-    # graphify 需要扫描 library/papers 目录（包含所有 p_xxx.md）
+    # graphify 不能递归扫描 library/papers/，需要扫描所有论文子目录
     papers_dir = library_dir / "papers"
     if not papers_dir.exists():
         return {
@@ -78,11 +78,22 @@ def run_graphify(
             "error": f"Papers 目录不存在: {papers_dir}"
         }
 
-    # 构建 graphify 命令（扫描 papers 而不是 papers-flat）
+    # 收集所有论文目录（p_xxx 格式）
+    paper_dirs = [d for d in papers_dir.iterdir() if d.is_dir() and d.name.startswith("p_")]
+
+    if not paper_dirs:
+        return {
+            "success": False,
+            "output": "",
+            "error": "未找到任何论文目录（p_xxx 格式）"
+        }
+
+    # 构建 graphify 命令：扫描所有论文目录
+    # 格式：graphify extract <path1> <path2> ... --backend <name> --model <name>
     cmd = [
         "graphify",
-        str(papers_dir),  # 直接扫描 papers 目录
-        "--output", str(graph_dir),
+        "extract",  # 使用 extract 子命令
+    ] + [str(d) for d in paper_dirs] + [  # 所有论文目录
         "--backend", "openai",  # 明确指定 backend
     ]
 
@@ -111,14 +122,26 @@ def run_graphify(
 
     try:
         # 运行 graphify，传入修改后的环境变量
+        # graphify 会在第一个扫描目录的父目录下创建 graphify-out/
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=300,  # 5 分钟超时
-            cwd=library_dir.parent,  # 在 base_dir 运行
+            cwd=str(papers_dir),  # 在 papers 目录运行
             env=env  # 传递环境变量
         )
+
+        # 如果成功，将 graphify-out/ 移动到目标 graph/ 目录
+        if result.returncode == 0:
+            graphify_out = papers_dir / "graphify-out"
+            if graphify_out.exists():
+                # 将内容复制到 graph/ 目录
+                if graph_dir.exists():
+                    shutil.rmtree(graph_dir)
+                shutil.copytree(graphify_out, graph_dir)
+                # 清理 graphify-out
+                shutil.rmtree(graphify_out)
 
         return {
             "success": result.returncode == 0,
