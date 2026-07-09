@@ -71,29 +71,69 @@ def related(ctx, paper_id: str, depth: int):
 
     storage_id = paper_info["storage_id"]
 
-    # 执行查询（使用 storage_id）
+    # 图谱中的节点可能有后缀（如 _paper），需要找到匹配的节点 ID
+    # 先尝试精确匹配，如果不存在则尝试带后缀的变体
+    import json
+    graph_file = graph_dir / "graph.json"
+    with open(graph_file, "r", encoding="utf-8") as f:
+        graph_data = json.load(f)
+
+    # 查找匹配的节点 ID（可能是 storage_id 或 storage_id_paper 等）
+    all_node_ids = [n.get("id") for n in graph_data.get("nodes", []) if n.get("id")]
+    graph_node_id = None
+
+    # 尝试精确匹配
+    if storage_id in all_node_ids:
+        graph_node_id = storage_id
+    else:
+        # 尝试找到以 storage_id 开头的节点
+        matches = [nid for nid in all_node_ids if nid.startswith(storage_id + "_")]
+        if matches:
+            # 优先选择 _paper 后缀
+            paper_suffix = [m for m in matches if m.endswith("_paper")]
+            graph_node_id = paper_suffix[0] if paper_suffix else matches[0]
+
+    if not graph_node_id:
+        console.print(f"[yellow]论文 {paper_id} 不在知识图谱中[/yellow]")
+        console.print("提示: 运行 'paperbase graph update' 更新图谱")
+        registry.close()
+        return
+
+    # 执行查询（使用图谱节点 ID）
     try:
-        related_storage_ids = find_related_papers(graph_dir, storage_id, depth)
+        related_node_ids = find_related_papers(graph_dir, graph_node_id, depth)
     except FileNotFoundError as e:
         console.print(f"[red]错误: {e}[/red]")
         registry.close()
         return
 
-    if not related_storage_ids:
+    if not related_node_ids:
         console.print(f"[yellow]未找到与 {paper_id} 相关的论文[/yellow]")
         registry.close()
         return
 
-    # 将 storage_id 转换回 paper_id 并获取元数据
+    # 将图谱节点 ID 转换回 storage_id，再转换为 paper_id
     table = Table(title=f"相关论文: {paper_id} (depth={depth})")
     table.add_column("Paper ID", style="magenta", width=25)
     table.add_column("Title", style="white", width=60)
     table.add_column("Authors", style="cyan", width=30)
     table.add_column("Year", style="green", width=6)
 
-    for sid in related_storage_ids:
+    papers = registry.list_papers()
+    seen_storage_ids = set()  # 去重
+
+    for node_id in related_node_ids:
+        # 提取 storage_id（去除后缀）
+        import re
+        storage_id_match = re.match(r'^(p_[0-9a-f]{12})', node_id)
+        sid = storage_id_match.group(1) if storage_id_match else node_id
+
+        # 去重
+        if sid in seen_storage_ids:
+            continue
+        seen_storage_ids.add(sid)
+
         # 通过 storage_id 查找 paper
-        papers = registry.list_papers()
         paper = next((p for p in papers if p["storage_id"] == sid), None)
 
         if paper:
@@ -114,11 +154,24 @@ def related(ctx, paper_id: str, depth: int):
 
             table.add_row(pid, title, authors, year)
         else:
-            # storage_id 不在 registry 中
-            table.add_row(sid, "[dim]N/A[/dim]", "[dim]N/A[/dim]", "[dim]N/A[/dim]")
+            # storage_id 不在 registry 中（引用文献）
+            # 从图谱中提取标题
+            node = next((n for n in graph_data.get("nodes", []) if n.get("id") == node_id), None)
+            ref_title = node.get("label", "N/A") if node else "N/A"
+
+            # 截断
+            if len(node_id) > 25:
+                display_id = node_id[:22] + "..."
+            else:
+                display_id = node_id
+
+            if len(ref_title) > 50:
+                ref_title = ref_title[:47] + "..."
+
+            table.add_row(f"[dim]{display_id}[/dim]", f"[dim]{ref_title}[/dim]", "[dim]引用文献[/dim]", "[dim]N/A[/dim]")
 
     console.print(table)
-    console.print(f"\n[dim]找到 {len(related_storage_ids)} 个相关论文[/dim]")
+    console.print(f"\n[dim]找到 {len(related_node_ids)} 个相关论文[/dim]")
 
     registry.close()
 
