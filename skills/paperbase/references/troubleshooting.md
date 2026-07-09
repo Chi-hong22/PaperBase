@@ -97,7 +97,7 @@ llm:
 
 4. Verify:
 ```bash
-paperbase config check-llm
+paperbase config show
 ```
 
 ---
