@@ -9,8 +9,10 @@ from paperbase.core.registry import PaperRegistry
 
 @click.command()
 @click.argument("paper_id", required=False)
+@click.option("--year", type=int, help="按年份过滤")
+@click.option("--state", type=str, help="按状态过滤（raw/normalized/ready）")
 @click.pass_context
-def status(ctx, paper_id: str | None):
+def status(ctx, paper_id: str | None, year: int | None, state: str | None):
     """查询论文状态"""
     console = Console()
     base_dir = ctx.obj["base_dir"]
@@ -38,6 +40,16 @@ def status(ctx, paper_id: str | None):
         papers = registry.list_papers()
         if not papers:
             console.print("[yellow]知识库为空[/yellow]")
+            return
+
+        # 应用过滤条件
+        if year is not None:
+            papers = [p for p in papers if p.get("year") == year]
+        if state is not None:
+            papers = [p for p in papers if p.get("state") == state]
+
+        if not papers:
+            console.print("[yellow]未找到符合条件的论文[/yellow]")
             return
 
         table = Table(title="PaperBase 论文列表")

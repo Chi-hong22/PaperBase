@@ -11,9 +11,10 @@ from paperbase.core.manifest import load_manifest
 
 @click.command()
 @click.argument("paper_id", type=str)
-@click.option("--confirm", is_flag=True, help="跳过交互式确认（危险）")
+@click.option("--yes", "-y", is_flag=True, help="跳过交互式确认（危险）")
+@click.option("--force", "-f", is_flag=True, help="跳过交互式确认（同 --yes）")
 @click.pass_context
-def remove(ctx, paper_id: str, confirm: bool):
+def remove(ctx, paper_id: str, yes: bool, force: bool):
     """硬删除论文（包括所有文件和索引）
 
     警告：此操作不可逆！
@@ -63,7 +64,8 @@ def remove(ctx, paper_id: str, confirm: bool):
     console.print(f"  占用空间: {size_mb:.2f} MB")
 
     # Step 3: 交互式确认
-    if not confirm:
+    skip_confirm = yes or force
+    if not skip_confirm:
         console.print("\n[red bold]警告：此操作将永久删除所有文件，无法恢复！[/red bold]")
         user_input = click.prompt(
             "请输入论文 Paper ID 以确认删除",
