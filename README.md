@@ -507,6 +507,9 @@ uv run paperbase status --state ready
 # 全文搜索（-n 是 --limit 的简写）
 uv run paperbase search "transformer architecture" --limit 20
 
+# 在指定论文中搜索（NEW）
+uv run paperbase search "threshold" --paper-id "doi:10.1109/tro.2008.2004520"
+
 # 知识图谱查询（需要先运行 graph update）
 uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
 uv run paperbase query similar "arxiv:1706.03762" --limit 5

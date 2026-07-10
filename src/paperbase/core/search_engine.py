@@ -90,13 +90,14 @@ class SearchEngine:
                     )
                 )
 
-    def search(self, query: str, limit: int = 10) -> List[Dict[str, any]]:
+    def search(self, query: str, limit: int = 10, paper_id_filter: str = None) -> List[Dict[str, any]]:
         """
         执行全文搜索
 
         Args:
             query: 搜索查询（支持 FTS5 查询语法：AND/OR/NOT）
             limit: 返回结果数量限制
+            paper_id_filter: 可选，只在指定 paper_id 的论文中搜索
 
         Returns:
             List[Dict]: 搜索结果列表，每个结果包含：
@@ -111,22 +112,27 @@ class SearchEngine:
         fts_query = self._convert_query(query)
 
         try:
-            # 执行 FTS5 搜索
-            # 使用 bm25() 计算相关性分数
-            # 使用 snippet() 提取匹配片段
-            cursor = self.conn.execute(
-                """
+            # 构建 SQL 查询
+            sql = """
                 SELECT
                     paper_id,
                     bm25(chunks_fts) as score,
                     snippet(chunks_fts, 2, '<b>', '</b>', '...', 64) as snippet
                 FROM chunks_fts
                 WHERE chunks_fts MATCH ?
-                ORDER BY score
-                LIMIT ?
-                """,
-                (fts_query, limit)
-            )
+            """
+
+            params = [fts_query]
+
+            # 如果指定了 paper_id，添加过滤条件
+            if paper_id_filter:
+                sql += " AND paper_id = ?"
+                params.append(paper_id_filter)
+
+            sql += " ORDER BY score LIMIT ?"
+            params.append(limit)
+
+            cursor = self.conn.execute(sql, params)
 
             results = []
             for row in cursor.fetchall():
