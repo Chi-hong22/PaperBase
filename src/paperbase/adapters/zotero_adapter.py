@@ -23,6 +23,7 @@ class ZoteroItem:
     authors: list[str]
     year: int
     doi: str | None
+    arxiv_id: str | None
     abstract: str
     item_type: str
     url: str | None
@@ -153,6 +154,7 @@ class ZoteroAdapter:
 
         # Extract optional fields
         doi = fields.get("doi") or None
+        arxiv_id = fields.get("arxiv id") or fields.get("arxiv") or None
         abstract = fields.get("abstract", "") or ""
         url = fields.get("url") or None
 
@@ -165,6 +167,7 @@ class ZoteroAdapter:
             authors=authors,
             year=year,
             doi=doi,
+            arxiv_id=arxiv_id,
             abstract=abstract,
             item_type=item_type,
             url=url,
