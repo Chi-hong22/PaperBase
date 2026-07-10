@@ -54,7 +54,7 @@ library/papers/*/chunks.jsonl
 library/papers/*/references.jsonl
 library/papers/*/manifest.json
 library/papers/*/assets/ # 图片等资源
-library/papers/graphify-out/
+library/papers/graphify-out/ # graphify 缓存
 
 registry/
 graph/
@@ -93,5 +93,3 @@ scripts/verify_*.py
 # Technical debt tracking (internal only)
 TECHNICAL_DEBT.md
 
-# graphify 缓存
-library/papers/graphify-out/

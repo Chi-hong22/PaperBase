@@ -77,8 +77,9 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         if metadata.get("doi"):
             paper_id = normalize_paper_id(metadata["doi"])
         else:
-            # Fallback: 使用文件名
-            paper_id = f"fallback:{pdf_path.stem}"
+            # Fallback: 使用 PDF 内容哈希（支持任意文件名）
+            pdf_hash = sha256_file(pdf_path)
+            paper_id = f"fallback:{pdf_hash[:16]}"
             paper_id = normalize_paper_id(paper_id)
 
         storage_id = generate_storage_id(paper_id)

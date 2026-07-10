@@ -81,15 +81,15 @@ adapters:
     #   include_refs: "all"
     #   max_tokens: "full_text"
 
-  # Zotero Adapter
+  # Zotero Adapter  # 预留接口
   zotero:
     enabled: true
     local_mode: true  # 本地模式
 
-  # ScanSci Adapter
+  # ScanSci Adapter  # 预留接口
   scansci:
-    enabled: false
-    scihub_enabled: false
+    enabled: true
+    scihub_enabled: true 
     require_authorized_access: true
 
 # 术语库配置
