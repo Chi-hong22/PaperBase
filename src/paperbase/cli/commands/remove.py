@@ -11,13 +11,14 @@ from paperbase.core.manifest import load_manifest
 
 @click.command()
 @click.argument("paper_id", type=str)
-@click.option("--yes", "-y", is_flag=True, help="跳过交互式确认（危险）")
-@click.option("--force", "-f", is_flag=True, help="跳过交互式确认（同 --yes）")
+@click.option("--yes", "-y", is_flag=True, help="（已废弃）保留用于向后兼容")
+@click.option("--force", "-f", is_flag=True, help="（已废弃）保留用于向后兼容")
+@click.option("--interactive", "-i", is_flag=True, help="启用交互式确认")
 @click.pass_context
-def remove(ctx, paper_id: str, yes: bool, force: bool):
+def remove(ctx, paper_id: str, yes: bool, force: bool, interactive: bool):
     """硬删除论文（包括所有文件和索引）
 
-    警告：此操作不可逆！
+    警告：此操作不可逆！默认直接删除，使用 --interactive 启用确认。
     """
     console = Console()
     base_dir = ctx.obj["base_dir"]
@@ -63,9 +64,8 @@ def remove(ctx, paper_id: str, yes: bool, force: bool):
     size_mb = total_size / (1024 * 1024)
     console.print(f"  占用空间: {size_mb:.2f} MB")
 
-    # Step 3: 交互式确认
-    skip_confirm = yes or force
-    if not skip_confirm:
+    # Step 3: 交互式确认（仅在显式启用时）
+    if interactive:
         console.print("\n[red bold]警告：此操作将永久删除所有文件，无法恢复！[/red bold]")
         user_input = click.prompt(
             "请输入论文 Paper ID 以确认删除",
@@ -76,6 +76,8 @@ def remove(ctx, paper_id: str, yes: bool, force: bool):
             console.print("[yellow]❌ 确认失败，删除已取消[/yellow]")
             registry.close()
             raise click.Abort()
+    else:
+        console.print("\n[red bold]警告：此操作将永久删除所有文件，无法恢复！[/red bold]")
 
     # Step 4: 执行删除
     console.print("\n[yellow]开始删除...[/yellow]")

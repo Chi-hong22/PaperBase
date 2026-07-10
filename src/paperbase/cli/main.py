@@ -13,6 +13,7 @@ from paperbase.cli.commands.query import query
 from paperbase.cli.commands.doctor import doctor
 from paperbase.cli.commands.remove import remove
 from paperbase.cli.commands.config import config
+from paperbase.cli.commands.sync import sync
 
 # 加载 .env 文件（如果存在）
 load_dotenv()
@@ -50,6 +51,7 @@ main.add_command(query)
 main.add_command(doctor)
 main.add_command(remove)
 main.add_command(config)
+main.add_command(sync)
 
 
 if __name__ == "__main__":

@@ -85,6 +85,35 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         console.print(f"   paper_id: {paper_id}")
         console.print(f"   storage_id: {storage_id}")
 
+        # 查重检查
+        registry_path = base_dir / "registry" / "papers.db"
+        if registry_path.exists():
+            registry = PaperRegistry(registry_path)
+
+            # 检查 DOI 重复
+            if metadata.get("doi"):
+                existing = registry.find_by_doi(metadata["doi"])
+                if existing:
+                    registry.close()
+                    console.print(f"[yellow]⚠️  论文已存在（DOI 重复）[/yellow]")
+                    console.print(f"   Paper ID: {existing['paper_id']}")
+                    console.print(f"   标题: {existing.get('title', 'N/A')}")
+                    console.print("[dim]提示：使用不同的 DOI 或删除已存在的论文[/dim]")
+                    raise click.Abort()
+
+            # 检查标题重复（Fallback）
+            if metadata.get("title"):
+                existing = registry.find_by_title(metadata["title"])
+                if existing:
+                    registry.close()
+                    console.print(f"[yellow]⚠️  论文可能已存在（标题相同）[/yellow]")
+                    console.print(f"   Paper ID: {existing['paper_id']}")
+                    console.print(f"   标题: {existing.get('title', 'N/A')}")
+                    console.print("[dim]提示：如果确实是不同论文，请确保标题不同[/dim]")
+                    raise click.Abort()
+
+            registry.close()
+
         # Step 3: 创建目录结构
         console.print("[yellow]3. 创建存储目录...[/yellow]")
         paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)

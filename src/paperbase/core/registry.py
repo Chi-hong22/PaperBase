@@ -53,6 +53,9 @@ class PaperRegistry:
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_papers_year ON papers(year)
         """)
+        self.conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_papers_doi ON papers(doi)
+        """)
         self.conn.commit()
 
     def register_paper(
@@ -143,6 +146,40 @@ class PaperRegistry:
             (paper_id,)
         )
         self.conn.commit()
+
+    def find_by_doi(self, doi: str) -> dict | None:
+        """通过 DOI 查找论文"""
+        cursor = self.conn.execute(
+            "SELECT * FROM papers WHERE doi = ?",
+            (doi,)
+        )
+        row = cursor.fetchone()
+        if row:
+            result = dict(row)
+            if result["authors"]:
+                try:
+                    result["authors"] = json.loads(result["authors"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return result
+        return None
+
+    def find_by_title(self, title: str) -> dict | None:
+        """通过标题精确匹配查找论文"""
+        cursor = self.conn.execute(
+            "SELECT * FROM papers WHERE title = ?",
+            (title,)
+        )
+        row = cursor.fetchone()
+        if row:
+            result = dict(row)
+            if result["authors"]:
+                try:
+                    result["authors"] = json.loads(result["authors"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return result
+        return None
 
     def close(self):
         """关闭连接"""

@@ -25,6 +25,10 @@ state_machine:
 # 仅用于传递给 graphify 工具的环境变量配置
 # PaperBase 核心功能（摄入、转换、检索）不依赖 LLM
 # 如果不使用 graphify，可以跳过此配置
+#
+# 注意：以下字段已废弃，不再使用：
+#   - llm.enabled: PaperBase 不再内置 LLM 调用逻辑
+#   - llm.provider: 统一使用 OpenAI-compatible API 格式
 llm:
   # OpenAI-compatible API 端点
   # graphify 会通过 OPENAI_BASE_URL 环境变量读取
