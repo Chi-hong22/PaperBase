@@ -457,10 +457,11 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
 
         # Step 4: 根据是否有 PDF 分流处理
         if item.has_pdf:
-            console.print("[yellow]4. 检测到 PDF 附件（当前版本仅支持元数据导入）...[/yellow]")
-            console.print("[dim]提示：完整 PDF 导入功能将在后续版本支持[/dim]")
+            console.print("[yellow]4. 检测到 PDF 附件...[/yellow]")
+            console.print("[dim]注意：Zotero 集成仅导入元数据，不包含 PDF 全文[/dim]")
+            console.print("[dim]如需全文检索，请使用: paperbase ingest --file <path-to-pdf>[/dim]")
 
-        console.print("[yellow]4. 摄入元数据...[/yellow]")
+        console.print("[yellow]5. 摄入元数据...[/yellow]")
         # 构造元数据字典
         metadata_dict = {
             "title": item.title,
