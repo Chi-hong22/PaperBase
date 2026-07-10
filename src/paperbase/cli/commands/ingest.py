@@ -399,6 +399,18 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
     console = Console()
     base_dir = ctx.obj["base_dir"]
 
+    # 解析 item_key（支持 URI 格式）
+    # 格式: zotero://select/library/items/4KJIR58A → 4KJIR58A
+    if item_key.startswith("zotero://"):
+        if "/items/" in item_key:
+            actual_key = item_key.split("/items/")[-1].strip()
+            console.print(f"[dim]检测到 Zotero URI，提取 key: {actual_key}[/dim]")
+            item_key = actual_key
+        else:
+            console.print(f"[red]❌ 无效的 Zotero URI 格式: {item_key}[/red]")
+            console.print("[yellow]正确格式示例: zotero://select/library/items/ABCD1234[/yellow]")
+            raise click.Abort()
+
     console.print(f"[cyan]从 Zotero 导入论文:[/cyan] {item_key}")
 
     # 初始化 ZoteroAdapter

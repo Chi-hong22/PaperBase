@@ -1,0 +1,210 @@
+diff --git a/src/paperbase/cli/commands/ingest.py b/src/paperbase/cli/commands/ingest.py
+index dbedf36..62083ee 100644
+--- a/src/paperbase/cli/commands/ingest.py
++++ b/src/paperbase/cli/commands/ingest.py
+@@ -385,20 +385,23 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
+         raise
+ 
+ 
+ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
+     """从 Zotero 导入单篇论文
+ 
+     Args:
+         ctx: Click 上下文
+         item_key: Zotero item key
+         no_graph: 是否跳过图谱更新
++
++    Returns:
++        str: "success" 表示成功导入，"skipped" 表示已存在跳过
+     """
+     console = Console()
+     base_dir = ctx.obj["base_dir"]
+ 
+     console.print(f"[cyan]从 Zotero 导入论文:[/cyan] {item_key}")
+ 
+     # 初始化 ZoteroAdapter
+     adapter = _create_zotero_adapter(ctx)
+ 
+     try:
+@@ -433,32 +436,32 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
+ 
+             # 检查 DOI 重复
+             if item.doi:
+                 existing = registry.find_by_doi(item.doi)
+                 if existing:
+                     registry.close()
+                     console.print(f"[yellow]⚠️  论文已存在（DOI 重复）[/yellow]")
+                     console.print(f"   Paper ID: {existing['paper_id']}")
+                     console.print(f"   标题: {existing.get('title', 'N/A')}")
+                     console.print("[dim]跳过此论文[/dim]")
+-                    return
++                    return "skipped"
+ 
+             # 检查标题重复
+             if item.title:
+                 existing = registry.find_by_title(item.title)
+                 if existing:
+                     registry.close()
+                     console.print(f"[yellow]⚠️  论文可能已存在（标题相同）[/yellow]")
+                     console.print(f"   Paper ID: {existing['paper_id']}")
+                     console.print(f"   标题: {existing.get('title', 'N/A')}")
+                     console.print("[dim]跳过此论文[/dim]")
+-                    return
++                    return "skipped"
+ 
+             registry.close()
+ 
+         # Step 4: 根据是否有 PDF 分流处理
+         if item.has_pdf:
+             console.print("[yellow]4. 检测到 PDF 附件...[/yellow]")
+             console.print("[dim]注意：Zotero 集成仅导入元数据，不包含 PDF 全文[/dim]")
+             console.print("[dim]如需全文检索，请使用: paperbase ingest --file <path-to-pdf>[/dim]")
+ 
+         console.print("[yellow]5. 摄入元数据...[/yellow]")
+@@ -481,47 +484,140 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
+             source_provider="zotero",
+             no_graph=no_graph
+         )
+ 
+         console.print(f"\n[green]✓ 论文元数据已保存到知识库[/green]")
+         console.print(f"   路径: {paths.paper_dir}")
+         if item.has_pdf:
+             console.print("[dim]注意：PDF 附件未导入，如需全文请使用 PDF 直接导入[/dim]")
+ 
+         console.print(f"\n[green]✓ 摄入完成[/green]")
++        return "success"
+ 
+     except Exception as e:
+         console.print(f"\n[red]❌ 摄入失败: {e}[/red]")
+         raise
+ 
+ 
++def _ingest_zotero_recent(ctx, limit: int, no_graph: bool):
++    """从 Zotero 批量导入最近论文
++
++    Args:
++        ctx: Click 上下文
++        limit: 导入数量
++        no_graph: 是否跳过图谱更新
++    """
++    console = Console()
++    base_dir = ctx.obj["base_dir"]
++
++    console.print(f"[cyan]从 Zotero 批量导入最近 {limit} 篇论文[/cyan]\n")
++
++    # 初始化 ZoteroAdapter
++    adapter = _create_zotero_adapter(ctx)
++
++    try:
++        # 获取最近论文列表
++        console.print("[yellow]获取 Zotero 论文列表...[/yellow]")
++        items = adapter.list_recent(limit)
++        console.print(f"[cyan]找到 {len(items)} 篇论文[/cyan]\n")
++
++        if not items:
++            console.print("[yellow]没有找到论文[/yellow]")
++            return
++
++        # 逐个导入（每篇传入 no_graph=True）
++        success_count = 0
++        skip_count = 0
++        failed_count = 0
++
++        for i, item in enumerate(items, 1):
++            # 显示标题（截断过长）
++            display_title = item.title[:60] + "..." if len(item.title) > 60 else item.title
++            console.print(f"[cyan][{i}/{len(items)}] {display_title}[/cyan]")
++
++            try:
++                # 调用单篇导入函数（强制 no_graph=True）
++                result = _ingest_from_zotero(ctx, item.item_key, no_graph=True)
++                if result == "success":
++                    success_count += 1
++                elif result == "skipped":
++                    skip_count += 1
++            except Exception as e:
++                # 单篇失败不影响其他论文
++                console.print(f"[red]✗ 失败: {e}[/red]")
++                failed_count += 1
++
++            console.print()  # 空行分隔
++
++        # 最终统计
++        console.print(f"[cyan]批量导入完成[/cyan]")
++        console.print(f"  成功: {success_count} 篇")
++        console.print(f"  跳过: {skip_count} 篇（已存在）")
++        console.print(f"  失败: {failed_count} 篇")
++
++        # 统一更新索引（仅当有成功导入且未禁用时）
++        if not no_graph and success_count > 0:
++            console.print("\n[yellow]更新全文检索索引...[/yellow]")
++            try:
++                from paperbase.core.search_engine import SearchEngine
++                index_path = base_dir / "index" / "fts.db"
++                library_path = base_dir / "library" / "papers"
++                with SearchEngine(index_path, library_path) as engine:
++                    engine.build_index()
++                console.print("[green]✓ 全文检索索引更新完成[/green]")
++            except Exception as e:
++                console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
++                console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
++
++            console.print("\n[yellow]更新知识图谱...[/yellow]")
++            try:
++                from paperbase.cli.commands.graph import update as graph_update
++                ctx.invoke(graph_update, force=False)
++            except Exception as e:
++                console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
++                console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
++        elif no_graph:
++            console.print("\n[dim]跳过索引更新（--no-graph）[/dim]")
++            console.print("   稍后可运行: [cyan]paperbase index[/cyan] 和 [cyan]paperbase graph update[/cyan]")
++
++    except Exception as e:
++        console.print(f"[red]✗ 批量导入失败: {e}[/red]")
++        raise
++
++
+ @click.command()
+ @click.argument("target", required=False)
+ @click.option("--file", "file_path", type=click.Path(exists=True, path_type=Path), help="本地 PDF 文件路径")
+ @click.option("--no-graph", is_flag=True, help="跳过图谱更新")
+ @click.option("--batch", type=click.Path(exists=True, path_type=Path), help="批量摄入文件列表（每行一个路径、DOI、URL 或标题）")
+ @click.option("--zotero-key", type=str, help="从 Zotero 导入指定 item key 的论文")
++@click.option("--zotero-recent", type=int, metavar="N", help="从 Zotero 批量导入最近 N 篇论文")
+ @click.pass_context
+-def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, batch: Path | None, zotero_key: str | None):
++def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, batch: Path | None, zotero_key: str | None, zotero_recent: int | None):
+     """摄入论文：本地 PDF 或 DOI/URL/title"""
+     console = Console()
+ 
+     # 互斥检查
+-    if sum([bool(target), bool(file_path), bool(batch), bool(zotero_key)]) > 1:
+-        console.print("[red]❌ 只能指定一个输入源：TARGET、--file、--batch 或 --zotero-key[/red]")
++    if sum([bool(target), bool(file_path), bool(batch), bool(zotero_key), bool(zotero_recent)]) > 1:
++        console.print("[red]❌ 只能指定一个输入源：TARGET、--file、--batch、--zotero-key 或 --zotero-recent[/red]")
+         raise click.Abort()
+ 
+-    if not target and not file_path and not batch and not zotero_key:
+-        console.print("[red]❌ 必须提供输入源：TARGET、--file、--batch 或 --zotero-key[/red]")
++    if not target and not file_path and not batch and not zotero_key and not zotero_recent:
++        console.print("[red]❌ 必须提供输入源：TARGET、--file、--batch、--zotero-key 或 --zotero-recent[/red]")
+         raise click.Abort()
+ 
+-    # Zotero 模式
++    # Zotero 批量模式
++    if zotero_recent:
++        _ingest_zotero_recent(ctx, zotero_recent, no_graph)
++        return
++
++    # Zotero 单篇模式
+     if zotero_key:
+         _ingest_from_zotero(ctx, zotero_key, no_graph)
+         return
+ 
+     # 批量模式
+     if batch:
+         _ingest_batch(ctx, batch, no_graph)
+         return
+ 
+     # 本地文件模式
