@@ -33,6 +33,7 @@ def test_ingest_from_zotero_doi_duplicate(mock_registry_class, mock_create_adapt
         year=2024,
         item_type="journalArticle",
         doi="10.1234/duplicate",
+        arxiv_id=None,
         abstract="Test abstract",
         has_pdf=False,
         url="https://example.com/paper",
