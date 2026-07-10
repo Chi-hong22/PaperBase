@@ -77,7 +77,7 @@ INGEST_VERIFICATION.md
 *_PROGRESS*.md
 *_PLANNING*.md
 docs/archive/            # 开发归档文档
-docs/superpowers/        # Superpowers 工作流文档
+docs/superpowers/     # Superpowers 工作流文档
 docs/MIGRATION-GUIDE.md  # 内部迁移指南
 docs/ROADMAP.md          # 内部路线图
 
@@ -92,4 +92,3 @@ scripts/verify_*.py
 .claude
 # Technical debt tracking (internal only)
 TECHNICAL_DEBT.md
-

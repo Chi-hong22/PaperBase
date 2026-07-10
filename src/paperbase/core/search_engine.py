@@ -90,7 +90,14 @@ class SearchEngine:
                     )
                 )
 
-    def search(self, query: str, limit: int = 10, paper_id_filter: str = None) -> List[Dict[str, any]]:
+    def search(
+        self,
+        query: str,
+        limit: int = 10,
+        paper_id_filter: str = None,
+        year_range: tuple = None,
+        author_filter: str = None
+    ) -> List[Dict[str, any]]:
         """
         执行全文搜索
 
@@ -98,6 +105,8 @@ class SearchEngine:
             query: 搜索查询（支持 FTS5 查询语法：AND/OR/NOT）
             limit: 返回结果数量限制
             paper_id_filter: 可选，只在指定 paper_id 的论文中搜索
+            year_range: 可选，年份范围过滤 (start_year, end_year)
+            author_filter: 可选，作者模糊匹配
 
         Returns:
             List[Dict]: 搜索结果列表，每个结果包含：
@@ -142,11 +151,85 @@ class SearchEngine:
                     "snippet": row["snippet"]
                 })
 
+            # 如果有元数据过滤，需要联合 Registry 过滤
+            if year_range or author_filter:
+                results = self._filter_by_metadata(results, year_range, author_filter)
+
             return results
 
         except sqlite3.OperationalError as e:
             # 查询语法错误，返回空结果
             return []
+
+    def _filter_by_metadata(
+        self,
+        results: List[Dict],
+        year_range: tuple = None,
+        author_filter: str = None
+    ) -> List[Dict]:
+        """
+        通过元数据过滤搜索结果
+
+        Args:
+            results: FTS 搜索结果
+            year_range: 年份范围 (start_year, end_year)
+            author_filter: 作者模糊匹配
+
+        Returns:
+            List[Dict]: 过滤后的结果
+        """
+        from paperbase.core.registry import PaperRegistry
+
+        # 获取 Registry 路径（index/ 和 registry/ 在同一父目录）
+        registry_path = self.index_path.parent.parent / "registry" / "papers.db"
+
+        if not registry_path.exists():
+            return results
+
+        registry = PaperRegistry(registry_path)
+        filtered = []
+
+        for result in results:
+            paper_id = result["paper_id"]
+            paper = registry.get_paper(paper_id)
+
+            if not paper:
+                continue
+
+            # 年份过滤
+            if year_range:
+                start_year, end_year = year_range
+                paper_year = paper.get("year")
+                if not paper_year or not (start_year <= paper_year <= end_year):
+                    continue
+
+            # 作者过滤（模糊匹配）
+            if author_filter:
+                authors = paper.get("authors", [])
+                # authors 可能是 JSON 字符串或列表
+                if isinstance(authors, str):
+                    import json
+                    try:
+                        authors = json.loads(authors)
+                    except json.JSONDecodeError:
+                        authors = []
+
+                # 模糊匹配：author_filter 在任何作者名中出现
+                author_filter_lower = author_filter.lower()
+                matched = False
+                for author in authors:
+                    author_name = author if isinstance(author, str) else author.get("name", "")
+                    if author_filter_lower in author_name.lower():
+                        matched = True
+                        break
+
+                if not matched:
+                    continue
+
+            filtered.append(result)
+
+        registry.close()
+        return filtered
 
     def _convert_query(self, query: str) -> str:
         """
