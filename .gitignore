@@ -45,11 +45,10 @@ htmlcov/
 .tox/
 
 # PaperBase specific
-library/sources/
-library/papers/*/        # 只排除子目录，不排除 .md 文件
-!library/papers/*.md     # 明确包含 .md 文件
+library/                 # 完全不上传 library/（私人论文库）
 registry/
 graph/
+index/                   # 向量索引
 *.db
 *.sqlite
 *.sqlite3
@@ -60,16 +59,17 @@ Thumbs.db
 *.tmp
 *.log
 
-# Development process artifacts
+# Development process artifacts (不对外开放)
 PHASE*.md
 TASK*.md
 INGEST_VERIFICATION.md
 *_REPORT.md
 *_PROGRESS*.md
 *_PLANNING*.md
-知识库思路讨论.txt
-docs/superpowers/plans/
-.superpowers
+docs/archive/            # 开发归档文档
+docs/superpowers/        # Superpowers 工作流文档
+docs/MIGRATION-GUIDE.md  # 内部迁移指南
+docs/ROADMAP.md          # 内部路线图
 
 # Manual test scripts (可能包含真实论文标识)
 test_*_manual.py
