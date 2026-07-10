@@ -195,9 +195,9 @@ uv run paperbase remove "arxiv:1706.03762" --interactive
 ```
 paperbase/
 ├── library/                   # 知识库主体
-│   ├── sources/pdf/sha256/   # 内容寻址的 PDF 存储
-│   │   └── <hash>/           # 按 SHA256 哈希分片存储
-│   │       └── <hash>.pdf
+│   ├── sources/              # 去重的 PDF 缓存池
+│   │   └── pdf/              # PDF 文件按 SHA256 去重存储
+│   │       └── <sha256>.pdf  # 多篇论文可共享同一 PDF
 │   ├── papers/               # 规范化论文
 │   │   ├── p_<storage_id>.md # Canonical Markdown（真相源）
 │   │   └── p_<storage_id>/  # 单篇论文数据目录
@@ -221,6 +221,11 @@ paperbase/
 ├── skills/paperbase/        # 全局 AI Agent skill
 └── tests/                    # 测试套件
 ```
+
+**目录说明**：
+
+- **`library/sources/pdf/`**: 去重的 PDF 缓存池。同一个 PDF 文件（通过 SHA256 识别）只存储一次，多篇论文可通过 `manifest.json` 中的 `source_artifacts` 引用同一 PDF。删除论文时，会检查 PDF 是否被其他论文引用，孤立 PDF 才会被删除。
+- **`library/papers/<storage_id>/source/`**: 单篇论文的原始 PDF 文件（如果有）。与 `sources/` 目录不同，这是与论文绑定的独立副本。
 
 **重要**：只有 `library/papers/*/paper.md` 和 `manifest.json` 是真相源，其他均可重建。
 
@@ -265,11 +270,27 @@ uv run paperbase ingest "doi:10.1038/s41586-026-10265-5"
 uv run paperbase ingest "arxiv:2301.07041"
 ```
 
-本地 PDF 不需要此工具：
+**⚠️ 在线获取的局限性**
+
+由于付费墙限制，部分论文**无法获取全文**，只能获取元数据或摘要：
+
+- **开放获取论文**：可获取完整全文（arXiv、PubMed Central、Unpaywall）
+- **付费墙论文**：只能获取元数据（SAGE、Elsevier、IEEE 等出版商）
+
+**推荐做法：优先使用 PDF 本地导入**
 
 ```bash
+# 本地 PDF 导入（推荐，不需要 paper-fetch）
 uv run paperbase ingest --file paper.pdf
 ```
+
+**优势**：
+- ✅ 完整全文内容
+- ✅ 保留图表和公式
+- ✅ 知识图谱构建完整
+- ✅ 不受付费墙限制
+
+详见：[在线获取论文的局限性](docs/troubleshooting/online-fetch-limitations.md)
 
 #### 2. Graphify（知识图谱构建，必需）
 
