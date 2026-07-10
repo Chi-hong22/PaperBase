@@ -84,8 +84,20 @@ python --version; git --version; Get-PSDrive -Name (Get-Location).Drive.Name | S
 ### 环境要求
 
 - Python 3.11+
-- [uv](https://github.com/astral-sh/uv)（Python 包管理器）
+- [uv](https://github.com/astral-sh/uv)（Python 包管理器，推荐）或 pip
 - Git
+
+**安装 uv（推荐）：**
+
+```bash
+# Linux/macOS
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows PowerShell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+详见 [uv 官方安装文档](https://github.com/astral-sh/uv#installation)。
 
 ### 安装
 
@@ -97,13 +109,30 @@ cd PaperBase
 # 安装依赖
 uv sync
 
+# 配置环境变量（推荐）
+# 设置 PAPERBASE_LIBRARY 以便在任意目录调用
+# Linux/macOS:
+export PAPERBASE_LIBRARY="/path/to/PaperBase"
+# Windows PowerShell:
+$env:PAPERBASE_LIBRARY = "C:\path\to\PaperBase"
+# 详见: docs/installation.md
+
+# 验证环境变量（可选）
+# Linux/macOS:
+echo $PAPERBASE_LIBRARY
+# Windows PowerShell:
+echo $env:PAPERBASE_LIBRARY
+
 # 安装全局工具
-uv tool install graphify           # 知识图谱构建工具
+uv tool install graphify  # 知识图谱构建工具（必需）
+
+# 可选工具
+uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git  # 在线论文获取（可选）
 uv tool install zotero-mcp-server  # Zotero 集成（可选）
 
 # 验证安装
-graphify --version
 uv run paperbase --help
+graphify --version  # 应显示: graphify, version x.x.x
 ```
 
 ### 摄入第一篇论文
@@ -116,22 +145,17 @@ uv run paperbase ingest "arxiv:1706.03762"
 **预期输出：**
 
 ```
-[2024-07-07 15:30:01] Fetching paper metadata...
-[2024-07-07 15:30:03] Downloading PDF (2.1 MB)...
-[2024-07-07 15:30:08] Converting PDF to Markdown...
-[2024-07-07 15:30:15] Normalizing structure...
-[2024-07-07 15:30:16] ✓ Paper ingested successfully
+✓ 论文已成功添加到知识库
+论文标识: arxiv:1706.03762
 
-Paper ID:    arxiv:1706.03762
-Storage ID:  p_a7f3b2c1d4e5
-State:       NORMALIZED
-Title:       Attention Is All You Need
-Location:    library/papers/p_a7f3b2c1d4e5/paper.md
+更新全文检索索引...
+✓ 索引更新完成
 
-Next steps:
-  - View paper: cat library/papers/p_a7f3b2c1d4e5/paper.md
-  - Search: uv run paperbase search "attention mechanism"
-  - Build graph: uv run paperbase graph update
+更新知识图谱...
+✓ 知识图谱更新完成
+
+✓ 摄入完成
+   论文已成功添加到知识库
 ```
 
 **摄入时间说明：**
@@ -157,28 +181,42 @@ uv run paperbase search "attention mechanism"
 # 更新知识图谱
 uv run paperbase graph update
 
-# 删除论文（硬删除，需确认）
+# 删除论文（硬删除，默认直接删除）
 uv run paperbase remove "arxiv:1706.03762"
+
+# 删除论文（启用交互式确认）
+uv run paperbase remove "arxiv:1706.03762" --interactive
 ```
 
-论文存储为 `library/papers/<storage_id>/paper.md`，带有结构化 frontmatter。
+论文存储为 `library/papers/p_<storage_id>.md`，带有结构化 frontmatter。
 
 ## 📂 仓库结构
 
 ```
 paperbase/
 ├── library/                   # 知识库主体
-│   ├── sources/pdf/          # 内容寻址的 PDF 存储（SHA256）
+│   ├── sources/pdf/sha256/   # 内容寻址的 PDF 存储
+│   │   └── <hash>/           # 按 SHA256 哈希分片存储
+│   │       └── <hash>.pdf
 │   ├── papers/               # 规范化论文
-│   │   └── p_<storage_id>/  # 单篇论文
-│   │       ├── paper.md      # Canonical Markdown（真相源）
+│   │   ├── p_<storage_id>.md # Canonical Markdown（真相源）
+│   │   └── p_<storage_id>/  # 单篇论文数据目录
 │   │       ├── manifest.json # 状态和溯源信息
-│   │       ├── chunks.jsonl  # 检索分块（派生）
-│   │       └── references.jsonl # 结构化引用（派生）
-│   ├── collections/          # 用户论文集合
-│   └── notes/                # 用户笔记
+│   │       ├── chunks.jsonl  # 检索分块（可选派生）
+│   │       ├── references.jsonl # 结构化引用（可选派生）
+│   │       ├── assets/       # 论文资源（可选）
+│   │       │   └── figure-*.png # 图片等资源文件
+│   │       └── source/
+│   │           └── source.pdf # 原始 PDF 文件
+│   ├── collections/          # 用户论文集合（规划中）
+│   └── notes/                # 用户笔记（规划中）
 ├── registry/                 # SQLite 查询索引（派生）
+│   └── papers.db            # SQLite 数据库文件
 ├── graph/                    # Graphify 知识图谱（派生）
+├── index/                    # 向量索引和嵌入缓存（派生）
+├── config/                   # 配置文件
+│   └── paperbase.yaml       # 主配置文件
+├── scripts/                  # 辅助脚本
 ├── src/paperbase/           # Python 包
 ├── skills/paperbase/        # 全局 AI Agent skill
 └── tests/                    # 测试套件
@@ -223,7 +261,7 @@ paper-fetch --version  # 应显示: paper-fetch 3.0.1
 安装后，`paperbase ingest` 可接收在线标识符：
 
 ```bash
-uv run paperbase ingest "10.1038/s41586-026-10265-5"
+uv run paperbase ingest "doi:10.1038/s41586-026-10265-5"
 uv run paperbase ingest "arxiv:2301.07041"
 ```
 
@@ -250,8 +288,16 @@ uv tool install graphify
 安装后，可使用图谱功能：
 
 ```bash
+# 基本用法（使用默认配置）
 uv run paperbase graph update
+
+# 指定 LLM 后端和模型（覆盖配置文件）
+uv run paperbase graph update --backend openai --model gpt-4o-mini
 ```
+
+**参数说明：**
+- `--backend`: LLM 后端类型（openai/anthropic/ollama 等），默认使用 `config/paperbase.yaml` 中的配置
+- `--model`: 模型名称（如 gpt-4o-mini/claude-3-5-sonnet-20241022），覆盖配置文件设置
 
 技术集成文档：[docs/guides/graphify-integration-guide.md](docs/guides/graphify-integration-guide.md)
 
@@ -259,40 +305,120 @@ uv run paperbase graph update
 
 PaperBase 核心功能（摄入、转换、SQLite FTS5 检索）**不依赖 LLM**。
 
-**Graphify 知识图谱功能是 PaperBase 的必需组件**，而 LLM 配置用于将环境变量传递给 Graphify。
+**Graphify 知识图谱功能是 PaperBase 的必需组件**，而 LLM 配置用于支持 Graphify 的语义分析能力。
 
-如果你已通过系统环境变量配置 Graphify 的 LLM（如 `OPENAI_API_KEY`），可以跳过此步骤。否则，请按以下方式配置。
+###### **配置流程图**
 
-###### **配置步骤（仅在需要时）**
-
-**1. 创建环境变量文件**
-
-```bash
-# 复制示例配置
-cp .env.example .env
-
-# 编辑 .env
-nano .env
+```mermaid
+graph TD
+    A[配置方式选择] --> B[方式 1: 系统环境变量]
+    A --> C[方式 2: config/paperbase.yaml]
+    
+    B --> E[Graphify 直接读取<br/>OPENAI_API_KEY<br/>OPENAI_BASE_URL<br/>OPENAI_MODEL]
+    
+    C --> F[PaperBase 读取配置文件<br/>llm.api_key<br/>llm.base_url<br/>llm.model]
+    F --> G[运行时映射为<br/>OPENAI_* 变量]
+    G --> H[传递给 Graphify 子进程]
+    
+    E --> J[验证: uv run paperbase doctor]
+    H --> J
+    
+    style B fill:#90EE90
+    style E fill:#E8F5E9
+    style J fill:#FFE082
 ```
 
-**2. 设置环境变量**
+###### **两种配置方式**
+
+> **注意：** `.env.example` 仅作为参考示例，实际配置应通过系统环境变量设置。PaperBase 优先读取系统环境变量，不依赖 `.env` 文件。
+
+**方式 1：系统环境变量（推荐，最简单）**
+
+Graphify 直接读取以下标准环境变量：
 
 ```bash
-# .env 文件内容
-PAPERBASE_LLM_BASE_URL="https://api.openai.com/v1"
-PAPERBASE_LLM_API_KEY="sk-..."
-PAPERBASE_LLM_MODEL="gpt-4o-mini"
+# Linux/macOS
+export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://api.openai.com/v1"  # 可选，默认为 OpenAI 官方地址
+export OPENAI_MODEL="gpt-4o-mini"                   # 可选，默认为 gpt-4o-mini
+
+# Windows PowerShell
+$env:OPENAI_API_KEY = "sk-..."
+$env:OPENAI_BASE_URL = "https://api.openai.com/v1"
+$env:OPENAI_MODEL = "gpt-4o-mini"
 ```
 
-**3. 验证 Graphify 可用**
+**方式 2：config/paperbase.yaml（持久化配置）**
+
+编辑 `config/paperbase.yaml`，添加 LLM 配置：
+
+```yaml
+llm:
+  api_key: "sk-..."
+  base_url: "https://api.openai.com/v1"  # 可选
+  model: "gpt-4o-mini"                   # 可选
+```
+
+或使用环境变量占位符（推荐）：
+
+```yaml
+llm:
+  api_key: ${PAPERBASE_LLM_API_KEY}
+  base_url: ${PAPERBASE_LLM_BASE_URL}
+  model: ${PAPERBASE_LLM_MODEL}
+```
+
+然后设置环境变量：
 
 ```bash
-# PaperBase 会将配置传递给 graphify
+# Linux/macOS
+export PAPERBASE_LLM_API_KEY="sk-..."
+export PAPERBASE_LLM_BASE_URL="https://api.openai.com/v1"
+export PAPERBASE_LLM_MODEL="gpt-4o-mini"
+
+# Windows PowerShell
+$env:PAPERBASE_LLM_API_KEY = "sk-..."
+$env:PAPERBASE_LLM_BASE_URL = "https://api.openai.com/v1"
+$env:PAPERBASE_LLM_MODEL = "gpt-4o-mini"
+```
+
+###### **变量映射关系**
+
+PaperBase 在调用 Graphify（知识图谱构建工具）时会自动将配置映射为 Graphify 期望的环境变量：
+
+| 配置来源 | PaperBase 变量/配置项 | Graphify 环境变量 | 说明 |
+|---------|---------------------|------------------|------|
+| **方式 1** | `OPENAI_API_KEY` | `OPENAI_API_KEY` | 直接透传，无需映射 |
+| **方式 1** | `OPENAI_BASE_URL` | `OPENAI_BASE_URL` | 直接透传，无需映射 |
+| **方式 1** | `OPENAI_MODEL` | `OPENAI_MODEL` | 直接透传，无需映射 |
+| **方式 2** | `llm.api_key` (YAML) | `OPENAI_API_KEY` | 运行时映射，传递给 Graphify |
+| **方式 2** | `llm.base_url` (YAML) | `OPENAI_BASE_URL` | 运行时映射，传递给 Graphify |
+| **方式 2** | `llm.model` (YAML) | `OPENAI_MODEL` | 运行时映射，传递给 Graphify |
+
+**优先级**：系统环境变量 (`OPENAI_*`) > config/paperbase.yaml
+
+**说明**：这些配置专门用于 Graphify 知识图谱构建。PaperBase 的核心功能（摄入、转换、全文检索）不需要 LLM。
+
+###### **验证配置**
+
+```bash
+# 运行诊断命令检查 LLM 配置
+uv run paperbase doctor
+
+# 测试图谱更新（会实际调用 LLM）
 uv run paperbase graph update
 ```
 
-详细配置见 [`.env.example`](.env.example) 和 [docs/guides/graphify-integration-guide.md](docs/guides/graphify-integration-guide.md)。
+**预期输出（配置正确）**：
 
+```
+✓ LLM Configuration
+  - API Key: sk-***abc (detected)
+  - Base URL: https://api.openai.com/v1
+  - Model: gpt-4o-mini
+```
+
+详细配置见 [`.env.example`](.env.example) 和 [docs/guides/graphify-integration-guide.md](docs/guides/graphify-integration-guide.md).
 ---
 
 #### 3. Zotero MCP（计划集成）
@@ -307,7 +433,7 @@ uv run paperbase graph update
 
 ```bash
 # 通过 DOI
-uv run paperbase ingest "10.1038/nature12373"
+uv run paperbase ingest "doi:10.1038/nature12373"
 
 # 通过 arXiv
 uv run paperbase ingest "arxiv:2301.07041"
@@ -334,7 +460,17 @@ C:\path\to\paper3.pdf
 
 uv run paperbase ingest --batch papers.txt
 
-# 跳过自动图谱更新（连续摄入时使用）
+# 批量摄入混合格式示例
+cat > mixed_papers.txt << EOF
+/path/to/local_paper.pdf
+doi:10.1038/nature12373
+arxiv:2301.07041
+https://arxiv.org/pdf/1706.03762.pdf
+EOF
+
+uv run paperbase ingest --batch mixed_papers.txt
+
+# 跳过索引和图谱更新（连续摄入时使用）
 uv run paperbase ingest paper.pdf --no-graph
 ```
 
@@ -344,11 +480,15 @@ uv run paperbase ingest paper.pdf --no-graph
 # 查看所有论文
 uv run paperbase status
 
-# 查看特定状态的论文
+# 查看特定状态的论文（有效值：normalized, ready）
 uv run paperbase status --state ready
 
-# 全文搜索
-uv run paperbase search "transformer architecture" -n 20
+# 全文搜索（-n 是 --limit 的简写）
+uv run paperbase search "transformer architecture" --limit 20
+
+# 知识图谱查询（需要先运行 graph update）
+uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
+uv run paperbase query similar "arxiv:1706.03762" --limit 5
 ```
 
 ### 知识图谱
@@ -375,6 +515,55 @@ uv run paperbase graph status
 
 详见 [docs/graph-update-strategy.md](docs/graph-update-strategy.md)。
 
+### 全文检索索引
+
+```bash
+# 手动构建/重建索引
+uv run paperbase index
+
+# 指定项目路径
+uv run paperbase index --base-dir /path/to/paperbase
+```
+
+**说明**：
+- 索引在摄入论文时自动更新
+- 手动重建用于修复索引不一致或首次设置
+
+### 环境诊断
+
+```bash
+# 检查系统环境和依赖
+uv run paperbase doctor
+```
+
+**检查项目**：
+- Python 版本（≥3.11）
+- uv 包管理器
+- Graphify 知识图谱工具
+- paper-fetch 在线获取工具
+- SQLite 版本（FTS5 支持）
+- LLM 配置
+- 知识库状态
+- Registry 数据库
+- 知识图谱
+
+### 配置管理
+
+```bash
+# 显示当前配置
+uv run paperbase config show
+
+# 显示配置文件路径
+uv run paperbase config path
+```
+
+**配置内容**：
+- LLM 配置（API 端点、模型）
+- 知识图谱更新策略
+- 路径配置
+
+配置文件位置：`config/paperbase.yaml`
+
 ## 🤖 AI Agent 集成
 
 ### 全局 Skill 安装
@@ -394,7 +583,7 @@ cp -r skills/paperbase ~/.codex/skills/
 安装后在任意 AI Agent 会话中调用 `/paperbase`：
 
 ```
-/paperbase ingest "10.1038/nature12373"
+/paperbase ingest "doi:10.1038/nature12373"
 /paperbase search "deep learning"
 /paperbase status
 ```
@@ -641,14 +830,16 @@ pip install -e .
    ```bash
    vim library/papers/<storage_id>/manifest.json
    ```
-3. **将 state 改为前一个状态**
+3. **将 state 改为有效状态**
 
    ```json
    {
-     "state": "SOURCE_READY",  // 从 BLOCKED 改为前一个有效状态
-     "error_log": []           // 可选：清空错误日志
+     "state": "NORMALIZED",  // 重置为初始状态，可重新处理
+     "error_log": []         // 可选：清空错误日志
    }
    ```
+   
+   **注意**：状态机中只有 `NORMALIZED` 和 `READY` 两个主状态。异常状态包括 `NEEDS_REVIEW`、`BLOCKED`、`FAILED_RETRYABLE`、`FAILED_PERMANENT`。
 4. **重新运行摄入**
 
    ```bash
@@ -746,7 +937,7 @@ uv run paperbase graph update --force
 
 ```bash
 # Registry 可以重建
-rm registry/papers.sqlite
+rm registry/papers.db
 uv run paperbase status  # 自动重建索引
 ```
 

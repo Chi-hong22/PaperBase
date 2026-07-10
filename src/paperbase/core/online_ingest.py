@@ -78,6 +78,35 @@ def _copy_assets(paths: PaperPaths, fetched: FetchedPaper, acquired_at: str) -> 
 
 def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestResult:
     paper_id = _paper_id_for_fetched(fetched)
+
+    # 查重检查
+    registry_path = base_dir / "registry" / "papers.db"
+    if registry_path.exists():
+        registry = PaperRegistry(registry_path)
+
+        # 检查 paper_id 是否已存在
+        existing = registry.get_paper(paper_id)
+        if existing:
+            registry.close()
+            raise ValueError(
+                f"论文已存在: {paper_id}\n"
+                f"标题: {existing.get('title', 'N/A')}\n"
+                f"提示：论文已在知识库中，无需重复摄入"
+            )
+
+        # 检查 DOI 重复
+        if fetched.doi:
+            existing = registry.find_by_doi(fetched.doi)
+            if existing and existing['paper_id'] != paper_id:
+                registry.close()
+                raise ValueError(
+                    f"论文已存在（DOI 重复）: {existing['paper_id']}\n"
+                    f"DOI: {fetched.doi}\n"
+                    f"标题: {existing.get('title', 'N/A')}"
+                )
+
+        registry.close()
+
     storage_id = generate_storage_id(paper_id)
     paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
     paths.create_directories()

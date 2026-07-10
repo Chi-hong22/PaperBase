@@ -61,12 +61,24 @@ def check_sqlite_version() -> Tuple[bool, str]:
 
 def check_library() -> Tuple[bool, str]:
     """Check if PaperBase library exists"""
+    # 优先使用 Registry 统计论文数量
+    registry_path = Path("registry/papers.db")
+    if registry_path.exists():
+        try:
+            from paperbase.core.registry import PaperRegistry
+            with PaperRegistry(registry_path) as registry:
+                paper_count = len(registry.list_papers())
+            return True, f"Library found ({paper_count} papers)"
+        except Exception:
+            pass  # fallback to directory scanning
+
+    # Fallback: 统计论文目录数量（p_* 目录，而非 .md 文件）
     library_path = Path("library")
     if library_path.exists():
         papers_dir = library_path / "papers"
         if papers_dir.exists():
-            paper_count = len(list(papers_dir.glob("p_*.md")))
-            return True, f"Library found ({paper_count} papers)"
+            paper_count = len([d for d in papers_dir.iterdir() if d.is_dir() and d.name.startswith("p_")])
+            return True, f"Library found ({paper_count} papers, no registry)"
         else:
             return False, "Library exists but papers/ directory missing"
     return False, "Library not found (run from PaperBase root or set PAPERBASE_LIBRARY)"
@@ -111,34 +123,22 @@ def check_paper_fetch() -> Tuple[bool, str]:
 def check_llm_config() -> Tuple[bool, str]:
     """Check LLM configuration"""
     try:
-        import os
-        import yaml
-        from pathlib import Path
+        from paperbase.config.loader import load_config
 
-        config_path = Path("config/paperbase.yaml")
-        if not config_path.exists():
-            return False, "config/paperbase.yaml not found"
+        config = load_config()
 
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-
-        llm_config = config.get("llm", {})
-        enabled = llm_config.get("enabled", False)
-
-        if not enabled:
+        if not config.llm.is_enabled():
             return True, "disabled (optional)"
 
-        # 检查环境变量
-        base_url = os.getenv("PAPERBASE_LLM_BASE_URL")
-        api_key = os.getenv("PAPERBASE_LLM_API_KEY")
-        model = os.getenv("PAPERBASE_LLM_MODEL")
+        # LLM 已启用，检查必需字段
+        model = config.llm.model
+        base_url = config.llm.base_url
 
-        if not all([base_url, api_key, model]):
+        if not model or not base_url:
             missing = []
-            if not base_url: missing.append("BASE_URL")
-            if not api_key: missing.append("API_KEY")
-            if not model: missing.append("MODEL")
-            return False, f"enabled but env vars missing: {', '.join(missing)}"
+            if not base_url: missing.append("base_url")
+            if not model: missing.append("model")
+            return False, f"enabled but missing: {', '.join(missing)}"
 
         return True, f"enabled ({model})"
 

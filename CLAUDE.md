@@ -85,18 +85,26 @@ PaperBase 是论文知识库脚手架，核心理念：
 
 1. **查看 manifest.json** 确认状态
 2. **检查 paper.md frontmatter** 是否通过 schema 验证
-3. **查看 registry/papers.sqlite** 确认索引状态
+3. **查看 registry/papers.db** 确认索引状态
 4. **检查 .graphifyignore** 确保 Graphify 不扫描重复内容
 
 ## Skills 使用
 
-项目集成的 skills：
-- `paper-fetch-skill`: 在 `skills/paper-fetch-skill/`
-- `citation-check-skill`: 在 `skills/citation-check-skill/`
-- `zotero-mcp`: 通过 MCP 调用（全局安装）
-- `graphify`: 通过 MCP 调用（全局安装）
+**项目集成的 skill：**
+- `paperbase`: 在 `skills/paperbase/`
+  - PaperBase 专用的 Claude skill，提供论文摄入、状态管理等功能
 
-**注意：** graphify 和 zotero-mcp 使用 `uv tool install` 全局安装，不在项目目录中。
+**外部工具（通过 `uv tool install` 全局安装）：**
+- `paper-fetch`: 从 DOI/arXiv/URL 获取论文
+  - 安装: `uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git`
+  - 验证: `paper-fetch --version`
+- `graphify`: 构建知识图谱
+  - 安装: `uv tool install graphify`
+  - 验证: `graphify --version`
+- `zotero-mcp`: Zotero 集成
+  - 安装: `uv tool install zotero-mcp-server`
+
+**注意：** 外部工具安装在用户全局环境（如 `~/.local/bin/`），不在项目目录中。
 
 ## 测试
 
