@@ -25,7 +25,12 @@ PaperBase 是论文知识库脚手架，核心理念：
    paperbase status "doi:10.1038/nature"
    ```
 
-3. **更新知识图谱**
+3. **同步 Registry 索引**
+   ```bash
+   paperbase sync
+   ```
+
+4. **更新知识图谱**
    ```bash
    paperbase graph update
    ```
