@@ -20,6 +20,7 @@ def _load_graph(graph_dir: Path) -> Dict[str, Any]:
         dict: 图谱数据 {"nodes": [...], "edges": [...]}
 
         注意：graphify 0.9.10+ 使用 hyperedges 格式，会自动转换为标准 edges
+        注意：graphify 也可能使用 "links" 作为边的键名，会统一为 "edges"
 
     Raises:
         FileNotFoundError: 如果 graph.json 不存在
@@ -31,6 +32,10 @@ def _load_graph(graph_dir: Path) -> Dict[str, Any]:
 
     with open(graph_file, "r", encoding="utf-8") as f:
         data = json.load(f)
+
+    # 统一边的键名：links -> edges
+    if "links" in data and "edges" not in data:
+        data["edges"] = data["links"]
 
     # 如果是 graphify 0.9.10+ 的 hyperedges 格式，转换为标准 edges
     if "edges" not in data and "graph" in data and "hyperedges" in data["graph"]:
