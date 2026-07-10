@@ -471,11 +471,133 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
             registry.close()
 
         # Step 4: 根据是否有 PDF 分流处理
+        pdf_path = None
         if item.has_pdf:
-            console.print("[yellow]4. 检测到 PDF 附件...[/yellow]")
-            console.print("[dim]注意：Zotero 集成仅导入元数据，不包含 PDF 全文[/dim]")
-            console.print("[dim]如需全文检索，请使用: paperbase ingest --file <path-to-pdf>[/dim]")
+            console.print("[yellow]4. 检测到 PDF 附件，尝试获取路径...[/yellow]")
+            try:
+                pdf_path_str = adapter.get_pdf_path(item_key)
+                if pdf_path_str:
+                    pdf_path = Path(pdf_path_str)
+                    console.print(f"[green]   ✓ 找到 PDF: {pdf_path.name}[/green]")
+                else:
+                    console.print("[yellow]   ⚠ 无法获取 PDF 路径（可能使用 Web API 模式）[/yellow]")
+                    console.print("[dim]   降级为元数据导入[/dim]")
+            except Exception as e:
+                console.print(f"[yellow]   ⚠ 获取 PDF 路径失败: {e}[/yellow]")
+                console.print("[dim]   降级为元数据导入[/dim]")
 
+        # Step 5: 如果有 PDF，走完整 PDF 导入流程
+        if pdf_path and pdf_path.exists():
+            console.print("[yellow]5. 使用完整 PDF 导入流程...[/yellow]")
+
+            # 直接调用 _ingest_local_pdf 的核心逻辑
+            try:
+                # 提取 PDF 元数据
+                console.print("[yellow]   5.1. 提取 PDF 元数据...[/yellow]")
+                pdf_metadata = extract_pdf_metadata(pdf_path)
+
+                # 合并 Zotero 元数据和 PDF 元数据（Zotero 优先）
+                merged_metadata = {
+                    "title": item.title or pdf_metadata.get("title", "Untitled"),
+                    "authors": item.authors if item.authors else pdf_metadata.get("authors", ["Unknown"]),
+                    "year": item.year or pdf_metadata.get("year"),
+                    "doi": item.doi or pdf_metadata.get("doi"),
+                    "abstract": item.abstract or pdf_metadata.get("abstract", ""),
+                }
+
+                console.print("[yellow]   5.2. 创建存储目录...[/yellow]")
+                paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
+                paths.create_directories()
+
+                console.print("[yellow]   5.3. 保存源 PDF...[/yellow]")
+                shutil.copy2(pdf_path, paths.source_pdf)
+                pdf_sha256 = sha256_file(paths.source_pdf)
+
+                console.print("[yellow]   5.4. 转换为 Markdown...[/yellow]")
+                candidate_md = convert_pdf_to_markdown(pdf_path)
+                console.print(f"      长度: {len(candidate_md)} 字符")
+
+                console.print("[yellow]   5.5. 整理论文信息...[/yellow]")
+                paper_metadata = normalize_paper(
+                    candidate_md=candidate_md,
+                    metadata=merged_metadata,
+                    paper_id=paper_id,
+                    storage_id=storage_id,
+                    source_provider="zotero+markitdown"
+                )
+
+                console.print("[yellow]   5.6. 生成标准格式文档...[/yellow]")
+                metadata_dict = paper_metadata.model_dump(mode="json", exclude_none=True)
+                canonical_md = generate_canonical_markdown(metadata_dict, candidate_md)
+                paths.paper_md.write_text(canonical_md, encoding="utf-8")
+                canonical_sha256 = sha256_string(canonical_md)
+
+                console.print("[yellow]   5.7. 生成文本分块...[/yellow]")
+                chunks = generate_chunks(canonical_md, paper_id)
+                if chunks:
+                    write_chunks_jsonl(chunks, paths.chunks_jsonl)
+                    console.print(f"      ✓ 生成 {len(chunks)} 个文本块")
+
+                console.print("[yellow]   5.8. 保存元数据...[/yellow]")
+                manifest = create_manifest(paper_id, storage_id)
+                manifest.state = PaperState.NORMALIZED
+                manifest.source_pdf = SourcePDF(
+                    path="./source/source.pdf",
+                    sha256=pdf_sha256,
+                    acquired_at=paper_metadata.provenance.ingested_at
+                )
+                manifest.canonical_md = CanonicalMD(
+                    path=f"../{storage_id}.md",
+                    sha256=canonical_sha256,
+                    schema_version="1.0"
+                )
+                manifest.pipeline = PipelineInfo(
+                    converter="zotero+markitdown",
+                    converter_version="0.6.0+markitdown-0.0.1",
+                    normalizer_version="1.0.0"
+                )
+                save_manifest(manifest, paths.manifest_json)
+
+                console.print("[yellow]   5.9. 记录到知识库...[/yellow]")
+                registry_path = base_dir / "registry" / "papers.db"
+                registry_path.parent.mkdir(exist_ok=True)
+                registry = PaperRegistry(registry_path)
+                registry.register_paper(
+                    paper_id=paper_id,
+                    storage_id=storage_id,
+                    state=PaperState.NORMALIZED,
+                    title=paper_metadata.title,
+                    authors=[a.name for a in paper_metadata.authors],
+                    year=paper_metadata.year,
+                    doi=merged_metadata.get("doi")
+                )
+                registry.close()
+
+                console.print(f"\n[green]✓ 论文（含 PDF 全文）已保存到知识库[/green]")
+                console.print(f"   路径: {paths.paper_dir}")
+
+                # 更新索引
+                if not no_graph:
+                    console.print("\n[yellow]更新全文检索索引...[/yellow]")
+                    try:
+                        from paperbase.core.search_engine import SearchEngine
+                        index_path = base_dir / "index" / "fts.db"
+                        library_path = base_dir / "library" / "papers"
+                        with SearchEngine(index_path, library_path) as engine:
+                            engine.build_index()
+                        console.print("[green]✓ 索引更新完成[/green]")
+                    except Exception as e:
+                        console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
+
+                console.print(f"\n[green]✓ 摄入完成（含 PDF 全文）[/green]")
+                return "success"
+
+            except Exception as e:
+                console.print(f"[red]✗ PDF 处理失败: {e}[/red]")
+                console.print("[yellow]降级为元数据导入...[/yellow]")
+                # 继续执行元数据导入流程
+
+        # Step 6: 仅元数据导入（无 PDF 或 PDF 处理失败）
         console.print("[yellow]5. 摄入元数据...[/yellow]")
         # 构造元数据字典
         metadata_dict = {
@@ -499,8 +621,9 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
 
         console.print(f"\n[green]✓ 论文元数据已保存到知识库[/green]")
         console.print(f"   路径: {paths.paper_dir}")
-        if item.has_pdf:
-            console.print("[dim]注意：PDF 附件未导入，如需全文请使用 PDF 直接导入[/dim]")
+        if item.has_pdf and not pdf_path:
+            console.print("[yellow]⚠ PDF 附件未导入（Web API 模式或路径不可用）[/yellow]")
+            console.print("[dim]   提示：使用本地模式或手动下载 PDF 后使用: paperbase ingest --file <path>[/dim]")
 
         console.print(f"\n[green]✓ 摄入完成[/green]")
         return "success"
