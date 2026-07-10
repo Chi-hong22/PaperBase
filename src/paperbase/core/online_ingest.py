@@ -168,7 +168,7 @@ def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestR
     )
     paths.paper_md.write_text(canonical_md, encoding="utf-8")
 
-    # Step 3.5: Generate chunks for full-text search
+    # Step 5: Generate chunks for full-text search
     chunks = generate_chunks(canonical_md, paper_id)
     if chunks:
         write_chunks_jsonl(chunks, paths.chunks_jsonl)

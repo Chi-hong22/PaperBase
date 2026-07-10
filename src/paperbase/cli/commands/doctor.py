@@ -118,7 +118,7 @@ def check_paper_fetch() -> Tuple[bool, str]:
                 return True, "paper-fetch (version unknown)"
         except Exception:
             return True, "paper-fetch (version check failed)"
-    return False, "not installed (optional); install with `uv tool install paper-fetch-skill`"
+    return False, "not installed (optional); install with: uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git"
 
 def check_llm_config() -> Tuple[bool, str]:
     """Check LLM configuration"""

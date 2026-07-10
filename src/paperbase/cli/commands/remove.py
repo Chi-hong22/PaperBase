@@ -11,8 +11,8 @@ from paperbase.core.manifest import load_manifest
 
 @click.command()
 @click.argument("paper_id", type=str)
-@click.option("--yes", "-y", is_flag=True, help="（已废弃）保留用于向后兼容")
-@click.option("--force", "-f", is_flag=True, help="（已废弃）保留用于向后兼容")
+@click.option("--yes", "-y", is_flag=True, help="已废弃（向后兼容，无效果）")
+@click.option("--force", "-f", is_flag=True, help="已废弃（向后兼容，无效果）")
 @click.option("--interactive", "-i", is_flag=True, help="启用交互式确认")
 @click.pass_context
 def remove(ctx, paper_id: str, yes: bool, force: bool, interactive: bool):

@@ -99,9 +99,9 @@ class PaperRegistry:
             if result["authors"]:
                 try:
                     result["authors"] = json.loads(result["authors"])
-                except (json.JSONDecodeError, TypeError) as e:
-                    # 如果不是 JSON，保持原样（兼容旧数据）
-                    logger.warning(f"Failed to parse authors JSON for paper {paper_id}: {e}, keeping raw string")
+                except (json.JSONDecodeError, TypeError):
+                    # 兼容旧数据格式
+                    logger.debug(f"Authors field is not JSON for paper {paper_id}, keeping as-is")
             return result
         return None
 
@@ -133,9 +133,9 @@ class PaperRegistry:
             if result["authors"]:
                 try:
                     result["authors"] = json.loads(result["authors"])
-                except (json.JSONDecodeError, TypeError) as e:
-                    # 如果不是 JSON，保持原样（兼容旧数据）
-                    logger.warning(f"Failed to parse authors JSON for paper {result['paper_id']}: {e}, keeping raw string")
+                except (json.JSONDecodeError, TypeError):
+                    # 兼容旧数据格式
+                    pass
             results.append(result)
         return results
 
