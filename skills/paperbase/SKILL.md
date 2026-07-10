@@ -132,6 +132,10 @@ Agent: [图谱推理] → 返回概念交集论文
 人类: "搜索提到 transformer 的论文"
 Agent: [FTS5 检索] → 返回 7 篇 + 匹配片段
 
+# 在指定论文中搜索（NEW）
+人类: "查询 RatSLAM 论文中 threshold 的相关内容"
+Agent: [单篇论文全文检索] → 返回 4 个匹配片段，显示上下文
+
 # 主题查询（NEW - 图谱标签匹配）
 人类: "查找 attention mechanism 相关的论文"
 Agent: [query topic] → 本地论文: 2 篇
@@ -160,7 +164,8 @@ paperbase status                       # 列出所有论文
 paperbase status <paper_id>            # 查询单篇
 paperbase status --year <year>         # 按年份筛选
 paperbase status --state <state>       # 按状态筛选
-paperbase search "<query>"             # 全文检索
+paperbase search "<query>"             # 全文检索（全局）
+paperbase search "<query>" --paper-id <id>  # 在指定论文中搜索（NEW）
 paperbase query related <id> --depth 2 # 相关论文（推荐 depth=2）
 paperbase query topic "<topic>"        # 主题查找（图谱标签）
 paperbase query topic "<topic>" --include-refs  # 包含引用文献

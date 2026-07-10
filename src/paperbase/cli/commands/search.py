@@ -17,9 +17,23 @@ from paperbase.core.registry import PaperRegistry
     default=10,
     help="返回结果数量限制"
 )
+@click.option(
+    "--paper-id",
+    type=str,
+    default=None,
+    help="只在指定论文中搜索（可选）"
+)
 @click.pass_context
-def search(ctx, query: str, limit: int):
-    """全文检索论文内容"""
+def search(ctx, query: str, limit: int, paper_id: str):
+    """全文检索论文内容
+
+    支持全局搜索或在单篇论文中搜索。
+
+    示例：
+
+      paperbase search "threshold"                    # 全局搜索
+      paperbase search "threshold" --paper-id doi:xxx  # 在指定论文中搜索
+    """
     console = Console()
     base_dir = ctx.obj["base_dir"]
 
@@ -40,17 +54,19 @@ def search(ctx, query: str, limit: int):
 
     # 执行搜索
     engine = SearchEngine(index_path, library_path)
-    results = engine.search(query, limit)
+    results = engine.search(query, limit, paper_id_filter=paper_id)
     engine.close()
 
     if not results:
-        console.print(f"[yellow]未找到匹配结果: {query}[/yellow]")
+        scope = f"在论文 {paper_id} 中" if paper_id else ""
+        console.print(f"[yellow]未找到匹配结果{scope}: {query}[/yellow]")
         return
 
     # 获取论文元数据
     registry = PaperRegistry(registry_path)
 
-    table = Table(title=f"搜索结果: {query}")
+    search_scope = f" (限定: {paper_id})" if paper_id else ""
+    table = Table(title=f"搜索结果: {query}{search_scope}")
     table.add_column("Score", style="cyan", width=8)
     table.add_column("Paper ID", style="magenta", width=25)
     table.add_column("Title", style="white", width=50)
