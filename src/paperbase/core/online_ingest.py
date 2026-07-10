@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
+from paperbase.utils.timestamp import now_iso8601
 
 from paperbase.adapters.paper_fetch_adapter import FetchedPaper
 from paperbase.core.identity import generate_storage_id, normalize_paper_id
@@ -112,7 +112,7 @@ def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestR
     paths.create_directories()
 
     # Use unified timestamp for all operations
-    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    now = now_iso8601()
 
     asset_artifacts = _copy_assets(paths, fetched, now)
     _write_references(paths.references_jsonl, fetched)

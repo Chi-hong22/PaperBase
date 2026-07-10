@@ -3,7 +3,7 @@
 import click
 from rich.console import Console
 from pathlib import Path
-from datetime import datetime, UTC
+from paperbase.utils.timestamp import now_iso8601
 from paperbase.adapters.graphify_adapter import (
     check_graphify_installed,
     run_graphify,
@@ -108,7 +108,7 @@ def update(ctx, force: bool, incremental: bool):
     # Step 4: 更新状态
     stats = get_graph_stats(graph_dir)
     updated_count = 0
-    now = datetime.now(UTC).isoformat() + "Z"
+    now = now_iso8601()  # 使用统一的时间戳生成函数
 
     # 打开 registry（所有模式都需要）
     registry_path = base_dir / "registry" / "papers.db"
