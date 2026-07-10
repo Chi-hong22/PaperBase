@@ -450,9 +450,38 @@ uv run paperbase graph update
 详细配置见 [`.env.example`](.env.example) 和 [docs/guides/graphify-integration-guide.md](docs/guides/graphify-integration-guide.md).
 ---
 
-#### 3. Zotero MCP（计划集成）
+#### 3. Zotero 集成（已支持）
 
-用于与 Zotero 文献管理器集成（即将支持）。
+用于从 Zotero 文献管理器导入论文元数据到 PaperBase。
+
+**安装方式**：
+
+```bash
+uv tool install zotero-mcp-server
+```
+
+**使用方式**：
+
+```bash
+# 单篇导入
+uv run paperbase ingest --zotero-key <ITEM_KEY>
+
+# 批量导入最近 N 篇论文
+uv run paperbase ingest --zotero-recent 10
+```
+
+**配置模式**：
+- **本地模式**（推荐）：连接本地 Zotero 应用程序，无需 API Key
+- **Web API 模式**：通过 Zotero Web API 访问，需要 API Key 和 Library ID
+
+**功能特性**：
+- ✅ 单篇论文导入（通过 Item Key）
+- ✅ 批量导入最近论文
+- ✅ 自动查重（DOI 和标题）
+- ✅ 支持本地和 Web API 两种模式
+- ⚠️ 当前仅支持元数据导入（无 PDF 附件）
+
+**完整文档**：[docs/integrations/zotero.md](docs/integrations/zotero.md)
 
 **项目地址**：https://github.com/54yyyu/zotero-mcp
 
