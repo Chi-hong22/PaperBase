@@ -21,7 +21,32 @@ pip install uv
 uv sync
 ```
 
-### 3. 验证安装
+### 3. 配置环境变量（推荐）
+
+为了在任意目录调用 PaperBase，建议设置环境变量：
+
+**Linux/macOS:**
+```bash
+# 添加到 ~/.bashrc 或 ~/.zshrc
+export PAPERBASE_LIBRARY="/path/to/PaperBase"
+```
+
+**Windows PowerShell:**
+```powershell
+# 添加到 PowerShell Profile ($PROFILE)
+$env:PAPERBASE_LIBRARY = "C:\path\to\PaperBase"
+```
+
+**验证环境变量：**
+```bash
+# Linux/macOS
+echo $PAPERBASE_LIBRARY
+
+# Windows
+echo $env:PAPERBASE_LIBRARY
+```
+
+### 4. 验证安装
 
 ```bash
 uv run paperbase doctor
