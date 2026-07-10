@@ -175,7 +175,7 @@ Agent:
   ✅ Python 3.11.5
   ✅ uv 0.5.0
   ✅ graphify 已安装
-  ✅ 12 篇论文（10 ready, 2 normalized）
+  ✅ 12 篇论文（使用 Registry 统计，优先级高于目录扫描）
   ℹ️  建议：2 篇论文待更新图谱
 
 人类: "显示 LLM 配置"
@@ -186,17 +186,30 @@ Agent:
 
 人类: "删除论文 doi:10.1234/abc"
 Agent:
-  ⚠️  警告：此操作不可逆
-  将删除：paper.md, source PDF, registry 记录
-  确认删除? (y/n)
+  已删除：paper.md, source PDF, registry 记录
+  完成！（默认非交互模式）
+
+人类: "我想确认后再删除"
+Agent:
+  使用 --interactive 启用交互模式
+  paperbase remove "doi:10.1234/abc" --interactive
+
+人类: "清理孤立的 Registry 记录"
+Agent:
+  正在同步 Registry 与文件系统...
+  发现 3 条孤立记录（文件已删除但索引仍存在）
+  确认清理? (y/n)
 ```
 
 **关键命令**：
 ```bash
-paperbase doctor             # 环境诊断
-paperbase config show        # 显示配置
-paperbase config show   # 验证 LLM
-paperbase remove <paper_id>  # 删除论文
+paperbase doctor                      # 环境诊断（优先使用 Registry 统计）
+paperbase config show                 # 显示配置
+paperbase config show            # 验证 LLM
+paperbase remove <paper_id>           # 删除论文（默认非交互）
+paperbase remove <id> --interactive   # 交互式删除（需确认）
+paperbase sync                        # 同步 Registry 与文件系统
+paperbase sync --dry-run              # 仅查看孤立记录
 ```
 
 **辅助脚本**：

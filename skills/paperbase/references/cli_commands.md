@@ -23,6 +23,11 @@ paperbase ingest <id> --no-graph        # 跳过图谱更新
 - 本地 PDF: `/path/to/paper.pdf`
 - 批量文件: `papers.txt`（每行一个标识符）
 
+**功能**：
+- 自动检测重复论文（基于 DOI 和标题）
+- 防止重复摄入相同论文
+- 支持单篇、本地文件、批量处理
+
 **示例**：
 ```bash
 # 在线摄入
@@ -231,7 +236,7 @@ paperbase doctor
 - uv 包管理器
 - graphify 安装状态（可选）
 - SQLite 版本和 FTS5 支持
-- 知识库状态（论文数量、图谱文件）
+- 知识库状态（优先使用 Registry 统计论文数量，Fallback 到目录统计）
 - Registry 数据库状态
 
 **示例输出**：
@@ -252,12 +257,17 @@ paperbase doctor
 永久删除论文（不可逆）。
 
 ```bash
-paperbase remove <paper_id>                # 删除（需确认）
-paperbase remove <paper_id> --yes          # 跳过确认（NEW）
-paperbase remove <paper_id> -y             # 短参数（NEW）
-paperbase remove <paper_id> --force        # 同 --yes（NEW）
-paperbase remove <paper_id> -f             # 短参数（NEW）
+paperbase remove <paper_id>                # 删除（默认非交互）
+paperbase remove <paper_id> --interactive  # 启用交互模式（需确认）
+paperbase remove <paper_id> -i             # 短参数
+paperbase remove <paper_id> --yes          # 已废弃，保留向后兼容
+paperbase remove <paper_id> --force        # 已废弃，保留向后兼容
 ```
+
+**行为变更**：
+- **默认模式**：直接删除，无需确认（适合自动化）
+- **交互模式**：使用 `--interactive` / `-i` 启用确认提示（适合手动操作）
+- **已废弃参数**：`--yes` / `-y` / `--force` / `-f` 保留向后兼容，但不再推荐使用
 
 **警告**：此操作将：
 - 删除论文目录（`p_xxx/`）
@@ -265,11 +275,6 @@ paperbase remove <paper_id> -f             # 短参数（NEW）
 - 删除 source PDF（如果是孤立的）
 - 删除 registry 记录
 - **不会自动更新图谱**（需手动运行 `graph update --force`）
-
-**自动化支持（NEW）**：
-- 使用 `--yes` 或 `-y` 跳过交互确认
-- 适合脚本和后台自动化处理
-- `--force` / `-f` 是 `--yes` 的别名
 
 **重要**：删除后图谱中仍保留该论文的节点和边关系。这可能导致：
 - 语义查询返回已删除论文的引用
@@ -280,14 +285,48 @@ paperbase remove <paper_id> -f             # 短参数（NEW）
 
 **示例**：
 ```bash
-# 删除论文（会要求确认）
+# 直接删除（默认非交互）
 paperbase remove "doi:10.1038/nature12373"
 
-# 跳过确认（危险）
-paperbase remove "arxiv:1706.03762" --confirm
+# 交互式删除（需确认）
+paperbase remove "arxiv:1706.03762" --interactive
 
 # 删除后重建图谱
 paperbase graph update --force
+```
+
+---
+
+### sync - 同步 Registry
+
+同步 Registry 数据库与文件系统，清理孤立的索引记录。
+
+```bash
+paperbase sync                  # 同步并确认删除
+paperbase sync --dry-run        # 仅显示孤立记录
+paperbase sync --yes            # 跳过确认直接清理
+```
+
+**功能**：
+- 检测 Registry 中存在但文件系统中不存在的论文记录
+- 显示孤立记录列表（Paper ID、标题、状态）
+- 提供清理选项（仅删除索引，不删除文件）
+
+**使用场景**：
+- 手动删除论文目录后清理索引
+- Registry 与文件系统不一致时修复
+- 定期维护知识库健康
+
+**示例**：
+```bash
+# 检查孤立记录
+paperbase sync --dry-run
+
+# 清理孤立记录（需确认）
+paperbase sync
+
+# 自动清理（跳过确认）
+paperbase sync --yes
 ```
 
 ---
