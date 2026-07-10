@@ -20,12 +20,24 @@ PaperBase 是论文知识库脚手架，核心理念：
    paperbase ingest "doi:10.1038/nature"
    ```
 
-2. **检查论文状态**
+2. **从 Zotero 导入论文**（需要先安装 zotero-mcp-server）
+   ```bash
+   # 安装 zotero-mcp-server（首次使用）
+   uv tool install zotero-mcp-server
+   
+   # 单篇导入（需要 Zotero Item Key）
+   paperbase ingest --zotero-key ABC12DEF
+   
+   # 批量导入最近 N 篇论文
+   paperbase ingest --zotero-recent 10
+   ```
+
+3. **检查论文状态**
    ```bash
    paperbase status "doi:10.1038/nature"
    ```
 
-3. **搜索论文**（全文检索 + 过滤）
+4. **搜索论文**（全文检索 + 过滤）
    ```bash
    # 基本搜索
    paperbase search "deep learning"
@@ -40,12 +52,12 @@ PaperBase 是论文知识库脚手架，核心理念：
    paperbase search "attention" --state ready --year 2017 --limit 10
    ```
 
-4. **同步 Registry 索引**
+5. **同步 Registry 索引**
    ```bash
    paperbase sync
    ```
 
-5. **更新知识图谱**
+6. **更新知识图谱**
    ```bash
    paperbase graph update
    ```
