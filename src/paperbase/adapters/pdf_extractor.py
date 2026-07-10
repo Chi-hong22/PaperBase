@@ -6,10 +6,12 @@
 from pathlib import Path
 import pymupdf
 
+from .pdf_text_extractor import extract_structured_data
+
 
 def extract_pdf_metadata(pdf_path: Path) -> dict:
     """
-    提取 PDF 元数据
+    提取 PDF 元数据（合并嵌入元数据和结构化文本提取）
 
     Returns:
         dict: {
@@ -17,8 +19,9 @@ def extract_pdf_metadata(pdf_path: Path) -> dict:
             "authors": list[str],
             "year": int | None,
             "doi": str | None,
+            "abstract": str | None,
             "subject": str | None,
-            "keywords": str | None
+            "keywords": list[str] | None
         }
     """
     if not pdf_path.exists():
@@ -63,14 +66,34 @@ def extract_pdf_metadata(pdf_path: Path) -> dict:
                         doi = match.group(0)
                         break
 
-        return {
+        # 基础元数据
+        result = {
             "title": metadata.get("title"),
             "authors": authors,
             "year": year,
             "doi": doi,
+            "abstract": None,
             "subject": metadata.get("subject"),
-            "keywords": metadata.get("keywords"),
+            "keywords": None,
         }
+
+    # 尝试从 PDF 文本中提取结构化数据
+    structured_data = extract_structured_data(pdf_path)
+
+    # 合并策略：结构化提取优先（更准确）
+    if structured_data["doi"] and not result["doi"]:
+        result["doi"] = structured_data["doi"]
+
+    if structured_data["abstract"]:
+        result["abstract"] = structured_data["abstract"]
+
+    if structured_data["keywords"]:
+        result["keywords"] = structured_data["keywords"]
+    elif metadata.get("keywords"):
+        # 降级到元数据中的 keywords（字符串格式）
+        result["keywords"] = metadata.get("keywords")
+
+    return result
 
 
 def extract_pdf_text(pdf_path: Path, max_pages: int = 10) -> str:

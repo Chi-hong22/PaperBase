@@ -211,8 +211,9 @@ paperbase/
 │   ├── collections/          # 用户论文集合（规划中）
 │   └── notes/                # 用户笔记（规划中）
 ├── registry/                 # SQLite 查询索引（派生）
-│   └── papers.db            # SQLite 数据库文件
+│   └── papers.db            # 全文检索索引 + 元数据缓存
 ├── graph/                    # Graphify 知识图谱（派生）
+│   └── graph.json           # 论文语义关联网络（节点 + 边）
 ├── index/                    # 向量索引和嵌入缓存（派生）
 ├── config/                   # 配置文件
 │   └── paperbase.yaml       # 主配置文件
@@ -226,8 +227,12 @@ paperbase/
 
 - **`library/sources/pdf/`**: 去重的 PDF 缓存池。同一个 PDF 文件（通过 SHA256 识别）只存储一次，多篇论文可通过 `manifest.json` 中的 `source_artifacts` 引用同一 PDF。删除论文时，会检查 PDF 是否被其他论文引用，孤立 PDF 才会被删除。
 - **`library/papers/<storage_id>/source/`**: 单篇论文的原始 PDF 文件（如果有）。与 `sources/` 目录不同，这是与论文绑定的独立副本。
+- **`registry/papers.db`**: SQLite 数据库，存储全文检索索引（FTS5）和元数据缓存，支持 `search` 命令的快速查询和过滤。
+- **`graph/graph.json`**: Graphify 知识图谱文件，存储论文节点和语义边（引用关系、相似度等），支持 `query` 命令的关系查询。
 
 **重要**：只有 `library/papers/*/paper.md` 和 `manifest.json` 是真相源，其他均可重建。
+
+**详细架构文档**：[存储布局说明](docs/architecture/storage-layout.md) - 完整的目录结构、文件格式、数据流和依赖关系。
 
 ## 🎯 适用场景
 
@@ -240,6 +245,9 @@ paperbase/
 | **领域知识图谱**    | 分析引用网络和方法论演进       |
 
 ## 📋 使用方法
+
+**快速导航**：
+- [搜索命令完整指南](docs/usage/search.md) - search 命令的详细用法、过滤参数和最佳实践
 
 ### 外部工具集成
 
@@ -510,6 +518,17 @@ uv run paperbase search "transformer architecture" --limit 20
 # 在指定论文中搜索（NEW）
 uv run paperbase search "threshold" --paper-id "doi:10.1109/tro.2008.2004520"
 
+# 按状态过滤搜索结果（NEW）
+uv run paperbase search "neural network" --state normalized
+uv run paperbase search "deep learning" --state ready
+
+# 按年份过滤搜索结果（NEW）
+uv run paperbase search "attention" --year 2017
+uv run paperbase search "SLAM" --year-min 2020 --year-max 2024
+
+# 组合过滤条件（NEW）
+uv run paperbase search "vision" --state ready --year-min 2022 --limit 10
+
 # 知识图谱查询（需要先运行 graph update）
 uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
 uv run paperbase query similar "arxiv:1706.03762" --limit 5
@@ -678,6 +697,8 @@ graph LR
 | **查询复杂度** | O(log N)，基于倒排索引              | O(N)，图遍历算法                    |
 | **返回结果**   | 文档列表 + 匹配片段                 | 关系网络 + 路径距离                 |
 | **典型场景**   | 关键词搜索、布尔查询、模糊匹配      | 文献综述、引用分析、概念追溯        |
+| **过滤能力**   | 按状态、年份、特定论文过滤          | 按关系深度、相似度阈值过滤          |
+| **数据依赖**   | 仅需 registry/papers.db             | 需要 graph/graph.json               |
 
 **实际使用示例**：
 
@@ -685,6 +706,10 @@ graph LR
 # FTS5: "哪些论文讨论了注意力机制？"
 uv run paperbase search "attention mechanism"
 # 返回：包含这些词的论文列表，按相关性排序
+
+# FTS5 过滤: "2020 年后发布的关于注意力机制的论文"
+uv run paperbase search "attention mechanism" --year-min 2020 --state ready
+# 返回：过滤后的论文列表
 
 # Graphify: "与 Transformer 论文相关的研究脉络是什么？"
 uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
@@ -1038,6 +1063,7 @@ MIT License
 
 - [AGENTS.md](AGENTS.md) - Agent 工作指南（必读）
 - [CLAUDE.md](CLAUDE.md) - Claude 特定指南
+- [docs/usage/search.md](docs/usage/search.md) - Search 命令使用指南
 - [Graphify](https://github.com/Graphify-Labs/graphify) - 知识图谱工具
 - [Zotero MCP](https://github.com/54yyyu/zotero-mcp) - Zotero 集成
 - [paper-fetch-skill](https://github.com/Dictation354/paper-fetch-skill) - 在线论文获取（外部 CLI 工具）

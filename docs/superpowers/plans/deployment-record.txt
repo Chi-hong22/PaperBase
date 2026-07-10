@@ -1,0 +1,24 @@
+# PaperBase Skill 全局部署记录
+
+部署时间: 2026-07-09 12:53:49
+源目录: F:/__PaperBase__/skills/paperbase
+目标目录:
+  - ~/.claude/skills/paperbase
+  - ~/.codex/skills/paperbase
+
+文件统计:
+  - 源: 17 个文件
+  - Claude: 17 个文件
+  - Codex: 17 个文件
+
+独立性验证: 通过
+外部引用: 无
+
+关键文件:
+  - SKILL.md
+  - references/installation.md (107 行精简版)
+  - references/troubleshooting-integration.md
+  - references/cli_commands.md
+  - references/data_architecture.md
+  - references/query_routing.md
+  - references/troubleshooting.md

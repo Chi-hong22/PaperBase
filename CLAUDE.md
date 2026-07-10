@@ -25,12 +25,27 @@ PaperBase 是论文知识库脚手架，核心理念：
    paperbase status "doi:10.1038/nature"
    ```
 
-3. **同步 Registry 索引**
+3. **搜索论文**（全文检索 + 过滤）
+   ```bash
+   # 基本搜索
+   paperbase search "deep learning"
+   
+   # 按状态过滤
+   paperbase search "transformer" --state ready
+   
+   # 按年份过滤
+   paperbase search "SLAM" --year-min 2020 --year-max 2024
+   
+   # 组合过滤
+   paperbase search "attention" --state ready --year 2017 --limit 10
+   ```
+
+4. **同步 Registry 索引**
    ```bash
    paperbase sync
    ```
 
-4. **更新知识图谱**
+5. **更新知识图谱**
    ```bash
    paperbase graph update
    ```
@@ -93,7 +108,12 @@ PaperBase 是论文知识库脚手架，核心理念：
 1. **查看 manifest.json** 确认状态
 2. **检查 paper.md frontmatter** 是否通过 schema 验证
 3. **查看 registry/papers.db** 确认索引状态
-4. **检查 .graphifyignore** 确保 Graphify 不扫描重复内容
+4. **检查 graph/graph.json** 确认知识图谱状态
+   - 位置: `<base_dir>/graph/graph.json`
+   - 功能: 存储论文语义关联（节点 + 边）
+   - 生成: `paperbase graph update`
+   - 依赖: `query` 命令必需，`search` 不需要
+5. **检查 .graphifyignore** 确保 Graphify 不扫描重复内容
 
 ## Skills 使用
 

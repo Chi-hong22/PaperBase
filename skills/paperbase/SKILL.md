@@ -132,9 +132,19 @@ Agent: [图谱推理] → 返回概念交集论文
 人类: "搜索提到 transformer 的论文"
 Agent: [FTS5 检索] → 返回 7 篇 + 匹配片段
 
-# 在指定论文中搜索（NEW）
+# 在指定论文中搜索
 人类: "查询 RatSLAM 论文中 threshold 的相关内容"
 Agent: [单篇论文全文检索] → 返回 4 个匹配片段，显示上下文
+
+# 全文检索 + 过滤（NEW）
+人类: "搜索 transformer，限定 2024 年的论文"
+Agent: [FTS5 检索 + 年份过滤] → 返回 3 篇 + 匹配片段
+
+人类: "搜索 deep learning，只看 Zhang 作者的"
+Agent: [FTS5 检索 + 作者过滤] → 返回 2 篇 + 匹配片段
+
+人类: "搜索 SLAM，只看 2020-2024 年的作者包含 Li 的论文"
+Agent: [FTS5 检索 + 年份范围 + 作者过滤] → 返回 2 篇 + 匹配片段
 
 # 主题查询（NEW - 图谱标签匹配）
 人类: "查找 attention mechanism 相关的论文"
@@ -165,17 +175,30 @@ paperbase status <paper_id>            # 查询单篇
 paperbase status --year <year>         # 按年份筛选
 paperbase status --state <state>       # 按状态筛选
 paperbase search "<query>"             # 全文检索（全局）
-paperbase search "<query>" --paper-id <id>  # 在指定论文中搜索（NEW）
+paperbase search "<query>" --paper-id <id>  # 在指定论文中搜索
+paperbase search "<query>" --year <year>    # 按年份过滤搜索结果（NEW，支持 '2023' 或 '2020-2024'）
+paperbase search "<query>" --author <name>  # 按作者过滤搜索结果（NEW，模糊匹配）
 paperbase query related <id> --depth 2 # 相关论文（推荐 depth=2）
 paperbase query topic "<topic>"        # 主题查找（图谱标签）
 paperbase query topic "<topic>" --include-refs  # 包含引用文献
 ```
 
-**NEW - query topic 增强**：
+**query topic 增强**：
 - ✅ 覆盖率 100%（支持所有节点格式）
 - ✅ 分词匹配（"deep learning" 自动分词）
 - ✅ 引用扩展（`--include-refs` 显示外部文献）
 - ✅ 自动去重（多节点映射同一论文）
+
+**NEW - search 过滤增强**：
+- ✅ 年份过滤（`--year 2024` 或 `--year 2020-2024`，支持单一年份和范围）
+- ✅ 作者过滤（`--author Zhang`，模糊匹配，"Zhang" 可匹配 "Zhang Li" 或 "Li Zhang"）
+- ✅ 多条件组合（可同时使用年份和作者过滤器）
+- ❌ 期刊过滤暂不支持（Registry 中无 venue 字段，待扩展 schema）
+
+**search vs query 区别**：
+- `search`：全文关键词检索（FTS5），适合查找具体术语、方法名
+- `query topic`：图谱标签匹配，适合查找主题概念
+- `query related`：图谱遍历，适合发现论文关联
 
 ---
 
