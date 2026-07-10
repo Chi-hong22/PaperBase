@@ -7,7 +7,7 @@ from paperbase.core.identity import normalize_paper_id, generate_storage_id
 from paperbase.core.paths import PaperPaths
 from paperbase.core.registry import PaperRegistry
 from paperbase.core.manifest import create_manifest, save_manifest
-from paperbase.adapters.pdf_extractor import extract_pdf_metadata, extract_pdf_text
+from paperbase.adapters.pdf_extractor import extract_pdf_metadata
 from paperbase.adapters.pdf_converter import convert_pdf_to_markdown
 from paperbase.adapters.paper_fetch_adapter import PaperFetchAdapter, PaperFetchUnavailable
 from paperbase.core.normalizer import normalize_paper
@@ -148,15 +148,15 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         paths.paper_md.write_text(canonical_md, encoding="utf-8")
         canonical_sha256 = sha256_string(canonical_md)
 
-        # Step 7.5: 生成分块文件
-        console.print("[yellow]7.5. 生成文本分块...[/yellow]")
+        # Step 8: 生成文本分块
+        console.print("[yellow]8. 生成文本分块...[/yellow]")
         chunks = generate_chunks(canonical_md, paper_id)
         if chunks:
             write_chunks_jsonl(chunks, paths.chunks_jsonl)
             console.print(f"   ✓ 生成 {len(chunks)} 个文本块")
 
-        # Step 8: 保存元数据
-        console.print("[yellow]8. 保存元数据...[/yellow]")
+        # Step 9: 保存元数据
+        console.print("[yellow]9. 保存元数据...[/yellow]")
         manifest = create_manifest(paper_id, storage_id)
         manifest.state = PaperState.NORMALIZED
         manifest.source_pdf = SourcePDF(
@@ -176,8 +176,8 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         )
         save_manifest(manifest, paths.manifest_json)
 
-        # Step 9: 记录到知识库
-        console.print("[yellow]9. 记录到知识库...[/yellow]")
+        # Step 10: 记录到知识库
+        console.print("[yellow]10. 记录到知识库...[/yellow]")
         registry_path = base_dir / "registry" / "papers.db"
         registry_path.parent.mkdir(exist_ok=True)
         registry = PaperRegistry(registry_path)
@@ -195,9 +195,9 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         console.print(f"\n[green]✓ 论文已保存到知识库[/green]")
         console.print(f"   路径: {paths.paper_dir}")
 
-        # Step 10: 更新全文检索索引和知识图谱（可选）
+        # Step 11: 更新全文检索索引和知识图谱（可选）
         if not no_graph:
-            console.print("\n[yellow]10. 更新全文检索索引...[/yellow]")
+            console.print("\n[yellow]11. 更新全文检索索引...[/yellow]")
             try:
                 from paperbase.core.search_engine import SearchEngine
                 index_path = base_dir / "index" / "fts.db"
@@ -209,7 +209,7 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
                 console.print(f"[yellow]   ⚠ 索引更新失败: {e}[/yellow]")
                 console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
 
-            console.print("\n[yellow]11. 更新知识图谱...[/yellow]")
+            console.print("\n[yellow]12. 更新知识图谱...[/yellow]")
             try:
                 from paperbase.cli.commands.graph import update as graph_update
                 # 调用 graph update 命令
