@@ -44,6 +44,9 @@ uv.lock
 htmlcov/
 .tox/
 
+# Superpowers 开发临时文件
+.superpowers/
+
 # PaperBase specific
 # library/ 子目录精细控制（允许 graphify 扫描 papers/*.md）
 library/sources/         # 原始 PDF 等源文件
