@@ -1,5 +1,6 @@
 """PaperBase CLI 入口"""
 
+import os
 import click
 from pathlib import Path
 from dotenv import load_dotenv
@@ -17,19 +18,26 @@ from paperbase.cli.commands.config import config
 load_dotenv()
 
 
+def get_default_base_dir() -> Path:
+    """获取默认的 base_dir，优先使用环境变量"""
+    if env_path := os.getenv("PAPERBASE_LIBRARY"):
+        return Path(env_path)
+    return Path.cwd()
+
+
 @click.group()
 @click.version_option(version="0.1.0")
 @click.option(
     "--base-dir",
     type=click.Path(path_type=Path),
-    default=Path.cwd(),
-    help="PaperBase 根目录"
+    default=None,
+    help="PaperBase 根目录（默认：$PAPERBASE_LIBRARY 或当前目录）"
 )
 @click.pass_context
-def main(ctx, base_dir: Path):
+def main(ctx, base_dir: Path | None):
     """PaperBase - 学术论文知识库"""
     ctx.ensure_object(dict)
-    ctx.obj["base_dir"] = base_dir
+    ctx.obj["base_dir"] = base_dir if base_dir is not None else get_default_base_dir()
 
 
 # 注册命令
