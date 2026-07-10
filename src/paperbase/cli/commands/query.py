@@ -31,12 +31,28 @@ def query():
     "--depth",
     "-d",
     type=int,
-    default=1,
-    help="遍历深度（1=直接相关，2=二度相关）"
+    default=2,
+    help="遍历深度（推荐 2）。1=直接连接（主要是概念/引用），2=通过共享概念找相关论文，3=更广但噪音大"
 )
 @click.pass_context
 def related(ctx, paper_id: str, depth: int):
-    """查找相关论文"""
+    """查找相关论文
+
+    通过知识图谱查找与指定论文相关的其他论文。
+
+    depth 参数说明：
+
+    - depth=1: 返回直接连接的节点，主要是概念、引用文献、技术节点。
+      论文节点之间很少直接连接，通常返回 15-20 个节点，但几乎不包含其他论文。
+
+    - depth=2: 推荐值。通过共享的概念节点（如 bathymetric_slam、multibeam_echo_sounder）
+      或共享的引用文献找到相关论文。通常返回 25-45 个节点，包含 3-7 篇相关论文。
+
+    - depth=3: 返回更广泛的关联，但噪音较大。可能返回 70+ 个节点，但论文比例较低。
+
+    学术图谱特点：论文之间通过主题、方法论、引用文献间接关联，而非直接连接。
+    因此 depth=2 是发现论文语义关联的最佳平衡点。
+    """
     console = Console()
     base_dir = ctx.obj["base_dir"]
 
@@ -83,16 +99,33 @@ def related(ctx, paper_id: str, depth: int):
     all_node_ids = [n.get("id") for n in graph_data.get("nodes", []) if n.get("id")]
     graph_node_id = None
 
+    # 构建邻接表以检查哪些节点有连接
+    edges = graph_data.get("links", graph_data.get("edges", []))
+    connected_nodes = set()
+    for edge in edges:
+        source = edge.get("source")
+        target = edge.get("target")
+        if source:
+            connected_nodes.add(source)
+        if target:
+            connected_nodes.add(target)
+
     # 尝试精确匹配
-    if storage_id in all_node_ids:
+    if storage_id in all_node_ids and storage_id in connected_nodes:
         graph_node_id = storage_id
     else:
         # 尝试找到以 storage_id 开头的节点
         matches = [nid for nid in all_node_ids if nid.startswith(storage_id + "_")]
         if matches:
-            # 优先选择 _paper 后缀
-            paper_suffix = [m for m in matches if m.endswith("_paper")]
-            graph_node_id = paper_suffix[0] if paper_suffix else matches[0]
+            # 优先选择有连接的节点
+            connected_matches = [m for m in matches if m in connected_nodes]
+            if connected_matches:
+                # 在有连接的节点中，优先选择 _paper 后缀
+                paper_suffix = [m for m in connected_matches if m.endswith("_paper")]
+                graph_node_id = paper_suffix[0] if paper_suffix else connected_matches[0]
+            else:
+                # 如果都没有连接，则选择第一个
+                graph_node_id = matches[0]
 
     if not graph_node_id:
         console.print(f"[yellow]论文 {paper_id} 不在知识图谱中[/yellow]")
@@ -149,7 +182,21 @@ def related(ctx, paper_id: str, depth: int):
 
             # 转换 authors list 为字符串并截断
             if isinstance(authors, list):
-                authors = ", ".join(authors)
+                # 处理 list，元素可能是 dict 或 str
+                author_names = [a.get("name", "Unknown") if isinstance(a, dict) else str(a) for a in authors]
+                authors = ", ".join(author_names)
+            elif isinstance(authors, str):
+                # 可能是 JSON 字符串
+                try:
+                    authors_list = json.loads(authors)
+                    if isinstance(authors_list, list):
+                        author_names = [a.get("name", "Unknown") if isinstance(a, dict) else str(a) for a in authors_list]
+                        authors = ", ".join(author_names)
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            else:
+                authors = str(authors)
+
             if len(authors) > 25:
                 authors = authors[:22] + "..."
 

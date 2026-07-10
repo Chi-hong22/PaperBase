@@ -141,8 +141,18 @@ Agent: [query topic --include-refs] → 本地: 2 篇, 引用: 3 篇
 
 # 关联查询（图谱遍历）
 人类: "找出与 BERT 论文相关的研究"
-Agent: [query related] → 直接相关: 5 篇, 二度相关: 12 篇
+Agent: [query related --depth 2] → 相关论文: 5 篇（通过共享概念关联）
+
+人类: "只看直接引用的文献"
+Agent: [query related --depth 1] → 直接连接: 18 个节点（主要是引用和概念）
 ```
+
+**depth 参数说明**：
+- `--depth 1`: 直接连接的节点，主要是概念、引用文献、技术节点。论文之间很少直接连接。
+- `--depth 2`: **推荐值**。通过共享概念（如 bathymetric_slam）或共享引用找到相关论文。
+- `--depth 3`: 更广泛的关联，但噪音较大。
+
+**学术图谱特点**：论文之间通过主题、方法论、引用文献间接关联，depth=2 是发现论文语义关联的最佳平衡点。
 
 **关键命令**：
 ```bash
@@ -151,7 +161,7 @@ paperbase status <paper_id>            # 查询单篇
 paperbase status --year <year>         # 按年份筛选
 paperbase status --state <state>       # 按状态筛选
 paperbase search "<query>"             # 全文检索
-paperbase query related <id> --depth N # 相关论文（图谱遍历）
+paperbase query related <id> --depth 2 # 相关论文（推荐 depth=2）
 paperbase query topic "<topic>"        # 主题查找（图谱标签）
 paperbase query topic "<topic>" --include-refs  # 包含引用文献
 ```
