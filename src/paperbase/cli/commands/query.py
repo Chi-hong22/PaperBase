@@ -8,6 +8,7 @@ CLI 高级用户参数化查询接口。
 """
 
 import click
+import json
 from rich.console import Console
 from rich.table import Table
 from pathlib import Path
@@ -295,9 +296,26 @@ def topic(ctx, topic: str, include_refs: bool):
         if len(title) > 50:
             title = title[:47] + "..."
 
-        # 转换 authors list 为字符串并截断
-        if isinstance(authors, list):
-            authors = ", ".join(authors)
+        # 转换 authors 为字符串
+        if isinstance(authors, str):
+            # 数据库中存储的是 JSON 字符串，需要反序列化
+            try:
+                authors_list = json.loads(authors)
+                if isinstance(authors_list, list):
+                    # 提取 name 字段
+                    author_names = [a.get("name", "Unknown") if isinstance(a, dict) else str(a) for a in authors_list]
+                    authors = ", ".join(author_names)
+                else:
+                    authors = str(authors_list)
+            except (json.JSONDecodeError, AttributeError):
+                authors = str(authors)
+        elif isinstance(authors, list):
+            # 处理 list，元素可能是 dict 或 str
+            author_names = [a.get("name", "Unknown") if isinstance(a, dict) else str(a) for a in authors]
+            authors = ", ".join(author_names)
+        else:
+            authors = str(authors)
+
         if len(authors) > 25:
             authors = authors[:22] + "..."
 
