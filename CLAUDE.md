@@ -48,7 +48,9 @@ PaperBase 是论文知识库脚手架，核心理念：
   - **调用方式**: PaperBase 通过 `subprocess` 调用 `paper-fetch --format both`
   - **职责**: 从 DOI/arXiv/URL 获取论文内容和元数据
   - **验证**: `paper-fetch --version`（应显示 3.0.1+）
-  - **备选**: 手动提供本地 PDF，使用 `paperbase ingest --file paper.pdf`
+  - **⚠️ 局限性**: 付费墙论文只能获取元数据，无全文。**推荐优先使用 PDF 本地导入**
+  - **推荐方式**: `paperbase ingest --file paper.pdf`（完整全文 + 图表 + 公式）
+  - **详见**: `docs/troubleshooting/online-fetch-limitations.md`
 - **知识图谱**: `uv tool install graphify`
   - **定位**: 外部 CLI 工具
   - **职责**: 构建论文语义关联网络

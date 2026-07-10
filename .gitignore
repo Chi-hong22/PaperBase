@@ -45,7 +45,17 @@ htmlcov/
 .tox/
 
 # PaperBase specific
-library/                 # 完全不上传 library/（私人论文库）
+# library/ 子目录精细控制（允许 graphify 扫描 papers/*.md）
+library/sources/         # 原始 PDF 等源文件
+library/collections/     # 论文集合
+library/notes/           # 笔记
+library/papers/*/source/ # 论文子目录中的源文件
+library/papers/*/chunks.jsonl
+library/papers/*/references.jsonl
+library/papers/*/manifest.json
+library/papers/*/assets/ # 图片等资源
+library/papers/graphify-out/
+
 registry/
 graph/
 index/                   # 向量索引
