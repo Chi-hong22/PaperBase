@@ -1,5 +1,7 @@
 """ingest 命令实现"""
 
+import os
+import yaml
 import click
 from rich.console import Console
 from pathlib import Path
@@ -23,6 +25,158 @@ def _target_is_local_file(target: str | None) -> bool:
     if not target:
         return False
     return Path(target).expanduser().exists()
+
+
+def _create_zotero_adapter(ctx):
+    """从配置和环境变量创建 ZoteroAdapter
+
+    Returns:
+        ZoteroAdapter 实例
+
+    Raises:
+        click.Abort: 如果 zotero_mcp 不可用或配置错误
+    """
+    from paperbase.adapters.zotero_adapter import (
+        ZoteroAdapter,
+        ZoteroUnavailable,
+    )
+
+    console = Console()
+    base_dir = ctx.obj["base_dir"]
+
+    # Read config
+    config_path = base_dir / "config" / "paperbase.yaml"
+    local_mode = True
+    api_key = None
+    library_id = None
+    library_type = "user"
+
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+            zotero_config = config.get("adapters", {}).get("zotero", {})
+            local_mode = zotero_config.get("local_mode", True)
+
+    # Override with environment variables
+    api_key = os.getenv("ZOTERO_API_KEY", api_key)
+    library_id = os.getenv("ZOTERO_LIBRARY_ID", library_id)
+    library_type = os.getenv("ZOTERO_LIBRARY_TYPE", library_type)
+
+    try:
+        return ZoteroAdapter(
+            local_mode=local_mode,
+            api_key=api_key,
+            library_id=library_id,
+            library_type=library_type,
+        )
+    except (ZoteroUnavailable, ValueError) as e:
+        console.print(f"[red]❌ Zotero 初始化失败: {e}[/red]")
+        raise click.Abort()
+
+
+def _create_paper_from_metadata(base_dir, metadata_dict, paper_id, storage_id, source_provider, no_graph):
+    """从元数据创建论文（无 PDF 场景）
+
+    Args:
+        base_dir: 知识库根目录
+        metadata_dict: 元数据字典（title, authors, year, doi, abstract, url）
+        paper_id: 论文 ID
+        storage_id: 存储 ID
+        source_provider: 来源标识（如 "zotero"）
+        no_graph: 是否跳过图谱更新
+
+    Returns:
+        PaperPaths 对象
+    """
+    console = Console()
+
+    # Create markdown from metadata
+    authors_str = ", ".join(metadata_dict.get("authors", ["Unknown"]))
+    abstract = metadata_dict.get("abstract", "No abstract available.")
+
+    candidate_md = f"""# {metadata_dict.get("title", "Untitled")}
+
+## Abstract
+
+{abstract}
+
+## Metadata
+
+- **Authors**: {authors_str}
+- **Year**: {metadata_dict.get("year", "N/A")}
+- **DOI**: {metadata_dict.get("doi", "N/A")}
+- **URL**: {metadata_dict.get("url", "N/A")}
+- **Source**: {source_provider}
+"""
+
+    # Normalize paper
+    paper_metadata = normalize_paper(
+        candidate_md=candidate_md,
+        metadata=metadata_dict,
+        paper_id=paper_id,
+        storage_id=storage_id,
+        source_provider=source_provider
+    )
+
+    # Create directory structure
+    paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
+    paths.create_directories()
+
+    # Generate canonical markdown
+    metadata_dict_full = paper_metadata.model_dump(mode="json", exclude_none=True)
+    canonical_md = generate_canonical_markdown(metadata_dict_full, candidate_md)
+    paths.paper_md.write_text(canonical_md, encoding="utf-8")
+    canonical_sha256 = sha256_string(canonical_md)
+
+    # Generate chunks
+    chunks = generate_chunks(canonical_md, paper_id)
+    if chunks:
+        write_chunks_jsonl(chunks, paths.chunks_jsonl)
+
+    # Save manifest
+    manifest = create_manifest(paper_id, storage_id)
+    manifest.state = PaperState.NORMALIZED
+    manifest.canonical_md = CanonicalMD(
+        path=f"../{storage_id}.md",
+        sha256=canonical_sha256,
+        schema_version="1.0"
+    )
+    manifest.pipeline = PipelineInfo(
+        converter=source_provider,
+        converter_version="0.6.0" if source_provider == "zotero" else "unknown",
+        normalizer_version="1.0.0"
+    )
+    save_manifest(manifest, paths.manifest_json)
+
+    # Register
+    registry_path = base_dir / "registry" / "papers.db"
+    registry_path.parent.mkdir(exist_ok=True)
+    registry = PaperRegistry(registry_path)
+    registry.register_paper(
+        paper_id=paper_id,
+        storage_id=storage_id,
+        state=PaperState.NORMALIZED,
+        title=paper_metadata.title,
+        authors=[a.name for a in paper_metadata.authors],
+        year=paper_metadata.year,
+        doi=metadata_dict.get("doi")
+    )
+    registry.close()
+
+    # Update index if needed
+    if not no_graph:
+        console.print("\n[yellow]更新全文检索索引...[/yellow]")
+        try:
+            from paperbase.core.search_engine import SearchEngine
+            index_path = base_dir / "index" / "fts.db"
+            library_path = base_dir / "library" / "papers"
+            with SearchEngine(index_path, library_path) as engine:
+                engine.build_index()
+            console.print("[green]✓ 索引更新完成[/green]")
+        except Exception as e:
+            console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
+
+    return paths
 
 
 def _ingest_online(ctx, query: str, no_graph: bool):
@@ -231,24 +385,138 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         raise
 
 
+def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
+    """从 Zotero 导入单篇论文
+
+    Args:
+        ctx: Click 上下文
+        item_key: Zotero item key
+        no_graph: 是否跳过图谱更新
+    """
+    console = Console()
+    base_dir = ctx.obj["base_dir"]
+
+    console.print(f"[cyan]从 Zotero 导入论文:[/cyan] {item_key}")
+
+    # 初始化 ZoteroAdapter
+    adapter = _create_zotero_adapter(ctx)
+
+    try:
+        # Step 1: 获取 Zotero 条目
+        console.print("[yellow]1. 获取 Zotero 条目...[/yellow]")
+        item = adapter.fetch_item(item_key)
+        console.print(f"   标题: {item.title}")
+        console.print(f"   作者: {', '.join(item.authors) if item.authors else 'N/A'}")
+        console.print(f"   年份: {item.year or 'N/A'}")
+        console.print(f"   类型: {item.item_type}")
+        console.print(f"   PDF: {'有' if item.has_pdf else '无'}")
+
+        # Step 2: 生成 paper_id
+        console.print("[yellow]2. 生成 paper_id...[/yellow]")
+        if item.doi:
+            paper_id = normalize_paper_id(item.doi)
+        elif item.arxiv_id:
+            paper_id = normalize_paper_id(f"arxiv:{item.arxiv_id}")
+        else:
+            # Fallback: 使用 Zotero key
+            paper_id = normalize_paper_id(f"zotero:{item_key}")
+
+        storage_id = generate_storage_id(paper_id)
+        console.print(f"   paper_id: {paper_id}")
+        console.print(f"   storage_id: {storage_id}")
+
+        # Step 3: 查重检查
+        console.print("[yellow]3. 查重检查...[/yellow]")
+        registry_path = base_dir / "registry" / "papers.db"
+        if registry_path.exists():
+            registry = PaperRegistry(registry_path)
+
+            # 检查 DOI 重复
+            if item.doi:
+                existing = registry.find_by_doi(item.doi)
+                if existing:
+                    registry.close()
+                    console.print(f"[yellow]⚠️  论文已存在（DOI 重复）[/yellow]")
+                    console.print(f"   Paper ID: {existing['paper_id']}")
+                    console.print(f"   标题: {existing.get('title', 'N/A')}")
+                    console.print("[dim]跳过此论文[/dim]")
+                    return
+
+            # 检查标题重复
+            if item.title:
+                existing = registry.find_by_title(item.title)
+                if existing:
+                    registry.close()
+                    console.print(f"[yellow]⚠️  论文可能已存在（标题相同）[/yellow]")
+                    console.print(f"   Paper ID: {existing['paper_id']}")
+                    console.print(f"   标题: {existing.get('title', 'N/A')}")
+                    console.print("[dim]跳过此论文[/dim]")
+                    return
+
+            registry.close()
+
+        # Step 4: 根据是否有 PDF 分流处理
+        if item.has_pdf:
+            console.print("[yellow]4. 检测到 PDF 附件（当前版本仅支持元数据导入）...[/yellow]")
+            console.print("[dim]提示：完整 PDF 导入功能将在后续版本支持[/dim]")
+
+        console.print("[yellow]4. 摄入元数据...[/yellow]")
+        # 构造元数据字典
+        metadata_dict = {
+            "title": item.title,
+            "authors": item.authors,
+            "year": item.year,
+            "doi": item.doi,
+            "abstract": item.abstract,
+            "url": item.url,
+        }
+
+        # 使用公共函数创建论文
+        paths = _create_paper_from_metadata(
+            base_dir=base_dir,
+            metadata_dict=metadata_dict,
+            paper_id=paper_id,
+            storage_id=storage_id,
+            source_provider="zotero",
+            no_graph=no_graph
+        )
+
+        console.print(f"\n[green]✓ 论文元数据已保存到知识库[/green]")
+        console.print(f"   路径: {paths.paper_dir}")
+        if item.has_pdf:
+            console.print("[dim]注意：PDF 附件未导入，如需全文请使用 PDF 直接导入[/dim]")
+
+        console.print(f"\n[green]✓ 摄入完成[/green]")
+
+    except Exception as e:
+        console.print(f"\n[red]❌ 摄入失败: {e}[/red]")
+        raise
+
+
 @click.command()
 @click.argument("target", required=False)
 @click.option("--file", "file_path", type=click.Path(exists=True, path_type=Path), help="本地 PDF 文件路径")
 @click.option("--no-graph", is_flag=True, help="跳过图谱更新")
 @click.option("--batch", type=click.Path(exists=True, path_type=Path), help="批量摄入文件列表（每行一个路径、DOI、URL 或标题）")
+@click.option("--zotero-key", type=str, help="从 Zotero 导入指定 item key 的论文")
 @click.pass_context
-def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, batch: Path | None):
+def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, batch: Path | None, zotero_key: str | None):
     """摄入论文：本地 PDF 或 DOI/URL/title"""
     console = Console()
 
     # 互斥检查
-    if sum([bool(target), bool(file_path), bool(batch)]) > 1:
-        console.print("[red]❌ 只能指定一个输入源：TARGET、--file 或 --batch[/red]")
+    if sum([bool(target), bool(file_path), bool(batch), bool(zotero_key)]) > 1:
+        console.print("[red]❌ 只能指定一个输入源：TARGET、--file、--batch 或 --zotero-key[/red]")
         raise click.Abort()
 
-    if not target and not file_path and not batch:
-        console.print("[red]❌ 必须提供输入源：TARGET、--file 或 --batch[/red]")
+    if not target and not file_path and not batch and not zotero_key:
+        console.print("[red]❌ 必须提供输入源：TARGET、--file、--batch 或 --zotero-key[/red]")
         raise click.Abort()
+
+    # Zotero 模式
+    if zotero_key:
+        _ingest_from_zotero(ctx, zotero_key, no_graph)
+        return
 
     # 批量模式
     if batch:
