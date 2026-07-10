@@ -247,3 +247,42 @@ class ZoteroAdapter:
                 pass
 
         return items
+
+    def get_pdf_path(self, item_key: str) -> str | None:
+        """Get local PDF attachment path for a Zotero item.
+
+        Args:
+            item_key: Zotero item key
+
+        Returns:
+            Local file path to PDF, or None if no PDF attachment found
+
+        Raises:
+            ZoteroUnavailable: If Zotero is unavailable or not in local mode
+        """
+        if not self.local_mode:
+            # Web API mode doesn't support local file paths
+            return None
+
+        try:
+            result = self._retrieval.get_attachment_path(item_key=item_key, ctx=self._ctx)
+        except Exception as e:
+            # Not finding attachments is not an error - return None
+            return None
+
+        # Parse result: zotero_mcp returns markdown with file paths
+        # Example: "**Path**: /path/to/file.pdf"
+        if not result or "Error" in result or "error" in result.lower():
+            return None
+
+        # Extract file path from markdown
+        for line in result.split("\n"):
+            line = line.strip()
+            if line.startswith("**Path**:") or line.startswith("Path:"):
+                # Extract path
+                path = line.split(":", 1)[-1].strip()
+                # Verify it's a PDF
+                if path.lower().endswith(".pdf") and os.path.exists(path):
+                    return path
+
+        return None
