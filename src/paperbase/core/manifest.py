@@ -2,13 +2,13 @@
 
 import json
 from pathlib import Path
-from datetime import datetime, UTC
 from paperbase.schemas.manifest import ManifestSchema, PaperState
+from paperbase.utils.timestamp import now_iso8601
 
 
 def create_manifest(paper_id: str, storage_id: str) -> ManifestSchema:
     """创建新的 manifest"""
-    now = datetime.now(UTC).isoformat()
+    now = now_iso8601()
     return ManifestSchema(
         paper_id=paper_id,
         storage_id=storage_id,
@@ -34,7 +34,7 @@ def save_manifest(manifest: ManifestSchema, path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
 
     # 更新 updated_at
-    manifest.updated_at = datetime.now(UTC).isoformat()
+    manifest.updated_at = now_iso8601()
 
     # 先写入临时文件
     temp_path = path.with_suffix(".tmp")

@@ -4,7 +4,7 @@
 """
 
 import re
-from datetime import datetime, UTC
+from paperbase.utils.timestamp import now_iso8601
 from paperbase.schemas.paper import (
     PaperMetadata,
     PaperAuthor,
@@ -78,7 +78,7 @@ def normalize_paper(
     )
 
     # 构建 provenance
-    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    now = now_iso8601()
     provenance = PaperProvenance(
         ingested_at=now,
         converter={"name": source_provider, "version": "1.0.0"},

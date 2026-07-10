@@ -7,7 +7,7 @@ import sqlite3
 import json
 import logging
 from pathlib import Path
-from datetime import datetime, UTC
+from paperbase.utils.timestamp import now_iso8601
 from paperbase.schemas.manifest import PaperState
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ class PaperRegistry:
     ):
         """注册或更新论文"""
         authors_json = json.dumps(authors or [])
-        now = datetime.now(UTC).isoformat()
+        now = now_iso8601()
 
         self.conn.execute("""
             INSERT INTO papers (paper_id, storage_id, state, title, authors, year, doi, updated_at)
@@ -107,7 +107,7 @@ class PaperRegistry:
 
     def update_state(self, paper_id: str, state: PaperState):
         """更新论文状态"""
-        now = datetime.now(UTC).isoformat()
+        now = now_iso8601()
         self.conn.execute(
             "UPDATE papers SET state = ?, updated_at = ? WHERE paper_id = ?",
             (state.value, now, paper_id)
