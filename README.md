@@ -491,6 +491,19 @@ uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
 uv run paperbase query similar "arxiv:1706.03762" --limit 5
 ```
 
+### 维护和同步
+
+```bash
+# 同步 Registry 索引与文件系统（清理孤立记录）
+uv run paperbase sync
+
+# 仅查看需要清理的记录，不执行删除
+uv run paperbase sync --dry-run
+
+# 跳过确认直接清理
+uv run paperbase sync --yes
+```
+
 ### 知识图谱
 
 ```bash
@@ -935,8 +948,18 @@ uv run paperbase graph update --force
 
 ### Registry 数据不一致
 
+**症状**: Registry 索引与文件系统不同步（如手动删除了论文文件，但索引仍存在）
+
+**解决方案**:
+
 ```bash
-# Registry 可以重建
+# 方法 1: 使用 sync 命令清理孤立记录（推荐）
+uv run paperbase sync
+
+# 查看需要清理的记录，不执行删除
+uv run paperbase sync --dry-run
+
+# 方法 2: 完全重建 Registry（耗时较长）
 rm registry/papers.db
 uv run paperbase status  # 自动重建索引
 ```
