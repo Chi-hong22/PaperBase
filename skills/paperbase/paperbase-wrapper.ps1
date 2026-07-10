@@ -150,8 +150,13 @@ if (-not $LibraryPath) {
     exit 1
 }
 
-# Navigate to repository root
-$RepoRoot = Split-Path -Parent $LibraryPath
+# Determine repository root
+# If LibraryPath ends with \library, use parent; otherwise use LibraryPath itself
+if ($LibraryPath -match '\\library$') {
+    $RepoRoot = Split-Path -Parent $LibraryPath
+} else {
+    $RepoRoot = $LibraryPath
+}
 Set-Location $RepoRoot
 
 # Check if uv is available
@@ -163,4 +168,4 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 
 # Execute paperbase CLI
 Write-Host "[PaperBase] Using library: $LibraryPath" -ForegroundColor $SuccessColor
-uv run paperbase @args
+uv run paperbase --base-dir $RepoRoot @args
