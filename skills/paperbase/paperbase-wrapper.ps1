@@ -167,5 +167,5 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 }
 
 # Execute paperbase CLI
-Write-Host "[PaperBase] Using library: $LibraryPath" -ForegroundColor $SuccessColor
+Write-Host "[PaperBase] Using library: $RepoRoot" -ForegroundColor $SuccessColor
 uv run paperbase --base-dir $RepoRoot @args
