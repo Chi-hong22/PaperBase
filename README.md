@@ -443,16 +443,6 @@ graph LR
 - 状态机简化为 2 个主状态，降低复杂度
 - 详见 [AGENTS.md](AGENTS.md) 的完整状态转换规则
 
-### 核心模块
-
-- **`core/identity.py`**: paper_id 规范化和 storage_id 生成
-- **`core/paths.py`**: 路径管理（带安全验证）
-- **`core/manifest.py`**: 状态机和溯源管理
-- **`core/normalizer.py`**: Markdown 规范化器
-- **`core/registry.py`**: SQLite 索引（支持上下文管理器）
-- **`core/search_engine.py`**: 全文检索（FTS5）
-- **`adapters/`**: 外部工具适配器（PDF 提取、转换、Graphify）
-
 ### 检索架构：为什么同时需要 SQLite FTS5 和知识图谱？
 
 **定位不同，互为补充**：
