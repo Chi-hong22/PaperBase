@@ -1,7 +1,5 @@
 # PaperBase
 
-<div align="center">
-
 ## 📖 PaperBase 是什么？
 
 PaperBase 是专为 AI 时代设计的**学术论文知识库脚手架**，解决传统文献管理工具（Zotero、Mendeley）的核心痛点：**无法将论文转化为机器可理解的结构化知识**。
@@ -831,6 +829,4 @@ MIT License
 
 ---
 
-<div align="center">
 Made with ❤️ by researchers, for researchers
-</div>
