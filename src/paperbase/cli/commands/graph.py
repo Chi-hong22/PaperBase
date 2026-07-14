@@ -165,6 +165,8 @@ def status(ctx):
     console.print(f"[cyan]索引状态[/cyan]")
     console.print(f"  位置: {graph_dir}")
     console.print(f"  索引文件: {len(stats['files'])} 个")
+    console.print(f"  节点: {stats['nodes']}")
+    console.print(f"  边: {stats['edges']}")
     if stats['files']:
         console.print(f"  详细:")
         for f in stats['files']:
