@@ -4,12 +4,14 @@ PaperBase Doctor - Environment Diagnostics Tool
 Checks system dependencies, configuration, and library health.
 """
 
+import json
 import sys
 import subprocess
 import shutil
 import click
 from pathlib import Path
 from typing import List, Tuple
+from paperbase.utils.markdown import find_local_absolute_image_paths
 
 def check_python_version() -> Tuple[bool, str]:
     """Check Python version >= 3.11"""
@@ -116,15 +118,47 @@ def check_library_consistency(base_dir: Path) -> Tuple[bool, str]:
 
     return True, "Registry and Canonical Markdown are consistent"
 
+
+def check_canonical_asset_paths(base_dir: Path) -> Tuple[bool, str]:
+    """Reject machine-local absolute image paths in Canonical Markdown."""
+    papers_dir = base_dir / "library" / "papers"
+    if not papers_dir.is_dir():
+        return True, "Canonical asset path check skipped (library unavailable)"
+
+    violations: list[str] = []
+    for paper_path in papers_dir.glob("p_*.md"):
+        try:
+            content = paper_path.read_text(encoding="utf-8")
+        except OSError as e:
+            return False, f"Canonical asset path check failed: {e}"
+
+        if find_local_absolute_image_paths(content):
+            violations.append(paper_path.name)
+
+    if violations:
+        return False, f"Canonical Markdown contains local absolute asset paths: {len(violations)} files"
+    return True, "Canonical Markdown asset paths are portable"
+
 def check_graph(base_dir: Path) -> Tuple[bool, str]:
     """Check knowledge graph"""
     graph_path = base_dir / "graph"
-    if graph_path.exists():
-        files = list(graph_path.glob("*.json"))
-        if files:
-            return True, f"Knowledge graph found ({len(files)} files)"
-        return True, "Knowledge graph directory exists (empty)"
-    return False, "Knowledge graph not found (run 'graph update' to create)"
+    if not graph_path.is_dir():
+        return False, "Knowledge graph not found (run 'graph update' to create)"
+
+    graph_json = graph_path / "graph.json"
+    if not graph_json.is_file():
+        return False, "Knowledge graph missing graph.json (run 'graph update' to create)"
+
+    try:
+        graph_data = json.loads(graph_json.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        return False, f"Knowledge graph graph.json is invalid: {e}"
+
+    edges = graph_data.get("links", graph_data.get("edges")) if isinstance(graph_data, dict) else None
+    if not isinstance(graph_data, dict) or not isinstance(graph_data.get("nodes"), list) or not isinstance(edges, list):
+        return False, "Knowledge graph graph.json has invalid node-link structure"
+
+    return True, "Knowledge graph found (graph.json)"
 
 def check_paper_fetch() -> Tuple[bool, str]:
     """Check if paper-fetch CLI is available"""
@@ -145,12 +179,13 @@ def check_paper_fetch() -> Tuple[bool, str]:
             return True, "paper-fetch (version check failed)"
     return False, "not installed (optional); install with: uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git"
 
-def check_llm_config() -> Tuple[bool, str]:
+def check_llm_config(base_dir: Path | None = None) -> Tuple[bool, str]:
     """Check LLM configuration"""
     try:
         from paperbase.config.loader import load_config
 
-        config = load_config()
+        config_path = base_dir / "config" / "paperbase.yaml" if base_dir else None
+        config = load_config(config_path)
 
         if not config.llm.is_enabled():
             return True, "disabled (optional)"
@@ -182,10 +217,11 @@ def main(base_dir: Path | None = None):
         ("graphify (optional)", check_graphify()),
         ("paper-fetch (optional)", check_paper_fetch()),
         ("SQLite Version", check_sqlite_version()),
-        ("LLM Configuration", check_llm_config()),
+        ("LLM Configuration", check_llm_config(base_dir)),
         ("PaperBase Library", check_library(base_dir)),
         ("Registry Database", check_registry(base_dir)),
         ("Library Consistency", check_library_consistency(base_dir)),
+        ("Canonical Asset Paths", check_canonical_asset_paths(base_dir)),
         ("Knowledge Graph", check_graph(base_dir)),
     ]
 
