@@ -424,7 +424,6 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
         console.print(f"   作者: {', '.join(item.authors) if item.authors else 'N/A'}")
         console.print(f"   年份: {item.year or 'N/A'}")
         console.print(f"   类型: {item.item_type}")
-        console.print(f"   PDF: {'有' if item.has_pdf else '无'}")
 
         # Step 2: 生成 paper_id
         console.print("[yellow]2. 生成 paper_id...[/yellow]")
@@ -472,19 +471,18 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
 
         # Step 4: 根据是否有 PDF 分流处理
         pdf_path = None
-        if item.has_pdf:
-            console.print("[yellow]4. 检测到 PDF 附件，尝试获取路径...[/yellow]")
-            try:
-                pdf_path_str = adapter.get_pdf_path(item_key)
-                if pdf_path_str:
-                    pdf_path = Path(pdf_path_str)
-                    console.print(f"[green]   ✓ 找到 PDF: {pdf_path.name}[/green]")
-                else:
-                    console.print("[yellow]   ⚠ 无法获取 PDF 路径（可能使用 Web API 模式）[/yellow]")
-                    console.print("[dim]   降级为元数据导入[/dim]")
-            except Exception as e:
-                console.print(f"[yellow]   ⚠ 获取 PDF 路径失败: {e}[/yellow]")
+        console.print("[yellow]4. 探测本地 PDF 附件...[/yellow]")
+        try:
+            pdf_path_str = adapter.get_pdf_path(item_key)
+            if pdf_path_str:
+                pdf_path = Path(pdf_path_str)
+                console.print(f"[green]   ✓ 找到 PDF: {pdf_path.name}[/green]")
+            else:
+                console.print("[yellow]   ⚠ 无法获取 PDF 路径（可能使用 Web API 模式）[/yellow]")
                 console.print("[dim]   降级为元数据导入[/dim]")
+        except Exception as e:
+            console.print(f"[yellow]   ⚠ 获取 PDF 路径失败: {e}[/yellow]")
+            console.print("[dim]   降级为元数据导入[/dim]")
 
         # Step 5: 如果有 PDF，走完整 PDF 导入流程
         if pdf_path and pdf_path.exists():
@@ -621,9 +619,6 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
 
         console.print(f"\n[green]✓ 论文元数据已保存到知识库[/green]")
         console.print(f"   路径: {paths.paper_dir}")
-        if item.has_pdf and not pdf_path:
-            console.print("[yellow]⚠ PDF 附件未导入（Web API 模式或路径不可用）[/yellow]")
-            console.print("[dim]   提示：使用本地模式或手动下载 PDF 后使用: paperbase ingest --file <path>[/dim]")
 
         console.print(f"\n[green]✓ 摄入完成[/green]")
         return "success"
@@ -671,7 +666,7 @@ def _ingest_zotero_recent(ctx, limit: int, no_graph: bool):
 
             try:
                 # 调用单篇导入函数（强制 no_graph=True）
-                result = _ingest_from_zotero(ctx, item.item_key, no_graph=True)
+                result = _ingest_from_zotero(ctx, item.key, no_graph=True)
                 if result == "success":
                     success_count += 1
                 elif result == "skipped":
