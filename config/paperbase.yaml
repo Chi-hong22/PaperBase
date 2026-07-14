@@ -89,12 +89,11 @@ adapters:
   # ScanSci Adapter  # 预留接口
   scansci:
     enabled: true
-    scihub_enabled: true 
+    scihub_enabled: false
     require_authorized_access: true
 
 # 术语库配置
 terminology:
   fuzzy_matching: true     # 是否启用模糊匹配
   custom_aliases: []       # 自定义别名
-
 

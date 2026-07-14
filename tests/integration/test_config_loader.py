@@ -17,6 +17,12 @@ class TestConfigLoader:
         assert hasattr(config, "llm")
         assert hasattr(config, "graph")
 
+    def test_default_config_disables_scihub(self):
+        """默认配置不得授权通过 Sci-Hub 绕过付费墙。"""
+        config = load_config()
+
+        assert config.adapters["scansci"]["scihub_enabled"] is False
+
     def test_load_nonexistent_config(self):
         """测试加载不存在的配置文件"""
         config = load_config(Path("/nonexistent/config.yaml"))
