@@ -15,6 +15,7 @@ from paperbase.adapters.paper_fetch_adapter import PaperFetchAdapter, PaperFetch
 from paperbase.core.normalizer import normalize_paper
 from paperbase.core.online_ingest import ingest_fetched_paper
 from paperbase.schemas.manifest import PaperState, SourcePDF, CanonicalMD, PipelineInfo
+from paperbase.schemas.paper import PaperIdentifiers
 from paperbase.core.chunker import generate_chunks, write_chunks_jsonl
 from paperbase.utils.hash import sha256_file, sha256_string
 from paperbase.utils.markdown import generate_canonical_markdown
@@ -117,6 +118,10 @@ def _create_paper_from_metadata(base_dir, metadata_dict, paper_id, storage_id, s
         storage_id=storage_id,
         source_provider=source_provider
     )
+    if metadata_dict.get("abstract"):
+        paper_metadata.abstract = metadata_dict["abstract"]
+    if metadata_dict.get("doi"):
+        paper_metadata.identifiers = PaperIdentifiers(doi=metadata_dict["doi"])
 
     # Create directory structure
     paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
@@ -205,6 +210,14 @@ def _ingest_online(ctx, query: str, no_graph: bool):
         except Exception as e:
             console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
             console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
+
+        console.print("[yellow]更新知识图谱...[/yellow]")
+        try:
+            from paperbase.cli.commands.graph import update as graph_update
+            ctx.invoke(graph_update, force=False)
+        except Exception as e:
+            console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
+            console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
     else:
         console.print("[dim]跳过索引更新（--no-graph）[/dim]")
 
@@ -523,6 +536,10 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
                     storage_id=storage_id,
                     source_provider="zotero+markitdown"
                 )
+                if merged_metadata.get("abstract"):
+                    paper_metadata.abstract = merged_metadata["abstract"]
+                if merged_metadata.get("doi"):
+                    paper_metadata.identifiers = PaperIdentifiers(doi=merged_metadata["doi"])
 
                 console.print("[yellow]   5.6. 生成标准格式文档...[/yellow]")
                 metadata_dict = paper_metadata.model_dump(mode="json", exclude_none=True)
@@ -587,6 +604,13 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
                     except Exception as e:
                         console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
 
+                    console.print("[yellow]更新知识图谱...[/yellow]")
+                    try:
+                        from paperbase.cli.commands.graph import update as graph_update
+                        ctx.invoke(graph_update, force=False)
+                    except Exception as e:
+                        console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
+
                 console.print(f"\n[green]✓ 摄入完成（含 PDF 全文）[/green]")
                 return "success"
 
@@ -619,6 +643,14 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
 
         console.print(f"\n[green]✓ 论文元数据已保存到知识库[/green]")
         console.print(f"   路径: {paths.paper_dir}")
+
+        if not no_graph:
+            console.print("[yellow]更新知识图谱...[/yellow]")
+            try:
+                from paperbase.cli.commands.graph import update as graph_update
+                ctx.invoke(graph_update, force=False)
+            except Exception as e:
+                console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
 
         console.print(f"\n[green]✓ 摄入完成[/green]")
         return "success"

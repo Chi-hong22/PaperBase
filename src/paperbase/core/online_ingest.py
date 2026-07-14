@@ -37,6 +37,11 @@ class OnlineIngestResult:
 def _paper_id_for_fetched(fetched: FetchedPaper) -> str:
     if fetched.doi:
         return normalize_paper_id(fetched.doi)
+
+    query_paper_id = normalize_paper_id(fetched.query)
+    if not query_paper_id.startswith("fallback:"):
+        return query_paper_id
+
     # Use full SHA256 hash to prevent collisions
     return normalize_paper_id(f"fallback:{sha256_string(fetched.title)}")
 
