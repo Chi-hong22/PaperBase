@@ -23,7 +23,7 @@ class ZoteroItem:
     key: str
     title: str
     authors: list[str]
-    year: int
+    year: int | None
     doi: str | None
     arxiv_id: str | None
     abstract: str
@@ -31,16 +31,16 @@ class ZoteroItem:
     url: str | None
 
 
-def _parse_year(value: str | None) -> int:
+def _parse_year(value: str | None) -> int | None:
     """Parse year from date string with validation.
 
-    Returns current year as fallback for missing/invalid dates.
+    Returns None for missing/invalid dates so downstream sources can fill it.
     Rejects placeholder years like 9999.
     """
     current_year = datetime.now().year
 
     if not value:
-        return current_year
+        return None
 
     # Try common date formats: YYYY-MM-DD, YYYY/MM/DD, YYYY
     for token in str(value).replace("/", "-").split("-"):
@@ -50,7 +50,7 @@ def _parse_year(value: str | None) -> int:
             if 1000 <= year <= current_year + 1:
                 return year
 
-    return current_year
+    return None
 
 
 class ZoteroAdapter:
@@ -151,7 +151,7 @@ class ZoteroAdapter:
         return ZoteroItem(
             key=key,
             title=title,
-            authors=authors or ["Unknown"],
+            authors=authors,
             year=_parse_year(data.get("date")),
             doi=data.get("DOI") or None,
             arxiv_id=data.get("archiveID") or None,
