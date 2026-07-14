@@ -24,7 +24,7 @@ from paperbase.schemas.paper import (
     PaperSource,
 )
 from paperbase.utils.hash import sha256_file, sha256_string
-from paperbase.utils.markdown import generate_canonical_markdown
+from paperbase.utils.markdown import find_local_absolute_image_paths, generate_canonical_markdown
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,11 @@ def _write_references(path: Path, fetched: FetchedPaper) -> None:
             f.write(json.dumps(reference.__dict__, ensure_ascii=False) + "\n")
 
 
-def _copy_assets(paths: PaperPaths, fetched: FetchedPaper, acquired_at: str) -> list[SourceArtifact]:
+def _copy_assets(
+    paths: PaperPaths,
+    fetched: FetchedPaper,
+    acquired_at: str,
+) -> list[SourceArtifact]:
     """Copy assets with unified timestamp."""
     artifacts: list[SourceArtifact] = []
     for index, asset in enumerate(fetched.assets, start=1):
@@ -68,9 +72,10 @@ def _copy_assets(paths: PaperPaths, fetched: FetchedPaper, acquired_at: str) -> 
         if target.exists() and target.stat().st_size != asset.source_path.stat().st_size:
             raise IOError(f"Asset copy incomplete: {target} size mismatch")
 
+        relative_path = f"./assets/{target.name}"
         artifacts.append(
             SourceArtifact(
-                path=f"./assets/{target.name}",
+                path=relative_path,
                 kind=asset.kind,
                 provider=fetched.provider,
                 original_url=asset.original_url,
@@ -78,7 +83,39 @@ def _copy_assets(paths: PaperPaths, fetched: FetchedPaper, acquired_at: str) -> 
                 sha256=sha256_file(target),
             )
         )
+
     return artifacts
+
+
+def _rewrite_asset_paths(markdown: str, path_replacements: dict[str, str]) -> str:
+    for source_path in sorted(path_replacements, key=len, reverse=True):
+        markdown = markdown.replace(source_path, path_replacements[source_path])
+    return markdown
+
+
+def _plan_asset_path_replacements(fetched: FetchedPaper) -> dict[str, str]:
+    path_replacements: dict[str, str] = {}
+    for index, asset in enumerate(fetched.assets, start=1):
+        if asset.source_path is None:
+            continue
+
+        safe_kind = asset.kind.replace("/", "_").replace("\\", "_").replace("..", "_")
+        suffix = asset.source_path.suffix or ".bin"
+        replacement = (
+            f"./assets/{safe_kind}-{index:03d}{suffix}"
+            if asset.source_path.exists()
+            else asset.original_url
+        )
+        if not replacement:
+            continue
+
+        source_references = {str(asset.source_path), asset.source_path.as_posix()}
+        if asset.source_path.is_absolute():
+            source_references.add(asset.source_path.as_uri())
+        for source_reference in source_references:
+            path_replacements[source_reference] = replacement
+
+    return path_replacements
 
 
 def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestResult:
@@ -114,11 +151,20 @@ def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestR
 
     storage_id = generate_storage_id(paper_id)
     paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
-    paths.create_directories()
 
     # Use unified timestamp for all operations
     now = now_iso8601()
 
+    path_replacements = _plan_asset_path_replacements(fetched)
+    canonical_body = _rewrite_asset_paths(fetched.markdown, path_replacements)
+    unresolved_asset_paths = find_local_absolute_image_paths(canonical_body)
+    if unresolved_asset_paths:
+        raise ValueError(
+            "在线论文包含无法解析的本机资产路径: "
+            f"{unresolved_asset_paths[0]}"
+        )
+
+    paths.create_directories()
     asset_artifacts = _copy_assets(paths, fetched, now)
     _write_references(paths.references_jsonl, fetched)
 
@@ -156,7 +202,7 @@ def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestR
 
     preliminary_canonical_md = generate_canonical_markdown(
         preliminary_metadata_dict,
-        fetched.markdown,
+        canonical_body,
     )
 
     # Step 2: Compute hash of the preliminary canonical markdown
@@ -169,7 +215,7 @@ def ingest_fetched_paper(base_dir: Path, fetched: FetchedPaper) -> OnlineIngestR
     metadata = PaperMetadata(**preliminary_metadata_dict)
     canonical_md = generate_canonical_markdown(
         metadata.model_dump(mode="json", exclude_none=True),
-        fetched.markdown,
+        canonical_body,
     )
     paths.paper_md.write_text(canonical_md, encoding="utf-8")
 

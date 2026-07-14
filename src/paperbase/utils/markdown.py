@@ -2,9 +2,33 @@
 """Markdown 工具函数"""
 
 import yaml
+import re
 from pathlib import Path
+from pathlib import PureWindowsPath
 import tempfile
 import shutil
+
+
+_IMAGE_TARGET_PATTERN = re.compile(r"!\[[^\]]*\]\(([^)\n]+)\)")
+_LOCAL_POSIX_PREFIXES = ("/tmp/", "/home/", "/users/", "/var/tmp/", "/private/tmp/", "/mnt/")
+
+
+def find_local_absolute_image_paths(markdown: str) -> list[str]:
+    """Find machine-local absolute image targets while allowing web URLs."""
+    local_paths: list[str] = []
+    for raw_target in _IMAGE_TARGET_PATTERN.findall(markdown):
+        target = raw_target.strip().strip("<>").split(maxsplit=1)[0]
+        target_lower = target.lower()
+        if target_lower.startswith(("http://", "https://", "data:")):
+            continue
+        if (
+            target_lower.startswith("file:")
+            or PureWindowsPath(target).is_absolute()
+            or target.startswith("\\")
+            or target_lower.startswith(_LOCAL_POSIX_PREFIXES)
+        ):
+            local_paths.append(target)
+    return local_paths
 
 
 def parse_frontmatter(content: str) -> tuple[dict, str]:
