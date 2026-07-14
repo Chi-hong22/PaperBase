@@ -44,10 +44,13 @@ def remove(ctx, paper_id: str, yes: bool, force: bool, interactive: bool):
 
     if not paths.paper_dir.exists():
         console.print(f"[yellow]⚠️  论文目录不存在: {paths.paper_dir}[/yellow]")
-        console.print("[yellow]仅删除 Registry 记录...[/yellow]")
+        if paths.paper_md.exists():
+            paths.paper_md.unlink()
+            console.print(f"[green]✅ 已删除: {paths.paper_md}[/green]")
+        console.print("[yellow]删除 Registry 记录...[/yellow]")
         registry.delete_paper(paper_id)
         registry.close()
-        console.print("[green]✅ 删除完成（仅 Registry）[/green]")
+        console.print("[green]✅ 删除完成！[/green]")
         return
 
     # Step 2: 显示论文信息
@@ -97,6 +100,9 @@ def remove(ctx, paper_id: str, yes: bool, force: bool, interactive: bool):
     try:
         shutil.rmtree(paths.paper_dir)
         console.print(f"   ✅ 已删除: {paths.paper_dir}")
+        if paths.paper_md.exists():
+            paths.paper_md.unlink()
+            console.print(f"   ✅ 已删除: {paths.paper_md}")
     except Exception as e:
         console.print(f"[red]❌ 删除目录失败: {e}[/red]")
         registry.close()
