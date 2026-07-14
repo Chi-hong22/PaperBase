@@ -19,7 +19,7 @@ def test_ingest_fetched_paper_writes_canonical_outputs(tmp_path: Path):
         authors=["Ada Lovelace"],
         year=2026,
         abstract="This paper studies example systems.",
-        markdown="# Example Paper\n\n![Figure 1](source-figure.png)\n",
+        markdown=f"# Example Paper\n\n![Figure 1]({source_asset})\n",
         provider="springer_html",
         original_url="https://doi.org/10.1234/example",
         has_fulltext=True,
@@ -55,7 +55,10 @@ def test_ingest_fetched_paper_writes_canonical_outputs(tmp_path: Path):
     assert manifest_json.exists()
     assert references_jsonl.read_text(encoding="utf-8").count("\n") == 1
     assert (assets_dir / "figure-001.png").exists()
-    assert "fulltext_provider: springer_html" in paper_md.read_text(encoding="utf-8")
+    canonical_text = paper_md.read_text(encoding="utf-8")
+    assert "fulltext_provider: springer_html" in canonical_text
+    assert "![Figure 1](./assets/figure-001.png)" in canonical_text
+    assert str(source_asset) not in canonical_text
 
 
 @pytest.mark.parametrize("query", ["arxiv:2301.07041", "2301.07041"])
@@ -112,3 +115,39 @@ def test_ingest_fetched_paper_keeps_title_fallback_for_ordinary_queries(tmp_path
 
     assert paper_ids[0].startswith("fallback:")
     assert paper_ids[0] == paper_ids[1]
+
+
+def test_ingest_fetched_paper_rejects_missing_local_asset(tmp_path: Path):
+    missing_asset = tmp_path / "missing-figure.png"
+    fetched = FetchedPaper(
+        query="10.1234/missing-asset",
+        doi="10.1234/missing-asset",
+        title="Missing Asset",
+        authors=["Ada Lovelace"],
+        year=2026,
+        markdown=f"![Figure]({missing_asset})",
+        assets=[FetchedAsset(kind="figure", heading="Figure", source_path=missing_asset)],
+    )
+
+    with pytest.raises(ValueError, match="无法解析的本机资产路径"):
+        ingest_fetched_paper(base_dir=tmp_path, fetched=fetched)
+
+    assert not (tmp_path / "library" / "papers").exists()
+
+
+@pytest.mark.parametrize("target", ["/tmp/figure.png", r"\assets\figure.png"])
+def test_ingest_fetched_paper_rejects_cross_platform_local_asset_paths(
+    tmp_path: Path,
+    target: str,
+):
+    fetched = FetchedPaper(
+        query=f"query-{target}",
+        doi=None,
+        title="Local Asset Path",
+        authors=["Ada Lovelace"],
+        year=2026,
+        markdown=f"![Figure]({target})",
+    )
+
+    with pytest.raises(ValueError, match="无法解析的本机资产路径"):
+        ingest_fetched_paper(base_dir=tmp_path, fetched=fetched)
