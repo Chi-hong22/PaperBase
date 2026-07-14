@@ -9,6 +9,8 @@ from click.testing import CliRunner
 
 from paperbase.adapters.zotero_adapter import ZoteroItem
 from paperbase.cli.main import main
+from paperbase.core.identity import generate_storage_id
+from paperbase.core.manifest import load_manifest
 from paperbase.core.registry import PaperRegistry
 from paperbase.utils.markdown import parse_frontmatter
 
@@ -268,6 +270,119 @@ def test_zotero_pdf_ingest_keeps_zotero_metadata_and_updates_graph(monkeypatch, 
     assert registered["authors"] == ["Zotero Author"]
     assert registered["year"] == 2025
     assert next((tmp_path / "library" / "papers").glob("p_*/source/source.pdf")).read_bytes() == b"zotero pdf"
+
+
+def test_zotero_pdf_doi_supplies_identity_when_zotero_has_no_stable_id(monkeypatch, tmp_path):
+    pdf_path = tmp_path / "doi-source.pdf"
+    pdf_path.write_bytes(b"pdf with doi")
+    adapter = Mock()
+    adapter.fetch_item.return_value = ZoteroItem(
+        key="PDFDOI01",
+        title="Zotero Title",
+        authors=["Zotero Author"],
+        year=2025,
+        item_type="journalArticle",
+        doi=None,
+        arxiv_id=None,
+        abstract="Zotero abstract.",
+        url="https://example.org/zotero",
+    )
+    adapter.get_pdf_path.return_value = str(pdf_path)
+
+    monkeypatch.setattr("paperbase.cli.commands.ingest._create_zotero_adapter", lambda ctx: adapter)
+    monkeypatch.setattr(
+        "paperbase.cli.commands.ingest.extract_pdf_metadata",
+        lambda path: {
+            "title": "PDF Title",
+            "authors": ["PDF Author"],
+            "year": 1999,
+            "doi": "10.1234/pdf-stable-id",
+            "abstract": "PDF abstract.",
+        },
+    )
+    monkeypatch.setattr(
+        "paperbase.cli.commands.ingest.convert_pdf_to_markdown",
+        lambda path: "# PDF Title\n\nPDF abstract.",
+    )
+
+    result = CliRunner().invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--zotero-key", "PDFDOI01", "--no-graph"],
+    )
+
+    assert result.exit_code == 0, result.output
+    expected_paper_id = "doi:10.1234/pdf-stable-id"
+    expected_storage_id = generate_storage_id(expected_paper_id)
+    canonical_path = tmp_path / "library" / "papers" / f"{expected_storage_id}.md"
+    frontmatter, _ = parse_frontmatter(canonical_path.read_text(encoding="utf-8"))
+    manifest = load_manifest(
+        tmp_path / "library" / "papers" / expected_storage_id / "manifest.json"
+    )
+    with PaperRegistry(tmp_path / "registry" / "papers.db") as registry:
+        registered = registry.get_paper(expected_paper_id)
+
+    assert frontmatter["paper_id"] == expected_paper_id
+    assert frontmatter["storage_id"] == expected_storage_id
+    assert frontmatter["identifiers"]["doi"] == "10.1234/pdf-stable-id"
+    assert frontmatter["title"] == "Zotero Title"
+    assert [author["name"] for author in frontmatter["authors"]] == ["Zotero Author"]
+    assert frontmatter["year"] == 2025
+    assert frontmatter["abstract"] == "Zotero abstract."
+    assert manifest.paper_id == expected_paper_id
+    assert manifest.storage_id == expected_storage_id
+    assert registered is not None
+    assert registered["storage_id"] == expected_storage_id
+    assert registered["doi"] == "10.1234/pdf-stable-id"
+
+
+def test_zotero_pdf_fills_only_missing_zotero_metadata(monkeypatch, tmp_path):
+    pdf_path = tmp_path / "metadata-fallback.pdf"
+    pdf_path.write_bytes(b"pdf metadata fallback")
+    adapter = Mock()
+    adapter.fetch_item.return_value = ZoteroItem(
+        key="GAPS1234",
+        title="Zotero Title",
+        authors=[],
+        year=None,
+        item_type="journalArticle",
+        doi="10.1234/zotero-doi",
+        arxiv_id=None,
+        abstract="",
+        url=None,
+    )
+    adapter.get_pdf_path.return_value = str(pdf_path)
+
+    monkeypatch.setattr("paperbase.cli.commands.ingest._create_zotero_adapter", lambda ctx: adapter)
+    monkeypatch.setattr(
+        "paperbase.cli.commands.ingest.extract_pdf_metadata",
+        lambda path: {
+            "title": "PDF Title",
+            "authors": ["PDF Author"],
+            "year": 2020,
+            "doi": "10.1234/pdf-doi",
+            "abstract": "PDF abstract.",
+        },
+    )
+    monkeypatch.setattr(
+        "paperbase.cli.commands.ingest.convert_pdf_to_markdown",
+        lambda path: "# PDF Title\n\nPDF abstract.",
+    )
+
+    result = CliRunner().invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--zotero-key", "GAPS1234", "--no-graph"],
+    )
+
+    assert result.exit_code == 0, result.output
+    storage_id = generate_storage_id("doi:10.1234/zotero-doi")
+    canonical_path = tmp_path / "library" / "papers" / f"{storage_id}.md"
+    frontmatter, _ = parse_frontmatter(canonical_path.read_text(encoding="utf-8"))
+
+    assert frontmatter["title"] == "Zotero Title"
+    assert [author["name"] for author in frontmatter["authors"]] == ["PDF Author"]
+    assert frontmatter["year"] == 2020
+    assert frontmatter["abstract"] == "PDF abstract."
+    assert frontmatter["identifiers"]["doi"] == "10.1234/zotero-doi"
 
 
 @pytest.mark.parametrize("with_pdf", [False, True])

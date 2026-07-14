@@ -120,8 +120,11 @@ def _create_paper_from_metadata(base_dir, metadata_dict, paper_id, storage_id, s
     )
     if metadata_dict.get("abstract"):
         paper_metadata.abstract = metadata_dict["abstract"]
-    if metadata_dict.get("doi"):
-        paper_metadata.identifiers = PaperIdentifiers(doi=metadata_dict["doi"])
+    if metadata_dict.get("doi") or metadata_dict.get("arxiv"):
+        paper_metadata.identifiers = PaperIdentifiers(
+            doi=metadata_dict.get("doi"),
+            arxiv=metadata_dict.get("arxiv"),
+        )
 
     # Create directory structure
     paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
@@ -438,12 +441,39 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
         console.print(f"   年份: {item.year or 'N/A'}")
         console.print(f"   类型: {item.item_type}")
 
-        # Step 2: 生成 paper_id
-        console.print("[yellow]2. 生成 paper_id...[/yellow]")
+        # Step 2: 探测本地 PDF，并在身份生成前提取可用标识符
+        pdf_path = None
+        pdf_metadata = {}
+        console.print("[yellow]2. 探测本地 PDF 附件...[/yellow]")
+        try:
+            pdf_path_str = adapter.get_pdf_path(item_key)
+            if pdf_path_str:
+                pdf_path = Path(pdf_path_str)
+                console.print(f"[green]   ✓ 找到 PDF: {pdf_path.name}[/green]")
+                if pdf_path.exists():
+                    pdf_metadata = extract_pdf_metadata(pdf_path)
+            else:
+                console.print("[yellow]   ⚠ 无法获取 PDF 路径（可能使用 Web API 模式）[/yellow]")
+                console.print("[dim]   降级为元数据导入[/dim]")
+        except Exception as e:
+            console.print(f"[yellow]   ⚠ 获取或解析 PDF 失败: {e}[/yellow]")
+            console.print("[dim]   降级为元数据导入[/dim]")
+            pdf_path = None
+            pdf_metadata = {}
+
+        pdf_doi = pdf_metadata.get("doi")
+        pdf_arxiv = pdf_metadata.get("arxiv_id") or pdf_metadata.get("arxiv")
+
+        # Step 3: 生成 paper_id
+        console.print("[yellow]3. 生成 paper_id...[/yellow]")
         if item.doi:
             paper_id = normalize_paper_id(item.doi)
         elif item.arxiv_id:
             paper_id = normalize_paper_id(f"arxiv:{item.arxiv_id}")
+        elif pdf_doi:
+            paper_id = normalize_paper_id(pdf_doi)
+        elif pdf_arxiv:
+            paper_id = normalize_paper_id(f"arxiv:{pdf_arxiv}")
         else:
             # Fallback: 使用 Zotero key
             paper_id = normalize_paper_id(f"zotero:{item_key}")
@@ -452,15 +482,17 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
         console.print(f"   paper_id: {paper_id}")
         console.print(f"   storage_id: {storage_id}")
 
-        # Step 3: 查重检查
-        console.print("[yellow]3. 查重检查...[/yellow]")
+        merged_doi = item.doi or pdf_doi
+
+        # Step 4: 查重检查
+        console.print("[yellow]4. 查重检查...[/yellow]")
         registry_path = base_dir / "registry" / "papers.db"
         if registry_path.exists():
             registry = PaperRegistry(registry_path)
 
             # 检查 DOI 重复
-            if item.doi:
-                existing = registry.find_by_doi(item.doi)
+            if merged_doi:
+                existing = registry.find_by_doi(merged_doi)
                 if existing:
                     registry.close()
                     console.print(f"[yellow]⚠️  论文已存在（DOI 重复）[/yellow]")
@@ -481,38 +513,19 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
                     return "skipped"
 
             registry.close()
-
-        # Step 4: 根据是否有 PDF 分流处理
-        pdf_path = None
-        console.print("[yellow]4. 探测本地 PDF 附件...[/yellow]")
-        try:
-            pdf_path_str = adapter.get_pdf_path(item_key)
-            if pdf_path_str:
-                pdf_path = Path(pdf_path_str)
-                console.print(f"[green]   ✓ 找到 PDF: {pdf_path.name}[/green]")
-            else:
-                console.print("[yellow]   ⚠ 无法获取 PDF 路径（可能使用 Web API 模式）[/yellow]")
-                console.print("[dim]   降级为元数据导入[/dim]")
-        except Exception as e:
-            console.print(f"[yellow]   ⚠ 获取 PDF 路径失败: {e}[/yellow]")
-            console.print("[dim]   降级为元数据导入[/dim]")
-
         # Step 5: 如果有 PDF，走完整 PDF 导入流程
         if pdf_path and pdf_path.exists():
             console.print("[yellow]5. 使用完整 PDF 导入流程...[/yellow]")
 
             # 直接调用 _ingest_local_pdf 的核心逻辑
             try:
-                # 提取 PDF 元数据
-                console.print("[yellow]   5.1. 提取 PDF 元数据...[/yellow]")
-                pdf_metadata = extract_pdf_metadata(pdf_path)
-
                 # 合并 Zotero 元数据和 PDF 元数据（Zotero 优先）
                 merged_metadata = {
                     "title": item.title or pdf_metadata.get("title", "Untitled"),
                     "authors": item.authors if item.authors else pdf_metadata.get("authors", ["Unknown"]),
                     "year": item.year or pdf_metadata.get("year"),
                     "doi": item.doi or pdf_metadata.get("doi"),
+                    "arxiv": item.arxiv_id or pdf_arxiv,
                     "abstract": item.abstract or pdf_metadata.get("abstract", ""),
                 }
 
@@ -538,8 +551,11 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
                 )
                 if merged_metadata.get("abstract"):
                     paper_metadata.abstract = merged_metadata["abstract"]
-                if merged_metadata.get("doi"):
-                    paper_metadata.identifiers = PaperIdentifiers(doi=merged_metadata["doi"])
+                if merged_metadata.get("doi") or merged_metadata.get("arxiv"):
+                    paper_metadata.identifiers = PaperIdentifiers(
+                        doi=merged_metadata.get("doi"),
+                        arxiv=merged_metadata.get("arxiv"),
+                    )
 
                 console.print("[yellow]   5.6. 生成标准格式文档...[/yellow]")
                 metadata_dict = paper_metadata.model_dump(mode="json", exclude_none=True)
@@ -623,11 +639,12 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
         console.print("[yellow]5. 摄入元数据...[/yellow]")
         # 构造元数据字典
         metadata_dict = {
-            "title": item.title,
-            "authors": item.authors,
-            "year": item.year,
-            "doi": item.doi,
-            "abstract": item.abstract,
+            "title": item.title or pdf_metadata.get("title", "Untitled"),
+            "authors": item.authors if item.authors else pdf_metadata.get("authors", ["Unknown"]),
+            "year": item.year or pdf_metadata.get("year"),
+            "doi": item.doi or pdf_doi,
+            "arxiv": item.arxiv_id or pdf_arxiv,
+            "abstract": item.abstract or pdf_metadata.get("abstract", ""),
             "url": item.url,
         }
 

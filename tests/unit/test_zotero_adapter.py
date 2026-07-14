@@ -70,6 +70,26 @@ def test_fetch_item_parses_zotero_061_json(zotero_runtime):
     assert calls == [("ABCD1234", True, "json")]
 
 
+def test_fetch_item_preserves_missing_authors_and_year_for_pdf_fallback(zotero_runtime):
+    zotero_runtime.get_item_metadata = lambda item_key, include_abstract, format, *, ctx: json.dumps(
+        {
+            "key": item_key,
+            "data": {
+                "key": item_key,
+                "itemType": "journalArticle",
+                "title": "Metadata With Gaps",
+                "creators": [],
+                "date": "",
+            },
+        }
+    )
+
+    item = ZoteroAdapter(local_mode=True).fetch_item("GAPS1234")
+
+    assert item.authors == []
+    assert item.year is None
+
+
 def test_list_recent_resolves_item_keys_from_zotero_061_output(zotero_runtime):
     zotero_runtime.get_recent = lambda limit, *, ctx: """# 1 Most Recently Added Items
 
