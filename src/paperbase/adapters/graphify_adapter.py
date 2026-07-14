@@ -5,6 +5,7 @@
 
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 import shutil
 
@@ -62,10 +63,6 @@ def run_graphify(
             "error": f"Library 目录不存在: {library_dir}"
         }
 
-    # 如果 force_rebuild，删除现有图谱
-    if force_rebuild and graph_dir.exists():
-        shutil.rmtree(graph_dir)
-
     # 确保 graph 目录存在
     graph_dir.mkdir(parents=True, exist_ok=True)
 
@@ -111,6 +108,10 @@ def run_graphify(
             cmd.extend(["--model", model])
 
     try:
+        graphify_out = papers_dir / "graphify-out"
+        if graphify_out.exists():
+            shutil.rmtree(graphify_out)
+
         # 运行 graphify，传入修改后的环境变量
         # graphify 会在第一个扫描目录的父目录下创建 graphify-out/
         result = subprocess.run(
@@ -124,14 +125,37 @@ def run_graphify(
 
         # 如果成功，将 graphify-out/ 移动到目标 graph/ 目录
         if result.returncode == 0:
-            graphify_out = papers_dir / "graphify-out"
+            if not (graphify_out / "graph.json").is_file():
+                shutil.rmtree(graphify_out, ignore_errors=True)
+                return {
+                    "success": False,
+                    "output": result.stdout,
+                    "error": "graphify 执行成功但未生成 graphify-out/graph.json",
+                }
+
             if graphify_out.exists():
-                # 将内容复制到 graph/ 目录
-                if graph_dir.exists():
-                    shutil.rmtree(graph_dir)
-                shutil.copytree(graphify_out, graph_dir)
-                # 清理 graphify-out
-                shutil.rmtree(graphify_out)
+                staging_root = Path(
+                    tempfile.mkdtemp(prefix=f".{graph_dir.name}-swap-", dir=graph_dir.parent)
+                )
+                staged_graph = staging_root / "new"
+                previous_graph = staging_root / "previous"
+
+                try:
+                    shutil.copytree(graphify_out, staged_graph)
+                    if graph_dir.exists():
+                        graph_dir.replace(previous_graph)
+
+                    try:
+                        staged_graph.replace(graph_dir)
+                    except Exception:
+                        if previous_graph.exists() and not graph_dir.exists():
+                            previous_graph.replace(graph_dir)
+                        raise
+
+                    shutil.rmtree(graphify_out, ignore_errors=True)
+                finally:
+                    if graph_dir.exists():
+                        shutil.rmtree(staging_root, ignore_errors=True)
 
         return {
             "success": result.returncode == 0,
@@ -188,7 +212,7 @@ def get_graph_stats(graph_dir: Path) -> dict:
                 graph_data = json.load(f)
 
             stats["nodes"] = len(graph_data.get("nodes", []))
-            stats["edges"] = len(graph_data.get("edges", []))
+            stats["edges"] = len(graph_data.get("edges") or graph_data.get("links", []))
         except (json.JSONDecodeError, OSError):
             # 优雅降级：解析失败时返回 0
             pass

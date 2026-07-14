@@ -50,6 +50,19 @@ def test_get_graph_stats_with_graph_json(tmp_path):
     assert "graph.json" in stats["files"]
 
 
+def test_get_graph_stats_supports_node_link_schema(tmp_path):
+    graph_data = {
+        "nodes": [{"id": "paper1"}, {"id": "paper2"}],
+        "links": [{"source": "paper1", "target": "paper2"}],
+    }
+    (tmp_path / "graph.json").write_text(json.dumps(graph_data), encoding="utf-8")
+
+    stats = get_graph_stats(tmp_path)
+
+    assert stats["nodes"] == 2
+    assert stats["edges"] == 1
+
+
 def test_get_graph_stats_invalid_json(tmp_path):
     """无效 JSON 应该返回 0 节点/边（优雅降级）"""
     graph_file = tmp_path / "graph.json"
