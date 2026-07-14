@@ -107,7 +107,9 @@ paperbase ingest --file paper.pdf
 
 # 搜索论文
 paperbase search "machine learning"
-paperbase search --zotero "reinforcement learning"
+
+# 从 Zotero 导入条目
+paperbase ingest --zotero-key <item-key>
 
 # 查询状态
 paperbase status <paper_id>
@@ -115,8 +117,9 @@ paperbase status <paper_id>
 # 更新图谱
 paperbase graph update
 
-# 验证知识库
-paperbase validate
+# 验证环境和知识库一致性
+paperbase doctor
+paperbase sync
 ```
 
 ## Done Criteria

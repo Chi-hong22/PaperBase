@@ -603,8 +603,8 @@ uv run paperbase search "deep learning" --state ready
 # 查看相关论文
 uv run paperbase query related "doi:10.48550/arXiv.1706.03762"
 
-# 查找相似论文
-uv run paperbase query similar "arxiv:1706.03762" --limit 5
+# 通过共享概念和引用查找相关论文
+uv run paperbase query related "arxiv:1706.03762" --depth 2
 ```
 
 ### 批量管理

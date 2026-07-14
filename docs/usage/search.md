@@ -9,7 +9,7 @@
 | 特性           | `search`（本文档）                | `query`                           |
 | ---------------- | ----------------------------------- | ----------------------------------- |
 | **检索目标**   | 查找包含特定关键词的论文          | 发现论文之间的关系和路径          |
-| **索引依赖**   | `registry/papers.db`（FTS5 索引） | `graph/graph.json`（知识图谱）    |
+| **索引依赖**   | `index/fts.db`（FTS5 索引）       | `graph/graph.json`（知识图谱）    |
 | **查询类型**   | 关键词匹配 + 元数据过滤           | 关系查询（引用、相似度）          |
 | **典型场景**   | "找到所有提到 transformer 的论文" | "找到与这篇论文引用关系最近的论文" |
 | **性能**       | O(log N)，快速                    | O(N)，图遍历较慢                  |
@@ -34,10 +34,10 @@ paperbase search <query> [OPTIONS]
 | `--limit` | `-n` | int | 10 | 返回结果数量上限 |
 | `--paper-id` | | str | - | 限定在指定论文中搜索 |
 | `--state` | | str | - | 按论文状态过滤（normalized/ready） |
-| `--year` | | int | - | 按发表年份过滤（精确匹配） |
+| `--year` | | str | - | 按发表年份过滤（单年或 `2020-2024` 范围） |
 | `--year-min` | | int | - | 按发表年份过滤（最小值） |
 | `--year-max` | | int | - | 按发表年份过滤（最大值） |
-| `--base-dir` | | path | 当前目录 | 指定 PaperBase 项目路径 |
+| `--base-dir` | | path | 当前目录 | 全局选项，必须写在 `search` 前 |
 
 ## 使用示例
 
@@ -103,7 +103,7 @@ paperbase search "LSTM" --year-max 2019
 
 **注意**：
 - `--year` 与 `--year-min`/`--year-max` 互斥，不能同时使用
-- 年份基于论文元数据中的 `published_date` 字段
+- 年份基于 Registry 中的 `year` 字段
 
 ### 5. 特定论文搜索
 
@@ -137,7 +137,7 @@ paperbase search "method" --paper-id "arxiv:2301.07041" --limit 5
 
 ```bash
 # 搜索指定路径的知识库
-paperbase search "deep learning" --base-dir /path/to/paperbase
+paperbase --base-dir /path/to/paperbase search "deep learning"
 
 # 或通过环境变量（推荐）
 export PAPERBASE_LIBRARY="/path/to/paperbase"
@@ -315,8 +315,8 @@ paperbase search "attention mechanism" --year 2017
 # 第 2 步：用 query 查看引用关系
 paperbase query related "arxiv:1706.03762" --depth 2
 
-# 第 3 步：用 query 找到相似论文
-paperbase query similar "arxiv:1706.03762" --limit 5
+# 第 3 步：按主题扩展图谱查询
+paperbase query topic "attention mechanism"
 ```
 
 ### 3. 定期维护索引
