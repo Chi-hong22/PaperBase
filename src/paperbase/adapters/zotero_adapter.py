@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -27,7 +29,6 @@ class ZoteroItem:
     abstract: str
     item_type: str
     url: str | None
-    has_pdf: bool
 
 
 def _parse_year(value: str | None) -> int:
@@ -105,75 +106,6 @@ class ZoteroAdapter:
         # Create context (verbose=False to reduce noise)
         self._ctx = CLIContext(verbose=False)
 
-    def _parse_item(self, raw_text: str) -> ZoteroItem:
-        """Parse Zotero item from markdown-formatted text.
-
-        Args:
-            raw_text: Markdown text returned by zotero_mcp
-
-        Returns:
-            ZoteroItem with parsed fields
-
-        Raises:
-            ZoteroUnavailable: If parsing fails or required fields are missing
-        """
-        lines = raw_text.strip().split("\n")
-        fields = {}
-
-        # Parse markdown format: "**Field**: value"
-        for line in lines:
-            line = line.strip()
-            if line.startswith("**") and "**:" in line:
-                # Extract field name and value
-                field_part, value_part = line.split("**:", 1)
-                field_name = field_part.replace("**", "").strip().lower()
-                value = value_part.strip()
-                fields[field_name] = value
-
-        # Extract required fields
-        key = fields.get("key", "")
-        title = fields.get("title", "")
-        item_type = fields.get("item type", "journalArticle")
-
-        if not key or not title:
-            raise ZoteroUnavailable(
-                f"Failed to parse Zotero item: missing key or title\nRaw: {raw_text[:200]}"
-            )
-
-        # Parse authors (comma-separated)
-        authors_raw = fields.get("creators", "") or fields.get("authors", "")
-        authors = (
-            [a.strip() for a in authors_raw.split(",") if a.strip()]
-            if authors_raw
-            else ["Unknown"]
-        )
-
-        # Parse year from date field
-        date_raw = fields.get("date", "") or fields.get("year", "")
-        year = _parse_year(date_raw)
-
-        # Extract optional fields
-        doi = fields.get("doi") or None
-        arxiv_id = fields.get("arxiv id") or fields.get("arxiv") or None
-        abstract = fields.get("abstract", "") or ""
-        url = fields.get("url") or None
-
-        # Check if PDF is available (look for "PDF Available" or attachment info)
-        has_pdf = "pdf available" in raw_text.lower() or "attachment" in raw_text.lower()
-
-        return ZoteroItem(
-            key=key,
-            title=title,
-            authors=authors,
-            year=year,
-            doi=doi,
-            arxiv_id=arxiv_id,
-            abstract=abstract,
-            item_type=item_type,
-            url=url,
-            has_pdf=has_pdf,
-        )
-
     def fetch_item(self, item_key: str) -> ZoteroItem:
         """Fetch a specific Zotero item by key.
 
@@ -187,15 +119,46 @@ class ZoteroAdapter:
             ZoteroUnavailable: If item not found or Zotero is unavailable
         """
         try:
-            result = self._retrieval.get_item(item_key=item_key, ctx=self._ctx)
+            result = self._retrieval.get_item_metadata(
+                item_key=item_key,
+                include_abstract=True,
+                format="json",
+                ctx=self._ctx,
+            )
+            payload = json.loads(result)
         except Exception as e:
             raise ZoteroUnavailable(f"Failed to fetch item {item_key}: {e}") from e
 
-        # Check if result indicates error
-        if "Error" in result or "error" in result.lower():
-            raise ZoteroUnavailable(f"Zotero error: {result}")
+        data = payload.get("data", payload)
+        key = payload.get("key") or data.get("key") or item_key
+        title = data.get("title", "")
+        if not title:
+            raise ZoteroUnavailable(f"Failed to parse Zotero item {item_key}: missing title")
 
-        return self._parse_item(result)
+        authors = []
+        for creator in data.get("creators", []):
+            if creator.get("name"):
+                authors.append(creator["name"])
+                continue
+
+            first_name = creator.get("firstName", "")
+            last_name = creator.get("lastName", "")
+            if first_name and last_name:
+                authors.append(f"{last_name}, {first_name}")
+            elif last_name or first_name:
+                authors.append(last_name or first_name)
+
+        return ZoteroItem(
+            key=key,
+            title=title,
+            authors=authors or ["Unknown"],
+            year=_parse_year(data.get("date")),
+            doi=data.get("DOI") or None,
+            arxiv_id=data.get("archiveID") or None,
+            abstract=data.get("abstractNote", "") or "",
+            item_type=data.get("itemType", "journalArticle"),
+            url=data.get("url") or None,
+        )
 
     def list_recent(self, limit: int = 50) -> list[ZoteroItem]:
         """List recent Zotero items.
@@ -215,38 +178,15 @@ class ZoteroAdapter:
             raise ZoteroUnavailable(f"Failed to list recent items: {e}") from e
 
         # Check if result indicates error
-        if "Error" in result or "error" in result.lower():
+        if result.lstrip().lower().startswith("error"):
             raise ZoteroUnavailable(f"Zotero error: {result}")
 
-        # Parse result: zotero_mcp returns markdown with multiple items
-        items = []
-        current_item_lines = []
-
-        for line in result.split("\n"):
-            # Each item starts with "## Item" or "**Key**:"
-            if line.startswith("## ") or (line.startswith("**Key**:") and current_item_lines):
-                # Parse previous item if exists
-                if current_item_lines:
-                    try:
-                        item = self._parse_item("\n".join(current_item_lines))
-                        items.append(item)
-                    except ZoteroUnavailable:
-                        # Skip malformed items
-                        pass
-                    current_item_lines = []
-
-            if line.strip():
-                current_item_lines.append(line)
-
-        # Parse last item
-        if current_item_lines:
-            try:
-                item = self._parse_item("\n".join(current_item_lines))
-                items.append(item)
-            except ZoteroUnavailable:
-                pass
-
-        return items
+        item_keys = re.findall(
+            r"^\*\*Item Key:\*\*\s*([A-Za-z0-9]+)\s*$",
+            result,
+            flags=re.MULTILINE,
+        )
+        return [self.fetch_item(item_key) for item_key in item_keys]
 
     def get_pdf_path(self, item_key: str) -> str | None:
         """Get local PDF attachment path for a Zotero item.
@@ -272,17 +212,21 @@ class ZoteroAdapter:
 
         # Parse result: zotero_mcp returns markdown with file paths
         # Example: "**Path**: /path/to/file.pdf"
-        if not result or "Error" in result or "error" in result.lower():
+        if not result or result.lstrip().lower().startswith("error"):
             return None
 
         # Extract file path from markdown
         for line in result.split("\n"):
             line = line.strip()
-            if line.startswith("**Path**:") or line.startswith("Path:"):
-                # Extract path
+            local_path_match = re.match(r"^-\s*Local path:\s*`?(.+?)`?$", line)
+            if local_path_match:
+                path = local_path_match.group(1)
+            elif line.startswith("**Path**:") or line.startswith("Path:"):
                 path = line.split(":", 1)[-1].strip()
-                # Verify it's a PDF
-                if path.lower().endswith(".pdf") and os.path.exists(path):
-                    return path
+            else:
+                continue
+
+            if path.lower().endswith(".pdf") and os.path.exists(path):
+                return path
 
         return None
