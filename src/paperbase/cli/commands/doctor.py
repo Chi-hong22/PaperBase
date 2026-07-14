@@ -59,10 +59,10 @@ def check_sqlite_version() -> Tuple[bool, str]:
     except Exception as e:
         return False, f"SQLite check failed: {e}"
 
-def check_library() -> Tuple[bool, str]:
+def check_library(base_dir: Path) -> Tuple[bool, str]:
     """Check if PaperBase library exists"""
     # 优先使用 Registry 统计论文数量
-    registry_path = Path("registry/papers.db")
+    registry_path = base_dir / "registry" / "papers.db"
     if registry_path.exists():
         try:
             from paperbase.core.registry import PaperRegistry
@@ -72,28 +72,53 @@ def check_library() -> Tuple[bool, str]:
         except Exception:
             pass  # fallback to directory scanning
 
-    # Fallback: 统计论文目录数量（p_* 目录，而非 .md 文件）
-    library_path = Path("library")
+    # Fallback: 统计 Canonical Markdown 文件
+    library_path = base_dir / "library"
     if library_path.exists():
         papers_dir = library_path / "papers"
         if papers_dir.exists():
-            paper_count = len([d for d in papers_dir.iterdir() if d.is_dir() and d.name.startswith("p_")])
+            paper_count = len(list(papers_dir.glob("p_*.md")))
             return True, f"Library found ({paper_count} papers, no registry)"
         else:
             return False, "Library exists but papers/ directory missing"
     return False, "Library not found (run from PaperBase root or set PAPERBASE_LIBRARY)"
 
-def check_registry() -> Tuple[bool, str]:
+def check_registry(base_dir: Path) -> Tuple[bool, str]:
     """Check registry database"""
-    registry_path = Path("registry/papers.db")
+    registry_path = base_dir / "registry" / "papers.db"
     if registry_path.exists():
         size = registry_path.stat().st_size / 1024  # KB
         return True, f"Registry database found ({size:.1f} KB)"
     return False, "Registry database not found (will auto-create on first use)"
 
-def check_graph() -> Tuple[bool, str]:
+def check_library_consistency(base_dir: Path) -> Tuple[bool, str]:
+    """Check that Registry records and Canonical Markdown agree."""
+    papers_dir = base_dir / "library" / "papers"
+    registry_path = base_dir / "registry" / "papers.db"
+    if not papers_dir.exists() or not registry_path.exists():
+        return True, "Consistency check skipped (library or registry unavailable)"
+
+    canonical_ids = {path.stem for path in papers_dir.glob("p_*.md")}
+    try:
+        from paperbase.core.registry import PaperRegistry
+        with PaperRegistry(registry_path) as registry:
+            registry_ids = {paper["storage_id"] for paper in registry.list_papers()}
+    except Exception as e:
+        return False, f"Consistency check failed: {e}"
+
+    canonical_not_registered = canonical_ids - registry_ids
+    registry_missing_canonical = registry_ids - canonical_ids
+    if canonical_not_registered or registry_missing_canonical:
+        return False, (
+            f"Canonical not registered: {len(canonical_not_registered)}; "
+            f"Registry missing canonical: {len(registry_missing_canonical)}"
+        )
+
+    return True, "Registry and Canonical Markdown are consistent"
+
+def check_graph(base_dir: Path) -> Tuple[bool, str]:
     """Check knowledge graph"""
-    graph_path = Path("graph")
+    graph_path = base_dir / "graph"
     if graph_path.exists():
         files = list(graph_path.glob("*.json"))
         if files:
@@ -146,7 +171,8 @@ def check_llm_config() -> Tuple[bool, str]:
         return False, f"check failed: {e}"
 
 
-def main():
+def main(base_dir: Path | None = None):
+    base_dir = base_dir or Path.cwd()
     print("🔍 PaperBase Doctor - Environment Diagnostics\n")
     print("=" * 60)
 
@@ -157,9 +183,10 @@ def main():
         ("paper-fetch (optional)", check_paper_fetch()),
         ("SQLite Version", check_sqlite_version()),
         ("LLM Configuration", check_llm_config()),
-        ("PaperBase Library", check_library()),
-        ("Registry Database", check_registry()),
-        ("Knowledge Graph", check_graph()),
+        ("PaperBase Library", check_library(base_dir)),
+        ("Registry Database", check_registry(base_dir)),
+        ("Library Consistency", check_library_consistency(base_dir)),
+        ("Knowledge Graph", check_graph(base_dir)),
     ]
 
     all_pass = True
@@ -200,7 +227,7 @@ def main():
 @click.pass_context
 def doctor(ctx):
     """Run environment diagnostics"""
-    main()
+    main(ctx.obj["base_dir"])
 
 if __name__ == "__main__":
     main()
