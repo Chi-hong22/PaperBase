@@ -80,7 +80,7 @@ def run_graphify(
     cmd = [
         "graphify",
         "extract",  # 使用 extract 子命令
-        str(papers_dir),  # 扫描 papers 目录（会自动识别所有 .md 文件）
+        ".",  # cwd 已位于 papers 目录，避免 Windows 绝对路径被重复拼接
         "--backend", "openai",  # 明确指定 backend
     ]
 

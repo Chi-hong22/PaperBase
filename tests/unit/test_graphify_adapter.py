@@ -81,6 +81,8 @@ def test_successful_rebuild_replaces_existing_graph(tmp_path, monkeypatch):
     (graph_dir / "sentinel.json").write_text('{"version": "old"}', encoding="utf-8")
 
     def successful_run(cmd, **kwargs):
+        assert cmd[2] == "."
+        assert Path(kwargs["cwd"]) == papers_dir
         output_dir = Path(kwargs["cwd"]) / "graphify-out"
         output_dir.mkdir()
         (output_dir / "graph.json").write_text('{"version": "new"}', encoding="utf-8")
