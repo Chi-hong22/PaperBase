@@ -16,72 +16,65 @@ def mock_graph_dir(tmp_path):
     graph_dir.mkdir()
 
     # 创建 mock graph.json
-    # 基于 graphify 标准格式：nodes 和 edges
+    # 基于 Graphify/NetworkX node-link 标准格式
     mock_graph = {
+        "directed": False,
+        "multigraph": False,
+        "graph": {},
         "nodes": [
             {
-                "id": "paper_001",
+                "id": "p_001_paper",
                 "label": "Attention Is All You Need",
-                "type": "paper",
-                "attributes": {
-                    "topics": ["transformer", "attention", "neural_networks"]
-                }
+                "norm_label": "attention is all you need",
+                "file_type": "paper",
             },
             {
-                "id": "paper_002",
+                "id": "p_002_paper",
                 "label": "BERT: Pre-training of Deep Bidirectional Transformers",
-                "type": "paper",
-                "attributes": {
-                    "topics": ["transformer", "bert", "pretraining"]
-                }
+                "norm_label": "bert: pre-training of deep bidirectional transformers",
+                "file_type": "paper",
             },
             {
-                "id": "paper_003",
+                "id": "p_003_paper",
                 "label": "GPT-3: Language Models are Few-Shot Learners",
-                "type": "paper",
-                "attributes": {
-                    "topics": ["gpt", "language_model", "few_shot"]
-                }
+                "norm_label": "gpt-3: language models are few-shot learners",
+                "file_type": "paper",
             },
             {
-                "id": "paper_004",
+                "id": "p_004_paper",
                 "label": "ResNet: Deep Residual Learning",
-                "type": "paper",
-                "attributes": {
-                    "topics": ["cnn", "residual", "computer_vision"]
-                }
+                "norm_label": "resnet: deep residual learning",
+                "file_type": "paper",
             },
             {
-                "id": "paper_005",
+                "id": "p_005_paper",
                 "label": "Vision Transformer",
-                "type": "paper",
-                "attributes": {
-                    "topics": ["transformer", "computer_vision", "vit"]
-                }
+                "norm_label": "vision transformer",
+                "file_type": "paper",
             }
         ],
-        "edges": [
+        "links": [
             {
-                "source": "paper_001",
-                "target": "paper_002",
+                "source": "p_001_paper",
+                "target": "p_002_paper",
                 "label": "CITES",
                 "confidence": "EXTRACTED"
             },
             {
-                "source": "paper_002",
-                "target": "paper_003",
+                "source": "p_002_paper",
+                "target": "p_003_paper",
                 "label": "RELATED_TO",
                 "confidence": "INFERRED"
             },
             {
-                "source": "paper_001",
-                "target": "paper_005",
+                "source": "p_001_paper",
+                "target": "p_005_paper",
                 "label": "CITES",
                 "confidence": "EXTRACTED"
             },
             {
-                "source": "paper_004",
-                "target": "paper_005",
+                "source": "p_004_paper",
+                "target": "p_005_paper",
                 "label": "RELATED_TO",
                 "confidence": "INFERRED"
             }
@@ -98,32 +91,32 @@ def test_find_related_papers_depth_1(mock_graph_dir):
     """测试查找直接相关的论文（depth=1）"""
     related = find_related_papers(
         graph_dir=mock_graph_dir,
-        paper_id="paper_001",
+        paper_id="p_001_paper",
         depth=1
     )
 
-    # paper_001 直接连接到 paper_002 和 paper_005
+    # p_001_paper 直接连接到 p_002_paper 和 p_005_paper
     assert isinstance(related, list)
     assert len(related) == 2
-    assert "paper_002" in related
-    assert "paper_005" in related
+    assert "p_002_paper" in related
+    assert "p_005_paper" in related
 
 
 def test_find_related_papers_depth_2(mock_graph_dir):
     """测试查找二度相关的论文（depth=2）"""
     related = find_related_papers(
         graph_dir=mock_graph_dir,
-        paper_id="paper_001",
+        paper_id="p_001_paper",
         depth=2
     )
 
-    # paper_001 -> paper_002 -> paper_003
-    # paper_001 -> paper_005 -> paper_004
+    # p_001_paper -> p_002_paper -> p_003_paper
+    # p_001_paper -> p_005_paper -> p_004_paper
     assert isinstance(related, list)
-    assert len(related) >= 3  # 至少包括 paper_002, paper_003, paper_005
-    assert "paper_002" in related
-    assert "paper_003" in related
-    assert "paper_005" in related
+    assert len(related) >= 3
+    assert "p_002_paper" in related
+    assert "p_003_paper" in related
+    assert "p_005_paper" in related
 
 
 def test_find_related_papers_nonexistent(mock_graph_dir):
@@ -147,7 +140,7 @@ def test_find_papers_by_topic_single_match(mock_graph_dir):
 
     assert isinstance(papers, list)
     assert len(papers) == 1
-    assert "paper_002" in papers
+    assert "p_002_paper" in papers
 
 
 def test_find_papers_by_topic_multiple_matches(mock_graph_dir):
@@ -158,10 +151,9 @@ def test_find_papers_by_topic_multiple_matches(mock_graph_dir):
     )
 
     assert isinstance(papers, list)
-    assert len(papers) == 3
-    assert "paper_001" in papers
-    assert "paper_002" in papers
-    assert "paper_005" in papers
+    assert len(papers) == 2
+    assert "p_002_paper" in papers
+    assert "p_005_paper" in papers
 
 
 def test_find_papers_by_topic_case_insensitive(mock_graph_dir):
@@ -197,7 +189,7 @@ def test_find_related_papers_no_graph_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         find_related_papers(
             graph_dir=empty_dir,
-            paper_id="paper_001",
+            paper_id="p_001_paper",
             depth=1
         )
 

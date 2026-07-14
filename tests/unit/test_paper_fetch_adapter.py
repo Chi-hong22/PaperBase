@@ -1,75 +1,59 @@
-from dataclasses import dataclass, field
+import json
+from unittest.mock import Mock, patch
 
 from paperbase.adapters.paper_fetch_adapter import PaperFetchAdapter
 
 
-@dataclass
-class FakeMetadata:
-    title: str = "Example Paper"
-    authors: list[str] = field(default_factory=lambda: ["Ada Lovelace", "Grace Hopper"])
-    abstract: str = "This paper studies example systems."
-    journal: str = "Journal of Examples"
-    published: str = "2026-07-08"
-    keywords: list[str] = field(default_factory=lambda: ["examples", "systems"])
-    landing_page_url: str = "https://doi.org/10.1234/example"
+@patch("paperbase.adapters.paper_fetch_adapter.shutil.which", return_value="paper-fetch")
+@patch("paperbase.adapters.paper_fetch_adapter.subprocess.run")
+def test_adapter_maps_cli_envelope_to_fetched_paper(mock_run, mock_which):
+    envelope = {
+        "doi": "10.1234/example",
+        "source": "springer_html",
+        "has_fulltext": True,
+        "content_kind": "fulltext",
+        "warnings": [],
+        "source_trail": ["crossref", "springer_html"],
+        "markdown": "# Example Paper\n\nThis paper studies example systems.",
+        "metadata": {
+            "title": "Example Paper",
+            "authors": ["Ada Lovelace", "Grace Hopper"],
+            "abstract": "This paper studies example systems.",
+            "published": "2026-07-08",
+            "landing_page_url": "https://doi.org/10.1234/example",
+        },
+        "article": {
+            "references": [
+                {
+                    "raw": "Lovelace A. Example work.",
+                    "doi": "10.1234/ref",
+                    "title": "Example work",
+                    "year": "2025",
+                }
+            ],
+            "assets": [
+                {
+                    "kind": "figure",
+                    "heading": "Figure 1",
+                    "caption": "Example figure.",
+                    "path": "downloaded/fig1.png",
+                    "original_url": "https://example.org/fig1.png",
+                }
+            ],
+        },
+    }
+    mock_run.return_value = Mock(stdout=json.dumps(envelope))
 
+    fetched = PaperFetchAdapter().fetch("10.1234/example")
 
-@dataclass
-class FakeReference:
-    raw: str
-    doi: str | None = None
-    title: str | None = None
-    year: str | None = None
-
-
-@dataclass
-class FakeAsset:
-    kind: str = "figure"
-    heading: str = "Figure 1"
-    caption: str = "Example figure."
-    path: str = "downloaded/fig1.png"
-    original_url: str = "https://example.org/fig1.png"
-
-
-@dataclass
-class FakeArticle:
-    metadata: FakeMetadata = field(default_factory=FakeMetadata)
-    references: list[FakeReference] = field(
-        default_factory=lambda: [
-            FakeReference(
-                raw="Lovelace A. Example work.",
-                doi="10.1234/ref",
-                title="Example work",
-                year="2025",
-            )
-        ]
+    mock_which.assert_called_once_with("paper-fetch")
+    mock_run.assert_called_once_with(
+        ["paper-fetch", "--query", "10.1234/example", "--format", "both"],
+        capture_output=True,
+        text=True,
+        check=True,
+        encoding="utf-8",
     )
-    assets: list[FakeAsset] = field(default_factory=lambda: [FakeAsset()])
-
-
-@dataclass
-class FakeEnvelope:
-    doi: str = "10.1234/example"
-    source: str = "springer_html"
-    has_fulltext: bool = True
-    content_kind: str = "fulltext"
-    warnings: list[str] = field(default_factory=list)
-    source_trail: list[str] = field(default_factory=lambda: ["crossref", "springer_html"])
-    markdown: str = "# Example Paper\n\n## Abstract\n\nThis paper studies example systems."
-    metadata: FakeMetadata = field(default_factory=FakeMetadata)
-    article: FakeArticle = field(default_factory=FakeArticle)
-
-
-def test_adapter_maps_fetch_envelope_to_fetched_paper():
-    def fake_fetch_paper(query, *, modes, render):
-        assert query == "10.1234/example"
-        assert "markdown" in modes
-        assert "metadata" in modes
-        return FakeEnvelope()
-
-    adapter = PaperFetchAdapter(fetch_paper_fn=fake_fetch_paper)
-    fetched = adapter.fetch("10.1234/example")
-
     assert fetched.query == "10.1234/example"
     assert fetched.doi == "10.1234/example"
     assert fetched.title == "Example Paper"

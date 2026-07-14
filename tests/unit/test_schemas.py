@@ -91,13 +91,19 @@ def test_manifest_minimal():
     manifest = ManifestSchema(
         paper_id="doi:10.1234/test",
         storage_id="p_abc123",
-        state=PaperState.DISCOVERED
+        state=PaperState.NORMALIZED
     )
     assert manifest.paper_id == "doi:10.1234/test"
-    assert manifest.state == PaperState.DISCOVERED
+    assert manifest.state == PaperState.NORMALIZED
 
 
 def test_manifest_state_transitions():
     """测试状态枚举"""
-    assert PaperState.DISCOVERED.value == "discovered"
-    assert PaperState.READY.value == "ready"
+    assert {state.value for state in PaperState} == {
+        "normalized",
+        "ready",
+        "needs_review",
+        "blocked",
+        "failed_retryable",
+        "failed_permanent",
+    }

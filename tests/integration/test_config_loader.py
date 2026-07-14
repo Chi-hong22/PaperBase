@@ -61,7 +61,8 @@ class TestConfigLoader:
             assert config.llm.get_base_url() == "https://api.openai.com/v1"
 
             # 验证 Graph 配置
-            assert config.graph.auto_update is True
+            assert config.graph.auto_update == "on_entity_change"
+            assert config.graph.get_triggers() == ["entity_change", "paper_ingest"]
 
             # 验证 Adapter 配置
             adapter = config.get_paper_fetch_adapter()
@@ -101,7 +102,8 @@ class TestConfigLoader:
             assert config.llm.is_enabled() is True
             assert config.llm.model == "gpt-4o-mini"
 
-            assert config.graph.auto_update is True
+            assert config.graph.auto_update == "on_entity_change"
+            assert config.graph.auto_update_on == ["entity_change", "paper_ingest"]
             assert config.graph.get_triggers() == ["entity_change", "paper_ingest"]
 
             adapter = config.get_paper_fetch_adapter()
