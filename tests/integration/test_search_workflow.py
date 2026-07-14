@@ -95,7 +95,7 @@ def sample_papers(temp_workspace):
     for paper in papers:
         registry.register_paper(
             paper_id=paper["paper_id"],
-            storage_id=paper["paper_id"],
+            storage_id=f"p_{paper['paper_id'][-3:]}",
             state=PaperState.READY,
             title=paper["title"],
             authors=paper["authors"].split(", "),
@@ -112,35 +112,32 @@ def sample_graph(temp_workspace):
     graph_path = temp_workspace["graph"]
 
     graph_data = {
+        "directed": False,
+        "multigraph": False,
+        "graph": {},
         "nodes": [
             {
-                "id": "paper001",
-                "type": "paper",
+                "id": "p_001_paper",
                 "label": "Introduction to Machine Learning",
-                "attributes": {
-                    "topics": ["machine learning", "artificial intelligence"]
-                }
+                "norm_label": "introduction to machine learning",
+                "file_type": "paper",
             },
             {
-                "id": "paper002",
-                "type": "paper",
+                "id": "p_002_paper",
                 "label": "Deep Learning Foundations",
-                "attributes": {
-                    "topics": ["deep learning", "neural networks"]
-                }
+                "norm_label": "deep learning foundations",
+                "file_type": "paper",
             },
             {
-                "id": "paper003",
-                "type": "paper",
+                "id": "p_003_paper",
                 "label": "Natural Language Processing",
-                "attributes": {
-                    "topics": ["NLP", "transformers"]
-                }
+                "norm_label": "natural language processing",
+                "file_type": "paper",
             }
         ],
-        "edges": [
-            {"source": "paper001", "target": "paper002", "type": "cites"},
-            {"source": "paper002", "target": "paper003", "type": "related"}
+        "links": [
+            {"source": "p_001_paper", "target": "p_002_paper", "type": "cites"},
+            {"source": "p_002_paper", "target": "p_003_paper", "type": "related"}
         ]
     }
 
@@ -218,16 +215,16 @@ def test_graph_query_find_related_papers(temp_workspace, sample_graph):
     graph_dir = temp_workspace["graph"]
 
     # 查找 paper001 的直接相关论文
-    related = find_related_papers(graph_dir, "paper001", depth=1)
+    related = find_related_papers(graph_dir, "p_001_paper", depth=1)
 
-    assert "paper002" in related
-    assert "paper001" not in related  # 不包含自己
+    assert "p_002_paper" in related
+    assert "p_001_paper" not in related  # 不包含自己
 
     # 查找二度相关论文
-    related_depth2 = find_related_papers(graph_dir, "paper001", depth=2)
+    related_depth2 = find_related_papers(graph_dir, "p_001_paper", depth=2)
 
-    assert "paper002" in related_depth2
-    assert "paper003" in related_depth2  # 二度相关
+    assert "p_002_paper" in related_depth2
+    assert "p_003_paper" in related_depth2  # 二度相关
 
 
 def test_graph_query_no_related_papers(temp_workspace, sample_graph):
@@ -247,12 +244,12 @@ def test_graph_query_find_papers_by_topic(temp_workspace, sample_graph):
     # 查找包含 "machine learning" 主题的论文
     papers = find_papers_by_topic(graph_dir, "machine learning")
 
-    assert "paper001" in papers
+    assert "p_001_paper" in papers
 
     # 查找包含 "deep learning" 主题的论文
     papers = find_papers_by_topic(graph_dir, "deep learning")
 
-    assert "paper002" in papers
+    assert "p_002_paper" in papers
 
 
 def test_graph_query_topic_case_insensitive(temp_workspace, sample_graph):
@@ -290,16 +287,21 @@ def test_end_to_end_search_and_query(temp_workspace, sample_papers, sample_graph
     found_paper_id = search_results[0]["paper_id"]
     assert found_paper_id == "paper002"
 
-    # 3. 查找相关论文
-    related_papers = find_related_papers(temp_workspace["graph"], found_paper_id, depth=1)
+    # 3. 通过 Registry 的 storage_id 映射到 Graphify 论文节点
+    registry = PaperRegistry(temp_workspace["registry"])
+    found_paper = registry.get_paper(found_paper_id)
+    related_papers = find_related_papers(
+        temp_workspace["graph"],
+        f"{found_paper['storage_id']}_paper",
+        depth=1,
+    )
     assert len(related_papers) > 0
 
-    # 4. 验证相关论文在 registry 中
-    registry = PaperRegistry(temp_workspace["registry"])
-    for paper_id in related_papers:
-        paper = registry.get_paper(paper_id)
-        assert paper is not None
-        assert paper["paper_id"] == paper_id
+    # 4. 验证 Graphify 节点前缀对应 Registry storage_id
+    registry_by_storage = {paper["storage_id"]: paper for paper in registry.list_papers()}
+    for graph_node_id in related_papers:
+        storage_id = graph_node_id.removesuffix("_paper")
+        assert storage_id in registry_by_storage
 
     registry.close()
     engine.close()

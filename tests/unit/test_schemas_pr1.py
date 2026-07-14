@@ -51,7 +51,7 @@ def test_manifest_timestamp_validation():
         ManifestSchema(
             paper_id="doi:10.1234/test",
             storage_id="p_abc123",
-            state=PaperState.DISCOVERED,
+            state=PaperState.NORMALIZED,
             source_pdf=SourcePDF(
                 path="test.pdf",
                 sha256="a" * 64,
@@ -190,7 +190,7 @@ def test_sha256_format_validation():
     manifest = ManifestSchema(
         paper_id="doi:10.1234/test",
         storage_id="p_abc123",
-        state=PaperState.DISCOVERED,
+        state=PaperState.NORMALIZED,
         source_pdf=SourcePDF(
             path="test.pdf",
             sha256=valid_sha256,
@@ -206,7 +206,7 @@ def test_sha256_format_validation():
         ManifestSchema(
             paper_id="doi:10.1234/test",
             storage_id="p_abc123",
-            state=PaperState.DISCOVERED,
+            state=PaperState.NORMALIZED,
             source_pdf=SourcePDF(
                 path="test.pdf",
                 sha256="invalid-hash",
