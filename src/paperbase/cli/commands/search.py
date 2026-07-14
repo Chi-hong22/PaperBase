@@ -29,6 +29,14 @@ from paperbase.core.registry import PaperRegistry
     default=None,
     help="年份过滤（如 '2023' 或 '2020-2024'）"
 )
+@click.option("--year-min", type=int, default=None, help="发表年份下限（含）")
+@click.option("--year-max", type=int, default=None, help="发表年份上限（含）")
+@click.option(
+    "--state",
+    type=click.Choice(["normalized", "ready"], case_sensitive=False),
+    default=None,
+    help="按论文状态过滤",
+)
 @click.option(
     "--author",
     type=str,
@@ -36,7 +44,17 @@ from paperbase.core.registry import PaperRegistry
     help="作者模糊匹配（如 'Smith'）"
 )
 @click.pass_context
-def search(ctx, query: str, limit: int, paper_id: str, year: str, author: str):
+def search(
+    ctx,
+    query: str,
+    limit: int,
+    paper_id: str,
+    year: str,
+    year_min: int,
+    year_max: int,
+    state: str,
+    author: str,
+):
     """全文检索论文内容
 
     支持全局搜索或在单篇论文中搜索，可通过年份和作者过滤。
@@ -64,19 +82,25 @@ def search(ctx, query: str, limit: int, paper_id: str, year: str, author: str):
         return
 
     # 检查 registry 是否存在（如果使用元数据过滤）
-    if (year or author) and not registry_path.exists():
+    if (year or year_min is not None or year_max is not None or state or author) and not registry_path.exists():
         console.print("[yellow]Registry 不存在，无法使用元数据过滤[/yellow]")
         console.print("提示: 请先摄入论文")
         return
 
     # 解析年份范围
     year_range = None
+    if year and (year_min is not None or year_max is not None):
+        raise click.UsageError("--year 不能与 --year-min/--year-max 同时使用")
     if year:
         year_range = _parse_year_range(year)
         if not year_range:
             console.print(f"[red]无效的年份格式: {year}[/red]")
             console.print("支持格式：'2023' 或 '2020-2024'")
             return
+    elif year_min is not None or year_max is not None:
+        if year_min is not None and year_max is not None and year_min > year_max:
+            raise click.UsageError("--year-min 不能大于 --year-max")
+        year_range = (year_min if year_min is not None else 0, year_max if year_max is not None else 9999)
 
     # 执行搜索
     engine = SearchEngine(index_path, library_path)
@@ -85,7 +109,8 @@ def search(ctx, query: str, limit: int, paper_id: str, year: str, author: str):
         limit,
         paper_id_filter=paper_id,
         year_range=year_range,
-        author_filter=author
+        author_filter=author,
+        state_filter=state,
     )
     engine.close()
 
@@ -95,6 +120,10 @@ def search(ctx, query: str, limit: int, paper_id: str, year: str, author: str):
             filters.append(f"论文: {paper_id}")
         if year:
             filters.append(f"年份: {year}")
+        elif year_min is not None or year_max is not None:
+            filters.append(f"年份: {year_min or '*'}-{year_max or '*'}")
+        if state:
+            filters.append(f"状态: {state}")
         if author:
             filters.append(f"作者: {author}")
 
@@ -103,7 +132,7 @@ def search(ctx, query: str, limit: int, paper_id: str, year: str, author: str):
         return
 
     # 获取论文元数据
-    registry = PaperRegistry(registry_path)
+    registry = PaperRegistry(registry_path) if registry_path.exists() else None
 
     # 构建搜索范围描述
     filters = []
@@ -111,6 +140,10 @@ def search(ctx, query: str, limit: int, paper_id: str, year: str, author: str):
         filters.append(f"论文: {paper_id}")
     if year:
         filters.append(f"年份: {year}")
+    elif year_min is not None or year_max is not None:
+        filters.append(f"年份: {year_min or '*'}-{year_max or '*'}")
+    if state:
+        filters.append(f"状态: {state}")
     if author:
         filters.append(f"作者: {author}")
 
@@ -122,7 +155,7 @@ def search(ctx, query: str, limit: int, paper_id: str, year: str, author: str):
     table.add_column("Snippet", style="dim", width=70)
 
     for result in results:
-        paper = registry.get_paper(result["paper_id"])
+        paper = registry.get_paper(result["paper_id"]) if registry else None
         title = paper["title"] if paper and paper["title"] else "N/A"
 
         # 截断过长的 title 和 snippet
@@ -143,7 +176,8 @@ def search(ctx, query: str, limit: int, paper_id: str, year: str, author: str):
     console.print(table)
     console.print(f"\n[dim]找到 {len(results)} 个结果[/dim]")
 
-    registry.close()
+    if registry:
+        registry.close()
 
 
 def _parse_year_range(year_str: str) -> tuple:

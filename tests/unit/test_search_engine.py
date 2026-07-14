@@ -224,6 +224,47 @@ def test_search_with_special_characters(sample_chunks):
     engine.close()
 
 
+def test_search_pages_until_it_collects_unique_papers(tmp_path):
+    """重复分块填满一批时继续分页，不全量载入所有命中。"""
+    engine = SearchEngine(tmp_path / "fts.db", tmp_path)
+    engine.close()
+
+    class FakeCursor:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def fetchall(self):
+            return self.rows
+
+    class FakeConnection:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, sql, params):
+            self.calls.append(params)
+            if len(self.calls) == 1:
+                return FakeCursor([
+                    {"paper_id": "paper001", "score": -1.0, "snippet": "first"}
+                    for _ in range(100)
+                ])
+            return FakeCursor([
+                {"paper_id": "paper002", "score": -0.5, "snippet": "second"}
+            ])
+
+        def close(self):
+            pass
+
+    fake_connection = FakeConnection()
+    engine.conn = fake_connection
+
+    results = engine.search("learning", limit=2)
+
+    assert [result["paper_id"] for result in results] == ["paper001", "paper002"]
+    assert len(fake_connection.calls) == 2
+    assert fake_connection.calls[0][-2:] == [100, 0]
+    assert fake_connection.calls[1][-2:] == [100, 100]
+
+
 def test_rebuild_index(sample_chunks):
     """测试重建索引"""
     index_path = sample_chunks / "registry" / "search_index.db"

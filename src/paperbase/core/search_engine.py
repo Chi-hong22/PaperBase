@@ -96,7 +96,8 @@ class SearchEngine:
         limit: int = 10,
         paper_id_filter: str = None,
         year_range: tuple = None,
-        author_filter: str = None
+        author_filter: str = None,
+        state_filter: str = None,
     ) -> List[Dict[str, any]]:
         """
         执行全文搜索
@@ -107,6 +108,7 @@ class SearchEngine:
             paper_id_filter: 可选，只在指定 paper_id 的论文中搜索
             year_range: 可选，年份范围过滤 (start_year, end_year)
             author_filter: 可选，作者模糊匹配
+            state_filter: 可选，论文状态过滤
 
         Returns:
             List[Dict]: 搜索结果列表，每个结果包含：
@@ -138,24 +140,40 @@ class SearchEngine:
                 sql += " AND paper_id = ?"
                 params.append(paper_id_filter)
 
-            sql += " ORDER BY score LIMIT ?"
-            params.append(limit)
-
-            cursor = self.conn.execute(sql, params)
+            sql += " ORDER BY score LIMIT ? OFFSET ?"
 
             results = []
-            for row in cursor.fetchall():
-                results.append({
-                    "paper_id": row["paper_id"],
-                    "score": abs(row["score"]),  # BM25 分数是负数，取绝对值
-                    "snippet": row["snippet"]
-                })
+            seen_paper_ids = set()
+            batch_size = max(limit * 10, 100)
+            offset = 0
+            while len(results) < limit:
+                cursor = self.conn.execute(sql, [*params, batch_size, offset])
+                rows = cursor.fetchall()
+                if not rows:
+                    break
+                offset += len(rows)
 
-            # 如果有元数据过滤，需要联合 Registry 过滤
-            if year_range or author_filter:
-                results = self._filter_by_metadata(results, year_range, author_filter)
+                candidates = []
+                for row in rows:
+                    if row["paper_id"] in seen_paper_ids:
+                        continue
+                    seen_paper_ids.add(row["paper_id"])
+                    candidates.append({
+                        "paper_id": row["paper_id"],
+                        "score": abs(row["score"]),  # BM25 分数是负数，取绝对值
+                        "snippet": row["snippet"]
+                    })
 
-            return results
+                if year_range or author_filter or state_filter:
+                    candidates = self._filter_by_metadata(
+                        candidates,
+                        year_range,
+                        author_filter,
+                        state_filter,
+                    )
+                results.extend(candidates)
+
+            return results[:limit]
 
         except sqlite3.OperationalError as e:
             # 查询语法错误，返回空结果
@@ -165,7 +183,8 @@ class SearchEngine:
         self,
         results: List[Dict],
         year_range: tuple = None,
-        author_filter: str = None
+        author_filter: str = None,
+        state_filter: str = None,
     ) -> List[Dict]:
         """
         通过元数据过滤搜索结果
@@ -174,6 +193,7 @@ class SearchEngine:
             results: FTS 搜索结果
             year_range: 年份范围 (start_year, end_year)
             author_filter: 作者模糊匹配
+            state_filter: 论文状态
 
         Returns:
             List[Dict]: 过滤后的结果
@@ -194,6 +214,9 @@ class SearchEngine:
             paper = registry.get_paper(paper_id)
 
             if not paper:
+                continue
+
+            if state_filter and paper.get("state") != state_filter:
                 continue
 
             # 年份过滤
