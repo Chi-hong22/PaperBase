@@ -560,7 +560,6 @@ uv run paperbase search "vision" --state ready --year-min 2022 --limit 10
 
 # 知识图谱查询（需要先运行 graph update）
 uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
-uv run paperbase query similar "arxiv:1706.03762" --limit 5
 ```
 
 ### 维护和同步
@@ -726,8 +725,8 @@ graph LR
 | **查询复杂度** | O(log N)，基于倒排索引              | O(N)，图遍历算法                    |
 | **返回结果**   | 文档列表 + 匹配片段                 | 关系网络 + 路径距离                 |
 | **典型场景**   | 关键词搜索、布尔查询、模糊匹配      | 文献综述、引用分析、概念追溯        |
-| **过滤能力**   | 按状态、年份、特定论文过滤          | 按关系深度、相似度阈值过滤          |
-| **数据依赖**   | 仅需 registry/papers.db             | 需要 graph/graph.json               |
+| **过滤能力**   | 按状态、年份、作者、特定论文过滤    | 按关系深度过滤                      |
+| **数据依赖**   | 需要 index/fts.db；元数据过滤还需要 registry/papers.db | 需要 graph/graph.json |
 
 **实际使用示例**：
 
