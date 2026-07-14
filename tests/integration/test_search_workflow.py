@@ -210,6 +210,45 @@ def test_search_engine_limit(temp_workspace, sample_papers):
     engine.close()
 
 
+def test_search_engine_deduplicates_chunks_by_paper(temp_workspace, sample_papers):
+    """同一论文命中多个分块时只返回一次论文结果。"""
+    engine = SearchEngine(temp_workspace["index"], temp_workspace["library"])
+    engine.build_index()
+
+    results = engine.search("learning", limit=10)
+
+    assert [result["paper_id"] for result in results] == ["paper001", "paper002"]
+    engine.close()
+
+
+def test_search_limit_is_applied_after_metadata_filter(temp_workspace, sample_papers):
+    """元数据过滤必须发生在最终结果数量截断之前。"""
+    engine = SearchEngine(temp_workspace["index"], temp_workspace["library"])
+    engine.build_index()
+
+    results = engine.search("learning", limit=1, year_range=(2021, 2021))
+
+    assert [result["paper_id"] for result in results] == ["paper002"]
+    engine.close()
+
+
+def test_search_engine_filters_by_state(temp_workspace, sample_papers):
+    """状态过滤使用 Registry 中的当前状态。"""
+    from paperbase.schemas.manifest import PaperState
+
+    registry = PaperRegistry(temp_workspace["registry"])
+    registry.update_state("paper001", PaperState.NORMALIZED)
+    registry.close()
+
+    engine = SearchEngine(temp_workspace["index"], temp_workspace["library"])
+    engine.build_index()
+
+    results = engine.search("learning", limit=10, state_filter="normalized")
+
+    assert [result["paper_id"] for result in results] == ["paper001"]
+    engine.close()
+
+
 def test_graph_query_find_related_papers(temp_workspace, sample_graph):
     """测试查找相关论文"""
     graph_dir = temp_workspace["graph"]

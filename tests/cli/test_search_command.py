@@ -105,6 +105,21 @@ def test_search_command_with_limit(test_workspace):
     assert "learning" in result.output
 
 
+def test_search_command_supports_documented_metadata_filters(test_workspace):
+    """公开文档中的状态和年份边界参数应可组合使用。"""
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "--base-dir", str(test_workspace),
+        "search", "learning",
+        "--state", "ready",
+        "--year-min", "2020",
+        "--year-max", "2025",
+    ])
+
+    assert result.exit_code == 0
+    assert "Introduction" in result.output
+
+
 def test_search_command_no_index(tmp_path):
     """测试搜索命令 - 索引不存在"""
     runner = CliRunner()
@@ -115,3 +130,31 @@ def test_search_command_no_index(tmp_path):
 
     assert result.exit_code == 0
     assert "搜索索引不存在" in result.output
+
+
+def test_search_without_registry_does_not_create_database(tmp_path):
+    """无元数据过滤的全文搜索不应隐式创建 Registry。"""
+    library_path = tmp_path / "library" / "papers"
+    paper_dir = library_path / "paper001"
+    paper_dir.mkdir(parents=True)
+    with open(paper_dir / "chunks.jsonl", "w", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "id": "chunk001",
+            "paper_id": "paper001",
+            "content": "machine learning",
+            "position": 0,
+        }) + "\n")
+
+    engine = SearchEngine(tmp_path / "index" / "fts.db", library_path)
+    engine.build_index()
+    engine.close()
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "--base-dir", str(tmp_path),
+        "search", "learning",
+    ])
+
+    assert result.exit_code == 0
+    assert "找到 1 个结果" in result.output
+    assert not (tmp_path / "registry" / "papers.db").exists()
