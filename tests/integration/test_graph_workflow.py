@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from paperbase.adapters.graphify_adapter import check_graphify_installed
 from paperbase.cli.main import main
-from paperbase.core.manifest import load_manifest
+from paperbase.core.manifest import load_manifest, save_manifest
 from paperbase.core.paths import PaperPaths
 from paperbase.core.registry import PaperRegistry
 from paperbase.schemas.manifest import PaperState
@@ -29,8 +29,10 @@ def test_graphify_installed(skip_if_no_graphify):
 def test_graph_workflow_end_to_end(monkeypatch, tmp_path):
     """真实摄入 PDF，并用确定性 Graphify 边界验证状态投影。"""
     pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    graphify_calls = []
 
     def fake_run_graphify(library_dir, graph_dir, force_rebuild, llm_config):
+        graphify_calls.append(library_dir)
         assert library_dir == tmp_path / "library"
         assert graph_dir == tmp_path / "graph"
         graph_dir.mkdir(parents=True, exist_ok=True)
@@ -75,3 +77,18 @@ def test_graph_workflow_end_to_end(monkeypatch, tmp_path):
     assert manifest.graph.indexed is True
     assert registered["state"] == PaperState.READY.value
     assert (tmp_path / "graph" / "graph.json").exists()
+
+    manifest.canonical_md.sha256 = "changed-canonical-sha256"
+    save_manifest(manifest, paths.manifest_json)
+    incremental_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "update", "--incremental"],
+    )
+
+    assert incremental_result.exit_code == 0, incremental_result.output
+    assert "检测到 1 篇论文有更新" in incremental_result.output
+    assert "已索引: 1 篇论文" in incremental_result.output
+    assert graphify_calls == [tmp_path / "library", tmp_path / "library"]
+
+    refreshed_manifest = load_manifest(paths.manifest_json)
+    assert refreshed_manifest.graph.content_sha256_at_index == "changed-canonical-sha256"

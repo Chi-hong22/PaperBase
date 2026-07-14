@@ -65,9 +65,8 @@ def update(ctx, force: bool, incremental: bool):
         llm_config = None
 
     # Step 2: 检测需要更新的论文
-    library_dir = base_dir / "library"
     if incremental:
-        changed_papers = detect_changed_papers(library_dir)
+        changed_papers = detect_changed_papers(base_dir / "library" / "papers")
 
         if not changed_papers:
             console.print("[green]✓ 索引已是最新[/green]")
@@ -122,24 +121,19 @@ def update(ctx, force: bool, incremental: bool):
             paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
             if paths.manifest_json.exists():
                 manifest = load_manifest(paths.manifest_json)
+                content_sha256 = manifest.canonical_md.sha256 if manifest.canonical_md else None
 
-                # 只处理 NORMALIZED 状态的论文
-                if manifest.state == PaperState.NORMALIZED:
-                    content_sha256 = manifest.canonical_md.sha256 if manifest.canonical_md else None
+                manifest.graph = GraphInfo(
+                    indexed=True,
+                    updated_at=now,
+                    content_sha256_at_index=content_sha256
+                )
 
-                    manifest.graph = GraphInfo(
-                        indexed=True,
-                        updated_at=now,
-                        content_sha256_at_index=content_sha256
-                    )
+                manifest.state = PaperState.READY
+                save_manifest(manifest, paths.manifest_json)
 
-                    # 推进到 READY
-                    manifest.state = PaperState.READY
-                    save_manifest(manifest, paths.manifest_json)
-
-                    # 更新 registry 状态（所有模式）
-                    registry.update_state(paper_id, PaperState.READY)
-                    updated_count += 1
+                registry.update_state(paper_id, PaperState.READY)
+                updated_count += 1
     finally:
         registry.close()
 
