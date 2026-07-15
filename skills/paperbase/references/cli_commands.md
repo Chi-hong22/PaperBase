@@ -53,20 +53,26 @@ paperbase graph update  # 统一更新图谱
 构建和管理知识图谱。
 
 ```bash
-paperbase graph update                  # 更新图谱
-paperbase graph update --incremental    # 增量更新（推荐）
-paperbase graph update --force          # 强制全量重建
+paperbase graph adopt                   # 接纳 Agent 已生成的 graphify-out
+paperbase graph adopt --force           # 接纳 Agent 全量图谱
+paperbase graph update                  # 手动 headless 更新，读取本地 LLM
+paperbase graph update --incremental    # 手动 headless 增量更新
+paperbase graph update --force          # 手动 headless 强制全量重建
 paperbase graph status                  # 查看图谱统计
 ```
 
 **更新模式**：
-- **默认模式**: 只处理 NORMALIZED 状态的论文
-- **增量模式** (`--incremental`): 通过 SHA256 检测内容变化，只更新变更的论文
-- **强制模式** (`--force`): 删除现有图谱并全量重建
+- **Agent 模式**: Graphify skill 先生成 `library/papers/graphify-out/`，再用 `adopt` 做无 LLM 状态投影
+- **手动默认模式**: `update` 调用 headless Graphify，读取 `config/paperbase.yaml` 的本地 LLM
+- **增量模式** (`--incremental`): 通过 SHA256 检测内容变化；保留 `graphify-out/cache/` 供 Graphify 复用
+- **强制模式** (`--force`): 删除 Graphify 缓存并全量重建
 
 **示例**：
 ```bash
-# 常规更新（处理新摄入的论文）
+# Agent 生成图谱后的接纳（推荐）
+paperbase graph adopt
+
+# 手动 headless 更新（处理新摄入的论文）
 paperbase graph update
 
 # 增量更新（日常维护，快 10 倍）

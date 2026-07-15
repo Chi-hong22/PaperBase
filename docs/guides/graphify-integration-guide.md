@@ -192,6 +192,8 @@ graphify extract <path> --out <dir>
 
 因此任何项目接入 Graphify CLI 时，都必须明确自己的输出路径契约：是直接读取 `<dir>/graphify-out/graph.json`，还是把它复制、移动或转换到项目自己的图谱目录。
 
+`--api-timeout` 只限制单次 LLM 请求，不限制整批 corpus 的总执行时间。批量论文的完整运行时间可能超过单次请求超时；外层脚本不应再硬编码一个更短的固定进程超时。Graphify 在已有 `graphify-out/manifest.json` 和 `graph.json` 时会执行增量扫描，因此接入方应保留 `graphify-out/cache/`，不要在每次运行前删除整个输出目录。
+
 ## 6. 核心工作流
 
 Graphify 的完整构建流程可以理解为：
