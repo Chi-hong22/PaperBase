@@ -31,10 +31,19 @@ def test_graph_workflow_end_to_end(monkeypatch, tmp_path):
     pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
     graphify_calls = []
 
-    def fake_run_graphify(library_dir, graph_dir, force_rebuild, llm_config):
+    def fake_run_graphify(
+        library_dir,
+        graph_dir,
+        force_rebuild,
+        llm_config,
+        process_timeout,
+        api_timeout,
+    ):
         graphify_calls.append(library_dir)
         assert library_dir == tmp_path / "library"
         assert graph_dir == tmp_path / "graph"
+        assert process_timeout is None
+        assert api_timeout == 600
         graph_dir.mkdir(parents=True, exist_ok=True)
         (graph_dir / "graph.json").write_text(
             json.dumps(
@@ -92,3 +101,37 @@ def test_graph_workflow_end_to_end(monkeypatch, tmp_path):
 
     refreshed_manifest = load_manifest(paths.manifest_json)
     assert refreshed_manifest.graph.content_sha256_at_index == "changed-canonical-sha256"
+
+
+def test_graph_adopt_projects_agent_output_without_running_headless(monkeypatch, tmp_path):
+    """Agent 先生成 graphify-out，PaperBase 只做确定性投影。"""
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    runner = CliRunner()
+
+    ingest_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+    assert ingest_result.exit_code == 0, ingest_result.output
+
+    papers_dir = tmp_path / "library" / "papers"
+    graphify_out = papers_dir / "graphify-out"
+    graphify_out.mkdir()
+    (graphify_out / "graph.json").write_text(
+        json.dumps({"nodes": [{"id": "agent"}], "links": []}),
+        encoding="utf-8",
+    )
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("adopt 不应调用 headless graphify")
+
+    monkeypatch.setattr("paperbase.cli.commands.graph.run_graphify", fail_if_called)
+
+    adopt_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "adopt"],
+    )
+
+    assert adopt_result.exit_code == 0, adopt_result.output
+    assert "已接纳 Graphify Agent 图谱" in adopt_result.output
+    assert (tmp_path / "graph" / "graph.json").exists()

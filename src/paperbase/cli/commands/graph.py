@@ -7,6 +7,7 @@ from paperbase.utils.timestamp import now_iso8601
 from paperbase.adapters.graphify_adapter import (
     check_graphify_installed,
     run_graphify,
+    adopt_graphify_output,
     get_graph_stats,
 )
 from paperbase.core.registry import PaperRegistry
@@ -52,40 +53,18 @@ def update(ctx, force: bool, incremental: bool):
         console.print("   安装方法: [cyan]uv tool install graphify[/cyan]")
         raise click.Abort()
 
-    # Step 1.5: 加载 PaperBase LLM 配置（用于传递给 graphify）
-    from paperbase.config.loader import load_config
-    try:
-        config = load_config()
-        llm_config = {
-            "api_key": config.llm.api_key,
-            "base_url": config.llm.base_url,
-            "model": config.llm.model
-        } if config.llm.is_enabled() else None
-    except Exception:
-        llm_config = None
+    # Step 1.5: 手动 CLI 模式才读取 PaperBase 的本地 LLM 配置。
+    llm_config, process_timeout, api_timeout = _load_headless_graphify_config()
 
     # Step 2: 检测需要更新的论文
+    normalized_papers = _papers_to_index(base_dir, incremental=incremental)
     if incremental:
-        changed_papers = detect_changed_papers(base_dir / "library" / "papers")
-
-        if not changed_papers:
+        if not normalized_papers:
             console.print("[green]✓ 索引已是最新[/green]")
             return
-
-        console.print(f"检测到 {len(changed_papers)} 篇论文有更新")
-        normalized_papers = changed_papers
+        console.print(f"检测到 {len(normalized_papers)} 篇论文有更新")
     else:
-        registry_path = base_dir / "registry" / "papers.db"
-        if not registry_path.exists():
-            console.print("[red]知识库为空，请先添加论文[/red]")
-            raise click.Abort()
-
-        registry = PaperRegistry(registry_path)
-        normalized_papers = registry.list_papers(state=PaperState.NORMALIZED)
-        all_papers = registry.list_papers()
-        registry.close()
-
-        console.print(f"待索引: {len(normalized_papers)} 篇，总计: {len(all_papers)} 篇")
+        console.print(f"待索引: {len(normalized_papers)} 篇")
 
     # Step 3: 构建索引
     console.print("[dim]正在构建论文关联...[/dim]")
@@ -96,7 +75,9 @@ def update(ctx, force: bool, incremental: bool):
         library_dir=library_dir,
         graph_dir=graph_dir,
         force_rebuild=force,
-        llm_config=llm_config  # 传递 PaperBase 的 LLM 配置
+        llm_config=llm_config,
+        process_timeout=process_timeout,
+        api_timeout=api_timeout,
     )
 
     if not result["success"]:
@@ -106,40 +87,117 @@ def update(ctx, force: bool, incremental: bool):
 
     # Step 4: 更新状态
     stats = get_graph_stats(graph_dir)
-    updated_count = 0
-    now = now_iso8601()  # 使用统一的时间戳生成函数
-
-    # 打开 registry（所有模式都需要）
-    registry_path = base_dir / "registry" / "papers.db"
-    registry = PaperRegistry(registry_path)
-
-    try:
-        for paper in normalized_papers:
-            storage_id = paper["storage_id"]
-            paper_id = paper["paper_id"]
-
-            paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
-            if paths.manifest_json.exists():
-                manifest = load_manifest(paths.manifest_json)
-                content_sha256 = manifest.canonical_md.sha256 if manifest.canonical_md else None
-
-                manifest.graph = GraphInfo(
-                    indexed=True,
-                    updated_at=now,
-                    content_sha256_at_index=content_sha256
-                )
-
-                manifest.state = PaperState.READY
-                save_manifest(manifest, paths.manifest_json)
-
-                registry.update_state(paper_id, PaperState.READY)
-                updated_count += 1
-    finally:
-        registry.close()
+    updated_count = _project_index_state(base_dir, normalized_papers)
 
     console.print(f"[green]✓ 索引更新完成[/green]")
     console.print(f"   已索引: {updated_count} 篇论文")
     console.print(f"   索引文件: {len(stats['files'])} 个")
+
+
+@graph.command()
+@click.option(
+    "--force",
+    is_flag=True,
+    help="将 Agent 生成的完整图谱投影到 PaperBase，并标记所有 NORMALIZED 论文",
+)
+@click.option(
+    "--incremental",
+    is_flag=True,
+    help="只标记内容发生变化的论文（默认行为）",
+)
+@click.pass_context
+def adopt(ctx, force: bool, incremental: bool):
+    """接纳 Graphify Agent 已生成的 graphify-out，不调用本地 LLM。"""
+    console = Console()
+    base_dir = ctx.obj["base_dir"]
+
+    if force and incremental:
+        console.print("[red]--force 和 --incremental 不能同时使用[/red]")
+        raise click.Abort()
+
+    normalized_papers = _papers_to_index(
+        base_dir,
+        incremental=not force,
+    )
+    if not normalized_papers:
+        console.print("[green]✓ 没有需要接纳的论文状态变化[/green]")
+        return
+
+    result = adopt_graphify_output(
+        library_dir=base_dir / "library",
+        graph_dir=base_dir / "graph",
+    )
+    if not result["success"]:
+        console.print(f"[red]Graphify 输出接纳失败: {result['error']}[/red]")
+        raise click.Abort()
+
+    updated_count = _project_index_state(base_dir, normalized_papers)
+    stats = get_graph_stats(base_dir / "graph")
+    console.print("[green]✓ 已接纳 Graphify Agent 图谱[/green]")
+    console.print(f"   已索引: {updated_count} 篇论文")
+    console.print(f"   节点: {stats['nodes']}，边: {stats['edges']}")
+
+
+def _load_headless_graphify_config() -> tuple[dict | None, float | None, float | None]:
+    """读取手动 headless Graphify 所需的本地 LLM 和超时配置。"""
+    from paperbase.config.loader import load_config
+
+    try:
+        config = load_config()
+    except Exception:
+        return None, None, None
+
+    llm_config = {
+        "api_key": config.llm.api_key,
+        "base_url": config.llm.base_url,
+        "model": config.llm.model,
+    } if config.llm.is_enabled() else None
+    return (
+        llm_config,
+        config.graph.get_process_timeout(),
+        config.graph.get_api_timeout(),
+    )
+
+
+def _papers_to_index(base_dir: Path, *, incremental: bool) -> list[dict]:
+    """返回需要在本次图谱状态投影中标记的论文。"""
+    papers_path = base_dir / "library" / "papers"
+    if incremental:
+        return detect_changed_papers(papers_path)
+
+    registry_path = base_dir / "registry" / "papers.db"
+    if not registry_path.exists():
+        raise click.ClickException("知识库为空，请先添加论文")
+
+    with PaperRegistry(registry_path) as registry:
+        return registry.list_papers(state=PaperState.NORMALIZED)
+
+
+def _project_index_state(base_dir: Path, papers: list[dict]) -> int:
+    """将已生成的图谱状态写回 manifest 和 Registry。"""
+    now = now_iso8601()
+    registry_path = base_dir / "registry" / "papers.db"
+    updated_count = 0
+
+    with PaperRegistry(registry_path) as registry:
+        for paper in papers:
+            paths = PaperPaths(storage_id=paper["storage_id"], base_dir=base_dir)
+            if not paths.manifest_json.exists():
+                continue
+
+            manifest = load_manifest(paths.manifest_json)
+            content_sha256 = manifest.canonical_md.sha256 if manifest.canonical_md else None
+            manifest.graph = GraphInfo(
+                indexed=True,
+                updated_at=now,
+                content_sha256_at_index=content_sha256,
+            )
+            manifest.state = PaperState.READY
+            save_manifest(manifest, paths.manifest_json)
+            registry.update_state(paper["paper_id"], PaperState.READY)
+            updated_count += 1
+
+    return updated_count
 
 
 @graph.command()
