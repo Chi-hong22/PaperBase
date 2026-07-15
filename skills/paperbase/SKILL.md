@@ -75,25 +75,31 @@ PDF/DOI → NORMALIZED → READY
 人类: "更新知识图谱"
 Agent:
   1. 检测变更论文（3 篇新增，1 篇修改）
-  2. 增量更新模式
-  3. 调用 graphify 构建关联
-  4. 推进状态到 READY
+  2. 优先调用 Graphify skill 的 Agent 模式：`/graphify library/papers --update --no-viz`
+  3. 调用 `paperbase graph adopt`，只接纳 graphify-out 并推进状态，不读取本地 LLM 配置
   完成：节点 +5，边 +12
 
 人类: "重建整个图谱"
 Agent:
   警告：全量重建耗时较长
-  确认后执行 --force 模式
+  确认后调用 `/graphify library/papers --no-viz`，再执行 `paperbase graph adopt --force`
   完成：已处理 100 篇论文
 ```
 
 **关键命令**：
 ```bash
-paperbase graph update                # 更新图谱
-paperbase graph update --incremental  # 增量更新（推荐）
-paperbase graph update --force        # 强制重建
+paperbase graph adopt                 # 接纳 Agent 已生成的 graphify-out（默认增量）
+paperbase graph adopt --force         # 接纳 Agent 全量图谱
+paperbase graph update                # 手动 headless 更新，读取本地 LLM 配置
+paperbase graph update --incremental  # 手动 headless 增量更新
+paperbase graph update --force        # 手动 headless 强制重建
 paperbase graph status                # 查看统计
 ```
+
+**LLM 优先级约定**：
+- Agent 调用本 skill 时，语义抽取优先使用 Graphify skill 的 Agent/self/subagent 能力；不得把 `config/paperbase.yaml` 的本地 LLM 配置注入该流程。
+- 只有人类明确执行 `paperbase graph update` 时，才使用 PaperBase 的本地 OpenAI-compatible LLM 配置。
+- `paperbase graph adopt` 是无 LLM 的确定性状态投影步骤。
 
 ---
 
