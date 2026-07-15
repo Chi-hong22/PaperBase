@@ -4,7 +4,7 @@ from pathlib import Path
 from paperbase.core.manifest import load_manifest
 from paperbase.core.paths import PaperPaths
 from paperbase.utils.hash import sha256_file
-from paperbase.schemas.manifest import ManifestSchema
+from paperbase.schemas.manifest import ManifestSchema, PaperState
 
 
 def detect_changed_papers(library_path: Path) -> list[dict]:
@@ -53,6 +53,16 @@ def should_update_graph(manifest: ManifestSchema) -> bool:
     2. canonical_md SHA256 发生变化 → 需要更新
     3. graph.content_sha256_at_index 为空 → 需要更新（向后兼容）
     """
+    # 已记录过同一份 Canonical 的质量问题时，等待内容哈希变化再重试。
+    if (
+        manifest.state == PaperState.NEEDS_REVIEW
+        and manifest.graph
+        and manifest.graph.content_sha256_at_index
+        and manifest.canonical_md
+        and manifest.canonical_md.sha256 == manifest.graph.content_sha256_at_index
+    ):
+        return False
+
     # 未图谱化
     if not manifest.graph or not manifest.graph.indexed:
         return True

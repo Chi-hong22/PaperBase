@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pathlib import Path
 from subprocess import CompletedProcess, TimeoutExpired
@@ -310,3 +312,48 @@ def test_adopt_graphify_output_preserves_source_cache(tmp_path):
     assert result["success"] is True
     assert (graph_dir / "graph.json").read_text(encoding="utf-8") == '{"version": "agent"}'
     assert (cache_dir / "cached.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("source_file", "source_location"),
+    [
+        ("p_example/source/source.pdf", "page 3"),
+        ("p_example.md", "external_pdf:p3:method"),
+    ],
+)
+def test_adopt_rejects_noncanonical_graph_sources(
+    tmp_path,
+    source_file,
+    source_location,
+):
+    library_dir = tmp_path / "library"
+    papers_dir = library_dir / "papers"
+    graphify_out = papers_dir / "graphify-out"
+    graphify_out.mkdir(parents=True)
+    (papers_dir / "p_example.md").write_text("# Canonical", encoding="utf-8")
+    (graphify_out / "graph.json").write_text(
+        json.dumps(
+            {
+                "nodes": [
+                    {
+                        "id": "p_example_method",
+                        "source_file": source_file,
+                        "source_location": source_location,
+                    }
+                ],
+                "links": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    graph_dir = tmp_path / "graph"
+    graph_dir.mkdir()
+    sentinel = graph_dir / "sentinel.json"
+    sentinel.write_text('{"version": "old"}', encoding="utf-8")
+
+    result = adopt_graphify_output(library_dir, graph_dir)
+
+    assert result["success"] is False
+    assert "Canonical Markdown" in result["error"]
+    assert sentinel.read_text(encoding="utf-8") == '{"version": "old"}'

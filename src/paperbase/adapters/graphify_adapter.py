@@ -3,6 +3,7 @@
 调用全局安装的 graphify 命令构建知识图谱
 """
 
+import json
 import os
 import subprocess
 import tempfile
@@ -138,8 +139,10 @@ def run_graphify(
                     "error": "graphify 执行成功但未生成 graphify-out/graph.json",
                 }
 
-            if graphify_out.exists():
-                _replace_graph_output(graphify_out, graph_dir)
+            adoption = adopt_graphify_output(library_dir, graph_dir)
+            if not adoption["success"]:
+                adoption["output"] = result.stdout
+                return adoption
 
         return {
             "success": result.returncode == 0,
@@ -180,6 +183,24 @@ def adopt_graphify_output(library_dir: Path, graph_dir: Path) -> dict:
             "error": f"Graphify 输出缺少 graph.json: {graphify_out}",
         }
 
+    source_errors = _validate_canonical_graph_sources(
+        graphify_out / "graph.json",
+        papers_dir,
+    )
+    if source_errors:
+        details = "；".join(source_errors[:3])
+        remaining = len(source_errors) - 3
+        if remaining > 0:
+            details += f"；另有 {remaining} 项"
+        return {
+            "success": False,
+            "output": "",
+            "error": (
+                "Graphify 输出违反 Canonical Markdown 唯一来源约束: "
+                f"{details}。请先将 PDF/URL 转换并写回 paper.md，再重新建图。"
+            ),
+        }
+
     try:
         _replace_graph_output(graphify_out, graph_dir)
     except Exception as exc:
@@ -190,6 +211,61 @@ def adopt_graphify_output(library_dir: Path, graph_dir: Path) -> dict:
         }
 
     return {"success": True, "output": "", "error": None}
+
+
+def _validate_canonical_graph_sources(graph_json: Path, papers_dir: Path) -> list[str]:
+    """验证图谱证据只来自 library/papers/*.md。"""
+    try:
+        graph_data = json.loads(graph_json.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return [f"无法读取 graph.json ({exc})"]
+
+    errors: list[str] = []
+    papers_root = papers_dir.resolve()
+    buckets = (
+        graph_data.get("nodes", []),
+        graph_data.get("edges", []),
+        graph_data.get("links", []),
+        graph_data.get("hyperedges", []),
+    )
+
+    for records in buckets:
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+
+            source_location = str(record.get("source_location") or "").lower()
+            if source_location.startswith(("external_pdf:", "source_pdf:", "external_url:")):
+                errors.append(f"发现外部来源定位 {record.get('source_location')}")
+
+            extraction_source = record.get("extraction_source")
+            if extraction_source not in (None, "canonical_markdown"):
+                errors.append(f"发现非 Canonical 抽取来源 {extraction_source}")
+
+            raw_source = record.get("source_file")
+            if not raw_source:
+                continue
+            source_text = str(raw_source).strip()
+            if source_text.lower().startswith(("http://", "https://", "file:")):
+                errors.append(f"发现 URL/本地文件来源 {source_text}")
+                continue
+
+            source_path = Path(source_text)
+            if source_path.suffix.lower() != ".md":
+                errors.append(f"发现非 Markdown 来源 {source_text}")
+                continue
+
+            candidate = source_path if source_path.is_absolute() else papers_root / source_path
+            try:
+                resolved = candidate.resolve()
+                resolved.relative_to(papers_root)
+            except (OSError, ValueError):
+                errors.append(f"来源不在 Canonical 目录 {source_text}")
+                continue
+            if not resolved.is_file():
+                errors.append(f"Canonical Markdown 不存在 {source_text}")
+
+    return list(dict.fromkeys(errors))
 
 
 def _replace_graph_output(graphify_out: Path, graph_dir: Path) -> None:
