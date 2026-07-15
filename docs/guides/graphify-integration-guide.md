@@ -194,6 +194,16 @@ graphify extract <path> --out <dir>
 
 `--api-timeout` 只限制单次 LLM 请求，不限制整批 corpus 的总执行时间。批量论文的完整运行时间可能超过单次请求超时；外层脚本不应再硬编码一个更短的固定进程超时。Graphify 在已有 `graphify-out/manifest.json` 和 `graph.json` 时会执行增量扫描，因此接入方应保留 `graphify-out/cache/`，不要在每次运行前删除整个输出目录。
 
+### Canonical-only 论文约束
+
+论文库接入时，Graphify 的输入必须是 `library/papers/*.md` 这层 Canonical Markdown。`source/*.pdf`、原始 URL、Zotero 附件和临时下载文件属于上游摄入材料，不能在图谱阶段直接读取。正确顺序是：
+
+```text
+PDF/URL/Zotero -> 摄入或修复 -> Canonical Markdown -> Graphify -> graph/投影
+```
+
+如果 Canonical 是 `metadata_only`、`abstract_only`、无有效全文标记或正文不足，接入方应将论文留在待审核状态，而不是用 PDF 旁路补抽取。正文级 `content_kind=fulltext` 且长度达标时，可覆盖历史遗留的外层 quality 标记。若图谱证据出现 `.pdf`、URL 或 `external_pdf:`，接纳阶段应拒绝替换旧图。
+
 ## 6. 核心工作流
 
 Graphify 的完整构建流程可以理解为：

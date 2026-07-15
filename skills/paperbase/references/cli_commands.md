@@ -53,6 +53,8 @@ paperbase graph update  # 统一更新图谱
 构建和管理知识图谱。
 
 ```bash
+paperbase graph preflight                # 建图前检查 Canonical 正文质量
+paperbase graph preflight --force        # 检查全部论文
 paperbase graph adopt                   # 接纳 Agent 已生成的 graphify-out
 paperbase graph adopt --force           # 接纳 Agent 全量图谱
 paperbase graph update                  # 手动 headless 更新，读取本地 LLM
@@ -66,6 +68,9 @@ paperbase graph status                  # 查看图谱统计
 - **手动默认模式**: `update` 调用 headless Graphify，读取 `config/paperbase.yaml` 的本地 LLM
 - **增量模式** (`--incremental`): 通过 SHA256 检测内容变化；保留 `graphify-out/cache/` 供 Graphify 复用
 - **强制模式** (`--force`): 删除 Graphify 缓存并全量重建
+- **质量门**: metadata-only、abstract-only、无有效全文标记或正文不足的论文进入 `NEEDS_REVIEW`；正文级 fulltext 标记且长度达标可覆盖历史遗留 quality 标记
+- **来源门**: `.pdf`、URL、`external_pdf:` 证据会让 adopt 整批失败，旧图保持不变
+- **阻塞门**: 只要存在未修复的 `NEEDS_REVIEW`，`update`/`adopt` 会在调用或接纳 Graphify 前停止；先修复 Canonical 再重试
 
 **示例**：
 ```bash
@@ -81,6 +86,8 @@ paperbase graph update --incremental
 # 强制重建（修复图谱问题）
 paperbase graph update --force
 ```
+
+**Canonical-only 约束**：Graphify 建图阶段只读取 `library/papers/*.md`。PDF、网页和 Zotero 附件必须先经过摄入/修复流程写回 Canonical Markdown；Zotero 元数据优先，PDF 不得覆盖权威元数据。
 
 ---
 

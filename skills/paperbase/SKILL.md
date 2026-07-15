@@ -74,20 +74,23 @@ PDF/DOI → NORMALIZED → READY
 ```
 人类: "更新知识图谱"
 Agent:
-  1. 检测变更论文（3 篇新增，1 篇修改）
-  2. 优先调用 Graphify skill 的 Agent 模式：`/graphify library/papers --update --no-viz`
-  3. 调用 `paperbase graph adopt`，只接纳 graphify-out 并推进状态，不读取本地 LLM 配置
+  1. 运行 `paperbase graph preflight`，先报告正文不足或需要审核的论文
+  2. 若预检有 `NEEDS_REVIEW`，先修复并重试；有阻塞项时 PaperBase 不会启动或接纳 Graphify
+  3. 没有阻塞项时，只对 Canonical Markdown 调用 Graphify skill：`/graphify library/papers --update --no-viz`
+  4. 调用 `paperbase graph adopt`，只接纳 graphify-out 并推进状态，不读取本地 LLM 配置
   完成：节点 +5，边 +12
 
 人类: "重建整个图谱"
 Agent:
   警告：全量重建耗时较长
-  确认后调用 `/graphify library/papers --no-viz`，再执行 `paperbase graph adopt --force`
+  确认后运行 `paperbase graph preflight --force`，调用 `/graphify library/papers --no-viz`，再执行 `paperbase graph adopt --force`
   完成：已处理 100 篇论文
 ```
 
 **关键命令**：
 ```bash
+paperbase graph preflight              # 建图前检查 Canonical 正文质量
+paperbase graph preflight --force      # 检查全部论文
 paperbase graph adopt                 # 接纳 Agent 已生成的 graphify-out（默认增量）
 paperbase graph adopt --force         # 接纳 Agent 全量图谱
 paperbase graph update                # 手动 headless 更新，读取本地 LLM 配置
@@ -100,6 +103,24 @@ paperbase graph status                # 查看统计
 - Agent 调用本 skill 时，语义抽取优先使用 Graphify skill 的 Agent/self/subagent 能力；不得把 `config/paperbase.yaml` 的本地 LLM 配置注入该流程。
 - 只有人类明确执行 `paperbase graph update` 时，才使用 PaperBase 的本地 OpenAI-compatible LLM 配置。
 - `paperbase graph adopt` 是无 LLM 的确定性状态投影步骤。
+
+**Canonical-only 图谱约束**：
+- Graphify 语义抽取的唯一输入是 `library/papers/*.md`；不得在建图阶段打开 `source/*.pdf`、访问 `original_url` 或直接从 URL/PDF 补抽取。
+- PDF/网页只能先经过摄入或修复流程，转换结果写回 Canonical Markdown，并重算 manifest 哈希后才能建图。
+- Zotero 元数据优先于 PDF 元数据；PDF 只能补正文或缺失字段，不能覆盖 Zotero 的标题、作者、年份等权威字段。
+- `content_kind=metadata_only/abstract_only`、无有效全文标记或正文不足的论文保持 `NEEDS_REVIEW`，不推进 `READY`；正文级 `content_kind=fulltext` 且长度达标时，可覆盖历史遗留的外层 quality 标记。
+- Graphify 产物若含 `.pdf`、URL 或 `external_pdf:` 证据，`paperbase graph adopt` 会拒绝整批投影，避免污染现有图谱。
+- 只要存在未修复的 `NEEDS_REVIEW` 论文，`update` 和 `adopt` 都会在耗时建图/投影前停止；先修复 Canonical，再重跑，避免“状态未就绪但图谱已收录”。
+
+**推荐重跑顺序**：
+```bash
+paperbase graph preflight
+/graphify library/papers --update --no-viz
+paperbase graph adopt
+paperbase doctor
+```
+
+预检发现 `NEEDS_REVIEW` 时，先修复对应 Canonical Markdown；PaperBase 会保留旧图谱且不调用 Graphify，再重复上述四步。不要在 Graphify 阶段绕过 Canonical 去读取 PDF。
 
 ---
 

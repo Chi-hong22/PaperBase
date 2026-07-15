@@ -123,9 +123,28 @@ paperbase graph update
 使用增量更新保持图谱同步：
 
 ```bash
-# 每日定时任务
+# 1. 先检查 Canonical Markdown 质量
+paperbase graph preflight
+
+# 2. Agent 优先：只从 Canonical Markdown 建图
+/graphify library/papers --update --no-viz
+paperbase graph adopt
+
+# 手动 headless 备用路径，才读取本地 LLM
 paperbase graph update --incremental
 ```
+
+预检发现 `NEEDS_REVIEW` 时，PaperBase 会在耗时建图前停止并保留旧图；只修复对应论文的摄入/Canonical 内容后重跑，不在 Graphify 阶段直接读取 PDF 或原始 URL。这样可避免 Graphify 扫描整库时把质量不足的论文重新带入图谱，也不会误标为 `READY`。
+
+### 重跑时的耗时与稳定性优化
+
+- **先预检再抽取**：先定位 metadata-only、abstract-only、解析失败和正文过短的论文，避免 Agent 读到一半才发现输入不可用。
+- **按论文/分块重试**：语义 Agent 结果先落盘为 chunk，单个 chunk 失败只重试该 chunk；不要重跑整库，也不要让长 JSON 依赖一次聊天响应传回。
+- **复用两类缓存**：保留 `library/papers/graphify-out/cache/semantic/`，内容哈希未变化的论文直接复用；只有 Canonical 哈希变化才重新抽取。
+- **失败不覆盖旧图**：Graphify 进程失败、来源门失败或健康检查失败时，保留当前 `graph/`；只有通过来源和质量门后才原子替换。
+- **审核状态不重复消耗**：`NEEDS_REVIEW` 会记录审核时 Canonical 哈希；内容未修复前，增量更新跳过它，但 `preflight` 仍会持续显示它。
+- **阻塞先停再建图**：只要本次变更或已有状态中存在 `NEEDS_REVIEW`，`update`/`adopt` 都不启动或接纳整库 Graphify；修复后一次重跑，避免先耗时再回滚。
+- **配置层次分明**：`process_timeout` 控制外层进程，默认不限制；`api_timeout` 只控制单次 LLM 请求，避免把两种时间概念混成固定 300 秒。
 
 ### CI/CD 流水线
 
