@@ -1,0 +1,2 @@
+# PDF fixtures are binary and must not be line-ending normalized.
+tests/fixtures/*.pdf binary

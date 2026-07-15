@@ -26,4 +26,16 @@ def test_paperbase_derived_and_private_paths_are_ignored():
     ]
 
     assert all(_is_ignored(path) for path in ignored_paths)
-    assert not _is_ignored("library/papers/p_example.md")
+    assert _is_ignored("library/papers/p_example.md")
+
+
+def test_graphify_reincludes_local_canonical_markdown():
+    graphifyignore = (
+        REPO_ROOT / "library" / "papers" / ".graphifyignore"
+    ).read_text(encoding="utf-8").splitlines()
+
+    assert "!p_*.md" in graphifyignore
+    assert "p_c4ba82019679.md" in graphifyignore
+    assert graphifyignore.index("!p_*.md") < graphifyignore.index(
+        "p_c4ba82019679.md"
+    )

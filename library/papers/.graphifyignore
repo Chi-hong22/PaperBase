@@ -1,0 +1,5 @@
+# Git 忽略本地 Canonical Markdown，但 Graphify 仍需扫描。
+!p_*.md
+
+# BLOCKED Canonical 不进入语义图谱。
+p_c4ba82019679.md
