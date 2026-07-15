@@ -78,3 +78,15 @@ class TestGraphConfig:
         config = GraphConfig()
         assert config.get_mode() == "incremental"
         assert config.advanced.mode == "incremental"
+
+    def test_graphify_timeouts(self):
+        """外层批处理默认不限制，总体请求沿用 Graphify 默认值。"""
+        config = GraphConfig()
+        assert config.get_process_timeout() is None
+        assert config.get_api_timeout() == 600
+
+        configured = GraphConfig(
+            advanced={"process_timeout": 900, "api_timeout": 120}
+        )
+        assert configured.get_process_timeout() == 900
+        assert configured.get_api_timeout() == 120

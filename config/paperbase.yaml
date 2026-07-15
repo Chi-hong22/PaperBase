@@ -55,6 +55,8 @@ graph:
   # 可选: 高级配置
   advanced:
     mode: incremental        # 更新模式: incremental (增量) / full (全量)
+    process_timeout: null      # PaperBase 外层进程超时；null 表示不限制批处理总时长
+    api_timeout: 600            # Graphify 单次 LLM 请求超时（秒）
     ignore_patterns:         # 忽略的文件模式
       - "sources/"
       - "registry/"
@@ -96,4 +98,3 @@ adapters:
 terminology:
   fuzzy_matching: true     # 是否启用模糊匹配
   custom_aliases: []       # 自定义别名
-

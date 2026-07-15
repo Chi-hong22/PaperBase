@@ -24,7 +24,9 @@ def run_graphify(
     library_dir: Path,
     graph_dir: Path,
     force_rebuild: bool = False,
-    llm_config: dict | None = None
+    llm_config: dict | None = None,
+    process_timeout: float | None = None,
+    api_timeout: float | None = None,
 ) -> dict:
     """
     运行 graphify 构建知识图谱
@@ -39,6 +41,8 @@ def run_graphify(
             - api_key: LLM API Key
             - base_url: LLM API Base URL
             - model: LLM 模型名称
+        process_timeout: PaperBase 外层进程超时；None 表示不限制批处理总时长
+        api_timeout: graphify 单次 LLM 请求超时（秒）
 
     Returns:
         dict: {
@@ -85,7 +89,6 @@ def run_graphify(
     ]
 
     # 准备环境变量（继承当前环境 + PaperBase LLM 配置）
-    import os
     env = os.environ.copy()
 
     # 如果提供了 llm_config，映射为 graphify 识别的环境变量
@@ -107,9 +110,12 @@ def run_graphify(
         if model:
             cmd.extend(["--model", model])
 
+    if api_timeout is not None:
+        cmd.extend(["--api-timeout", str(api_timeout)])
+
     try:
         graphify_out = papers_dir / "graphify-out"
-        if graphify_out.exists():
+        if force_rebuild and graphify_out.exists():
             shutil.rmtree(graphify_out)
 
         # 运行 graphify，传入修改后的环境变量
@@ -118,15 +124,14 @@ def run_graphify(
             cmd,
             capture_output=True,
             text=True,
-            timeout=300,  # 5 分钟超时
+            timeout=process_timeout,
             cwd=str(papers_dir),  # 在 papers 目录运行
             env=env  # 传递环境变量
         )
 
-        # 如果成功，将 graphify-out/ 移动到目标 graph/ 目录
+        # 如果成功，将 graphify-out/ 复制到目标 graph/ 目录，保留源端缓存供下次增量运行。
         if result.returncode == 0:
             if not (graphify_out / "graph.json").is_file():
-                shutil.rmtree(graphify_out, ignore_errors=True)
                 return {
                     "success": False,
                     "output": result.stdout,
@@ -134,28 +139,7 @@ def run_graphify(
                 }
 
             if graphify_out.exists():
-                staging_root = Path(
-                    tempfile.mkdtemp(prefix=f".{graph_dir.name}-swap-", dir=graph_dir.parent)
-                )
-                staged_graph = staging_root / "new"
-                previous_graph = staging_root / "previous"
-
-                try:
-                    shutil.copytree(graphify_out, staged_graph)
-                    if graph_dir.exists():
-                        graph_dir.replace(previous_graph)
-
-                    try:
-                        staged_graph.replace(graph_dir)
-                    except Exception:
-                        if previous_graph.exists() and not graph_dir.exists():
-                            previous_graph.replace(graph_dir)
-                        raise
-
-                    shutil.rmtree(graphify_out, ignore_errors=True)
-                finally:
-                    if graph_dir.exists():
-                        shutil.rmtree(staging_root, ignore_errors=True)
+                _replace_graph_output(graphify_out, graph_dir)
 
         return {
             "success": result.returncode == 0,
@@ -163,11 +147,12 @@ def run_graphify(
             "error": result.stderr if result.returncode != 0 else None
         }
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        limit = "未设置" if process_timeout is None else f"{process_timeout:g} 秒"
         return {
             "success": False,
-            "output": "",
-            "error": "graphify 执行超时（>5分钟）"
+            "output": _timeout_output(exc),
+            "error": f"graphify 执行超时（外层限制: {limit}）"
         }
     except Exception as e:
         return {
@@ -175,6 +160,74 @@ def run_graphify(
             "output": "",
             "error": f"graphify 执行失败: {str(e)}"
         }
+
+
+def adopt_graphify_output(library_dir: Path, graph_dir: Path) -> dict:
+    """将 Agent/Graphify 已生成的 graphify-out 原子投影到 PaperBase graph/。"""
+    papers_dir = library_dir / "papers"
+    graphify_out = papers_dir / "graphify-out"
+
+    if not graphify_out.exists():
+        return {
+            "success": False,
+            "output": "",
+            "error": f"Graphify 输出目录不存在: {graphify_out}",
+        }
+    if not (graphify_out / "graph.json").is_file():
+        return {
+            "success": False,
+            "output": "",
+            "error": f"Graphify 输出缺少 graph.json: {graphify_out}",
+        }
+
+    try:
+        _replace_graph_output(graphify_out, graph_dir)
+    except Exception as exc:
+        return {
+            "success": False,
+            "output": "",
+            "error": f"Graphify 输出投影失败: {exc}",
+        }
+
+    return {"success": True, "output": "", "error": None}
+
+
+def _replace_graph_output(graphify_out: Path, graph_dir: Path) -> None:
+    """原子替换 PaperBase 图谱目录，保留 Graphify 自身缓存。"""
+    staging_root = Path(
+        tempfile.mkdtemp(prefix=f".{graph_dir.name}-swap-", dir=graph_dir.parent)
+    )
+    staged_graph = staging_root / "new"
+    previous_graph = staging_root / "previous"
+
+    try:
+        shutil.copytree(graphify_out, staged_graph)
+        if graph_dir.exists():
+            graph_dir.replace(previous_graph)
+
+        try:
+            staged_graph.replace(graph_dir)
+        except Exception:
+            if previous_graph.exists() and not graph_dir.exists():
+                previous_graph.replace(graph_dir)
+            raise
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)
+
+
+def _timeout_output(exc: subprocess.TimeoutExpired) -> str:
+    """提取超时时已捕获的输出，便于定位批量任务卡点。"""
+    stdout = _stringify_output(exc.stdout)
+    stderr = _stringify_output(exc.stderr)
+    return "\n".join(part for part in (stdout, stderr) if part)
+
+
+def _stringify_output(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return value
 
 
 def get_graph_stats(graph_dir: Path) -> dict:

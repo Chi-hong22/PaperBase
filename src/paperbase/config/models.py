@@ -85,6 +85,8 @@ class GraphAdvancedConfig(BaseModel):
     """图谱高级配置"""
     mode: Literal["incremental", "full"] = "incremental"
     ignore_patterns: list[str] = []
+    process_timeout: float | None = None
+    api_timeout: float | None = 600
 
 
 class GraphConfig(BaseModel):
@@ -145,6 +147,14 @@ class GraphConfig(BaseModel):
             "**/chunks.jsonl",
             "**/references.jsonl",
         ]
+
+    def get_process_timeout(self) -> float | None:
+        """获取 PaperBase 对 graphify 进程设置的外层超时。"""
+        return self.advanced.process_timeout
+
+    def get_api_timeout(self) -> float | None:
+        """获取 graphify 单次 LLM 请求超时。"""
+        return self.advanced.api_timeout
 
 
 class AdapterConfig(BaseModel):

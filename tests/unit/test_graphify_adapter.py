@@ -1,9 +1,10 @@
 import pytest
 from pathlib import Path
-from subprocess import CompletedProcess
+from subprocess import CompletedProcess, TimeoutExpired
 
 import paperbase.adapters.graphify_adapter as graphify_adapter
 from paperbase.adapters.graphify_adapter import (
+    adopt_graphify_output,
     check_graphify_installed,
     run_graphify,
 )
@@ -98,6 +99,106 @@ def test_successful_rebuild_replaces_existing_graph(tmp_path, monkeypatch):
     assert (graph_dir / "graph.json").read_text(encoding="utf-8") == '{"version": "new"}'
 
 
+def test_incremental_run_preserves_graphify_cache(tmp_path, monkeypatch):
+    library_dir = tmp_path / "library"
+    papers_dir = library_dir / "papers"
+    papers_dir.mkdir(parents=True)
+    (papers_dir / "p_example.md").write_text("# Example", encoding="utf-8")
+
+    graphify_out = papers_dir / "graphify-out"
+    semantic_cache = graphify_out / "cache" / "semantic"
+    semantic_cache.mkdir(parents=True)
+    cache_entry = semantic_cache / "cached.json"
+    cache_entry.write_text('{"nodes": []}', encoding="utf-8")
+
+    def successful_run(cmd, **kwargs):
+        (graphify_out / "graph.json").write_text('{"version": "new"}', encoding="utf-8")
+        return CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(graphify_adapter, "check_graphify_installed", lambda: True)
+    monkeypatch.setattr(graphify_adapter.subprocess, "run", successful_run)
+
+    result = run_graphify(library_dir, tmp_path / "graph")
+
+    assert result["success"] is True
+    assert cache_entry.exists()
+    assert (graphify_out / "graph.json").exists()
+
+
+def test_run_graphify_passes_configured_timeouts(tmp_path, monkeypatch):
+    library_dir = tmp_path / "library"
+    papers_dir = library_dir / "papers"
+    papers_dir.mkdir(parents=True)
+    (papers_dir / "p_example.md").write_text("# Example", encoding="utf-8")
+
+    observed = {}
+
+    def successful_run(cmd, **kwargs):
+        observed["cmd"] = cmd
+        observed["timeout"] = kwargs["timeout"]
+        output_dir = Path(kwargs["cwd"]) / "graphify-out"
+        output_dir.mkdir()
+        (output_dir / "graph.json").write_text('{"version": "new"}', encoding="utf-8")
+        return CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(graphify_adapter, "check_graphify_installed", lambda: True)
+    monkeypatch.setattr(graphify_adapter.subprocess, "run", successful_run)
+
+    result = run_graphify(
+        library_dir,
+        tmp_path / "graph",
+        process_timeout=900,
+        api_timeout=120,
+    )
+
+    assert result["success"] is True
+    assert observed["timeout"] == 900
+    assert observed["cmd"][-2:] == ["--api-timeout", "120"]
+
+
+def test_run_graphify_has_no_default_process_timeout(tmp_path, monkeypatch):
+    library_dir = tmp_path / "library"
+    papers_dir = library_dir / "papers"
+    papers_dir.mkdir(parents=True)
+    (papers_dir / "p_example.md").write_text("# Example", encoding="utf-8")
+
+    observed = {}
+
+    def successful_run(cmd, **kwargs):
+        observed["timeout"] = kwargs["timeout"]
+        output_dir = Path(kwargs["cwd"]) / "graphify-out"
+        output_dir.mkdir()
+        (output_dir / "graph.json").write_text('{"version": "new"}', encoding="utf-8")
+        return CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(graphify_adapter, "check_graphify_installed", lambda: True)
+    monkeypatch.setattr(graphify_adapter.subprocess, "run", successful_run)
+
+    result = run_graphify(library_dir, tmp_path / "graph")
+
+    assert result["success"] is True
+    assert observed["timeout"] is None
+
+
+def test_run_graphify_reports_configured_process_timeout(tmp_path, monkeypatch):
+    library_dir = tmp_path / "library"
+    papers_dir = library_dir / "papers"
+    papers_dir.mkdir(parents=True)
+    (papers_dir / "p_example.md").write_text("# Example", encoding="utf-8")
+
+    def timed_out(cmd, **kwargs):
+        raise TimeoutExpired(cmd, kwargs["timeout"], output="partial output")
+
+    monkeypatch.setattr(graphify_adapter, "check_graphify_installed", lambda: True)
+    monkeypatch.setattr(graphify_adapter.subprocess, "run", timed_out)
+
+    result = run_graphify(library_dir, tmp_path / "graph", process_timeout=900)
+
+    assert result["success"] is False
+    assert result["output"] == "partial output"
+    assert "900 秒" in result["error"]
+
+
 def test_replacement_failure_preserves_existing_graph(tmp_path, monkeypatch):
     library_dir = tmp_path / "library"
     papers_dir = library_dir / "papers"
@@ -164,15 +265,16 @@ def test_post_backup_swap_failure_restores_existing_graph(tmp_path, monkeypatch)
     assert not list(tmp_path.glob(".graph-swap-*"))
 
 
-def test_success_without_fresh_graph_json_is_failure(tmp_path, monkeypatch):
+def test_success_without_graph_json_is_failure(tmp_path, monkeypatch):
     library_dir = tmp_path / "library"
     papers_dir = library_dir / "papers"
     papers_dir.mkdir(parents=True)
     (papers_dir / "p_example.md").write_text("# Example", encoding="utf-8")
 
     stale_output = papers_dir / "graphify-out"
-    stale_output.mkdir()
-    (stale_output / "graph.json").write_text('{"version": "stale"}', encoding="utf-8")
+    stale_cache = stale_output / "cache" / "semantic"
+    stale_cache.mkdir(parents=True)
+    (stale_cache / "cached.json").write_text('{"nodes": []}', encoding="utf-8")
 
     graph_dir = tmp_path / "graph"
     graph_dir.mkdir()
@@ -186,9 +288,25 @@ def test_success_without_fresh_graph_json_is_failure(tmp_path, monkeypatch):
         lambda *args, **kwargs: CompletedProcess(args[0], 0, stdout="ok", stderr=""),
     )
 
-    result = run_graphify(library_dir, graph_dir, force_rebuild=True)
+    result = run_graphify(library_dir, graph_dir, force_rebuild=False)
 
     assert result["success"] is False
     assert "graph.json" in result["error"]
     assert sentinel.read_text(encoding="utf-8") == '{"version": "old"}'
-    assert not stale_output.exists()
+    assert stale_output.exists()
+
+
+def test_adopt_graphify_output_preserves_source_cache(tmp_path):
+    library_dir = tmp_path / "library"
+    graphify_out = library_dir / "papers" / "graphify-out"
+    cache_dir = graphify_out / "cache" / "semantic"
+    cache_dir.mkdir(parents=True)
+    (graphify_out / "graph.json").write_text('{"version": "agent"}', encoding="utf-8")
+    (cache_dir / "cached.json").write_text('{"nodes": []}', encoding="utf-8")
+
+    graph_dir = tmp_path / "graph"
+    result = adopt_graphify_output(library_dir, graph_dir)
+
+    assert result["success"] is True
+    assert (graph_dir / "graph.json").read_text(encoding="utf-8") == '{"version": "agent"}'
+    assert (cache_dir / "cached.json").exists()
