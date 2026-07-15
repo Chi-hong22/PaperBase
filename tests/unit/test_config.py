@@ -84,6 +84,7 @@ class TestGraphConfig:
         config = GraphConfig()
         assert config.get_process_timeout() is None
         assert config.get_api_timeout() == 600
+        assert config.get_minimum_canonical_body_chars() == 500
 
         configured = GraphConfig(
             advanced={"process_timeout": 900, "api_timeout": 120}

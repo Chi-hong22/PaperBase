@@ -87,6 +87,7 @@ class GraphAdvancedConfig(BaseModel):
     ignore_patterns: list[str] = []
     process_timeout: float | None = None
     api_timeout: float | None = 600
+    minimum_canonical_body_chars: int = Field(default=500, gt=0)
 
 
 class GraphConfig(BaseModel):
@@ -155,6 +156,10 @@ class GraphConfig(BaseModel):
     def get_api_timeout(self) -> float | None:
         """获取 graphify 单次 LLM 请求超时。"""
         return self.advanced.api_timeout
+
+    def get_minimum_canonical_body_chars(self) -> int:
+        """获取允许进入语义图谱的 Canonical 正文最小长度。"""
+        return self.advanced.minimum_canonical_body_chars
 
 
 class AdapterConfig(BaseModel):

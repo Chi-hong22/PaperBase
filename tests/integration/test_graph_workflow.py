@@ -8,9 +8,11 @@ from click.testing import CliRunner
 from paperbase.adapters.graphify_adapter import check_graphify_installed
 from paperbase.cli.main import main
 from paperbase.core.manifest import load_manifest, save_manifest
+from paperbase.core.graph_updater import detect_changed_papers
 from paperbase.core.paths import PaperPaths
 from paperbase.core.registry import PaperRegistry
 from paperbase.schemas.manifest import PaperState
+from paperbase.utils.markdown import generate_canonical_markdown, parse_frontmatter
 
 
 @pytest.fixture
@@ -135,3 +137,181 @@ def test_graph_adopt_projects_agent_output_without_running_headless(monkeypatch,
     assert adopt_result.exit_code == 0, adopt_result.output
     assert "已接纳 Graphify Agent 图谱" in adopt_result.output
     assert (tmp_path / "graph" / "graph.json").exists()
+
+
+def test_graph_preflight_reports_metadata_only_canonical(tmp_path):
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    runner = CliRunner()
+    ingest_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+    assert ingest_result.exit_code == 0, ingest_result.output
+
+    with PaperRegistry(tmp_path / "registry" / "papers.db") as registry:
+        paper = registry.list_papers()[0]
+
+    paths = PaperPaths(storage_id=paper["storage_id"], base_dir=tmp_path)
+    metadata, body = parse_frontmatter(paths.paper_md.read_text(encoding="utf-8"))
+    metadata["quality"]["fulltext"] = False
+    paths.paper_md.write_text(
+        generate_canonical_markdown(metadata, body),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "preflight"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "可建图: 0" in result.output
+    assert "需审核: 1" in result.output
+    assert paper["storage_id"] in result.output
+    assert "quality.fulltext=false" in result.output
+
+
+def test_graph_update_stops_before_graphify_for_blocked_canonical(
+    monkeypatch, tmp_path
+):
+    """质量门失败时保留旧图谱，避免把 metadata-only 送入 Graphify。"""
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    runner = CliRunner()
+    ingest_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+    assert ingest_result.exit_code == 0, ingest_result.output
+
+    with PaperRegistry(tmp_path / "registry" / "papers.db") as registry:
+        paper = registry.list_papers()[0]
+
+    paths = PaperPaths(storage_id=paper["storage_id"], base_dir=tmp_path)
+    metadata, body = parse_frontmatter(paths.paper_md.read_text(encoding="utf-8"))
+    metadata["quality"]["fulltext"] = False
+    paths.paper_md.write_text(
+        generate_canonical_markdown(metadata, body),
+        encoding="utf-8",
+    )
+    manifest = load_manifest(paths.manifest_json)
+    manifest.canonical_md.sha256 = "changed-canonical-sha256"
+    save_manifest(manifest, paths.manifest_json)
+
+    graph_path = tmp_path / "graph" / "graph.json"
+    graph_path.parent.mkdir(parents=True)
+    graph_path.write_text('{"sentinel": true}', encoding="utf-8")
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("质量门失败时不应调用 graphify")
+
+    monkeypatch.setattr("paperbase.cli.commands.graph.run_graphify", fail_if_called)
+
+    result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "update", "--incremental"],
+    )
+
+    assert result.exit_code != 0
+    assert "未调用 Graphify" in result.output
+    assert graph_path.read_text(encoding="utf-8") == '{"sentinel": true}'
+    refreshed_manifest = load_manifest(paths.manifest_json)
+    assert refreshed_manifest.state == PaperState.NEEDS_REVIEW
+    assert refreshed_manifest.graph.indexed is False
+
+
+def test_graph_preflight_accepts_embedded_fulltext_over_stale_quality(tmp_path):
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    runner = CliRunner()
+    ingest_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+    assert ingest_result.exit_code == 0, ingest_result.output
+
+    with PaperRegistry(tmp_path / "registry" / "papers.db") as registry:
+        paper = registry.list_papers()[0]
+
+    paths = PaperPaths(storage_id=paper["storage_id"], base_dir=tmp_path)
+    metadata, _body = parse_frontmatter(paths.paper_md.read_text(encoding="utf-8"))
+    metadata["quality"]["fulltext"] = False
+    metadata["quality"]["needs_review"] = True
+    fulltext_body = (
+        "---\ncontent_kind: fulltext\nhas_fulltext: true\n---\n\n"
+        "# Full paper\n\n"
+        + ("Detailed canonical content. " * 40)
+    )
+    paths.paper_md.write_text(
+        generate_canonical_markdown(metadata, fulltext_body),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "preflight"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "可建图: 1" in result.output
+    assert "需审核: 0" in result.output
+
+
+def test_graph_adopt_keeps_metadata_only_paper_in_needs_review(tmp_path):
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    runner = CliRunner()
+    ingest_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+    assert ingest_result.exit_code == 0, ingest_result.output
+
+    with PaperRegistry(tmp_path / "registry" / "papers.db") as registry:
+        paper = registry.list_papers()[0]
+
+    paths = PaperPaths(storage_id=paper["storage_id"], base_dir=tmp_path)
+    metadata, body = parse_frontmatter(paths.paper_md.read_text(encoding="utf-8"))
+    metadata["quality"]["fulltext"] = False
+    paths.paper_md.write_text(
+        generate_canonical_markdown(metadata, body),
+        encoding="utf-8",
+    )
+
+    graphify_out = tmp_path / "library" / "papers" / "graphify-out"
+    graphify_out.mkdir()
+    (graphify_out / "graph.json").write_text(
+        json.dumps(
+            {
+                "nodes": [
+                    {
+                        "id": "canonical_title",
+                        "source_file": f"{paper['storage_id']}.md",
+                        "source_location": "lines 1-4",
+                    }
+                ],
+                "links": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "adopt"],
+    )
+
+    assert result.exit_code != 0
+    assert "发现 1 篇论文需要审核" in result.output
+    assert "本次未接纳 Graphify 输出" in result.output
+    assert not (tmp_path / "graph").exists()
+    manifest = load_manifest(paths.manifest_json)
+    assert manifest.state == PaperState.NEEDS_REVIEW
+    assert manifest.graph.indexed is False
+    with PaperRegistry(tmp_path / "registry" / "papers.db") as registry:
+        assert registry.get_paper(paper["paper_id"])["state"] == PaperState.NEEDS_REVIEW.value
+    assert detect_changed_papers(tmp_path / "library" / "papers") == []
+
+    preflight_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "preflight"],
+    )
+    assert preflight_result.exit_code == 0, preflight_result.output
+    assert "需审核: 1" in preflight_result.output
