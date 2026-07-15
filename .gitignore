@@ -48,7 +48,8 @@ htmlcov/
 .superpowers/
 
 # PaperBase specific
-# library/ 子目录精细控制（允许 graphify 扫描 papers/*.md）
+# 论文库内容仅保留在本地；Graphify 通过 library/papers/.graphifyignore 重新纳入 Canonical Markdown。
+library/papers/p_*.md
 # 原始 PDF 等源文件
 library/sources/
 # 论文集合
