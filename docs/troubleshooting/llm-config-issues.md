@@ -1,5 +1,7 @@
 # LLM 配置问题排查记录
 
+> **历史问题记录（2026-07-08）**：本文用于保留旧版 headless LLM 配置故障的诊断证据，其中命令和模块名可能已失效。当前 Agent 建图优先走 `paperbase graph preflight → /graphify library/papers --update --no-viz → paperbase graph adopt`；当前 headless 配置请以 `docs/installation.md` 和 `paperbase config --help` 为准。
+
 **日期**: 2026-07-08  
 **问题**: .env 已配置 LLM API，但实际调用显示未配置
 
@@ -231,7 +233,7 @@ LLM 配置:
 ### 2. 验证 LLM 配置
 
 ```bash
-paperbase config check-llm
+paperbase config show
 ```
 
 输出示例：

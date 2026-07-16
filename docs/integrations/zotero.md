@@ -2,7 +2,7 @@
 
 ## 概述
 
-PaperBase 通过 `zotero-mcp-server` 集成 Zotero 文献管理器，支持从 Zotero 导入论文元数据到知识库。
+PaperBase 通过 `zotero-mcp-server` 集成 Zotero 文献管理器。单篇或最近条目导入时，本地模式会优先读取 Zotero 元数据；若条目存在可访问的本地 PDF 附件，则继续走完整 PDF 摄入流程生成 Canonical 全文。
 
 **定位**: 互补工具，而非替代关系
 
@@ -29,8 +29,8 @@ PaperBase 通过 `zotero-mcp-server` 集成 Zotero 文献管理器，支持从 Z
 
    ```bash
    # 检查是否安装成功
-   python -c "import zotero_mcp; print(zotero_mcp.__version__)"
-   # 预期输出: 0.6.0
+   uv run python -c "import importlib.metadata as m; print(m.version('zotero-mcp-server'))"
+   # 当前已验证版本: 0.6.1
    ```
 
 ### 可选（取决于使用模式）
@@ -345,28 +345,11 @@ uv run paperbase ingest --zotero-key ABC12DEF
 
 ## 功能限制
 
-### 当前不支持
+### 当前边界
 
-1. **PDF 附件导入** ⚠️
+1. **PDF 附件读取仅限本地模式**
 
-   **原因**: `zotero-mcp-server` 仅返回元数据，不提供 PDF 文件路径
-
-   **影响**:
-   - 无法获取论文全文内容
-   - 无法提取图表、公式、完整正文
-   - 知识图谱构建受限（仅基于摘要）
-
-   **解决方案**:
-   ```bash
-   # 方式 1: 先从 Zotero 导入元数据，再补充 PDF
-   uv run paperbase ingest --zotero-key ABC12DEF  # 导入元数据
-   # 手动从 Zotero 导出 PDF 到本地
-   uv run paperbase remove "doi:10.1038/nature"   # 删除旧记录
-   uv run paperbase ingest --file paper.pdf       # 重新导入带 PDF 的完整版本
-
-   # 方式 2: 直接使用 PDF 导入（推荐）
-   uv run paperbase ingest --file paper.pdf       # 自动提取元数据 + 全文
-   ```
+   Web API 模式无法访问本机文件路径，因此只导入 Zotero 元数据。若本地模式未找到附件、附件路径失效或 PDF 转换失败，论文可能保持 metadata-only/abstract-only，并在建图预检中进入 `NEEDS_REVIEW`。
 
 2. **集合过滤**
 
@@ -376,9 +359,9 @@ uv run paperbase ingest --zotero-key ABC12DEF
 
    Zotero 中的标签（Tags）和笔记（Notes）不会导入。
 
-4. **附件类型识别**
+4. **附件可访问性**
 
-   `has_pdf` 字段仅基于关键词检测，可能不准确。
+   PaperBase 只处理 `zotero-mcp-server` 返回且本机可访问的 PDF 路径；云端未下载、链接附件或非 PDF 附件不会被当作完整全文导入。
 
 ---
 
@@ -386,20 +369,21 @@ uv run paperbase ingest --zotero-key ABC12DEF
 
 ### Q1: 为什么导入的论文没有全文？
 
-**A**: Zotero 集成仅导入元数据（标题、作者、摘要等），不包含 PDF 全文。
+**A**: 本地模式只有在 Zotero 条目存在可访问的 PDF 附件时才会导入全文。Web API 模式、云端未下载附件或无 PDF 的条目只会生成元数据/摘要级 Canonical。
 
 **推荐做法**:
 1. 使用 PDF 导入获取完整内容：
    ```bash
    uv run paperbase ingest --file paper.pdf
    ```
-2. 或先导入元数据，后续补充 PDF（需删除旧记录）
+2. 或先让 Zotero 下载附件，再重新执行该条目的导入/修复流程
 
 **对比**:
 
 | 导入方式         | 元数据 | 全文 | 图表 | 公式 | 知识图谱质量 |
 | ------------------ | -------- | ------ | ------ | ------ | -------------- |
-| `--zotero-key`   | ✓      | ✗    | ✗    | ✗    | 低（仅摘要）   |
+| `--zotero-key`（本地附件可用） | ✓ | ✓ | ✓ | ✓ | 高（完整内容） |
+| `--zotero-key`（无本地附件） | ✓ | ✗ | ✗ | ✗ | 低（仅元数据/摘要） |
 | `--file paper.pdf` | ✓      | ✓    | ✓    | ✓    | 高（完整内容） |
 
 ---

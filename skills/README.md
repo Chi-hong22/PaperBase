@@ -18,11 +18,11 @@ PaperBase 使用**外部黑盒工具**架构，核心功能通过 CLI 调用独�
 ### graphify
 - **定位**: 外部 CLI 工具
 - **安装位置**: 全局（`~/.local/bin/graphify`）
-- **调用方式**: CLI (`graphify extract <path> --backend openai --model <model>`)
+- **调用方式**: Agent 优先使用 `/graphify library/papers --update --no-viz`；手动 headless 备用路径使用 `paperbase graph update`
 - **职责**: 知识图谱构建、语义分析
 - **安装**: `uv tool install graphify`
 - **验证**: `graphify --version`（应显示 0.9.10+）
-- **要求**: 需要配置 LLM（OPENAI_API_KEY, OPENAI_BASE_URL, model）
+- **要求**: Agent 路径不读取 PaperBase 本地 LLM 配置；headless 路径读取 `config/paperbase.yaml`
 
 ### zotero-mcp
 - **定位**: 外部 MCP 服务
@@ -61,11 +61,11 @@ PaperBase 遵循 **Unix 哲学**：每个工具做好一件事。
 
 ## 目录结构验证
 
-**最终确认的立体结构：**
+**当前平面 Canonical + 同名资源目录结构：**
 ```
 library/papers/
+  ├── p_a7f3b2c1d4e5.md      # Canonical Markdown（内容真相源）
   ├── p_a7f3b2c1d4e5/
-  │   ├── paper.md           # Canonical Markdown（唯一真相源）
   │   ├── manifest.json      # 元数据和状态
   │   ├── references.jsonl   # 引用数据
   │   ├── source/            # 原始 PDF
@@ -77,9 +77,9 @@ library/papers/
 ```
 
 **验证结果：**
-- ✅ graphify 能正确扫描立体结构（29 nodes, 28 edges）
-- ✅ 立体结构优于扁平化（更好的文件组织 + 更多图谱节点）
-- ✅ 修复 `.gitignore` 后完全可行
+- ✅ Graphify 只扫描 `p_*.md` Canonical，资源目录不会重复进入 corpus
+- ✅ `.gitignore` 可排除本地论文内容，`.graphifyignore` 用 `!p_*.md` 独立重新纳入扫描
+- ✅ `BLOCKED` Canonical 由精确 ignore 规则排除，不进入增量建图
 
 ## 相关文档
 

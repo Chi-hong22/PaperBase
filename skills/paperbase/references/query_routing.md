@@ -178,7 +178,7 @@ def query_graph(query: str, base_dir: Path) -> str:
 
 1. **Index Phase** (happens during `graph update`):
    ```
-   paper.md → LLM extracts concepts → graph.json
+   library/papers/p_<storage_id>.md → semantic extraction → graph.json
    ```
 
 2. **Query Phase**:

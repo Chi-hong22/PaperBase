@@ -204,6 +204,8 @@ PDF/URL/Zotero -> 摄入或修复 -> Canonical Markdown -> Graphify -> graph/投
 
 如果 Canonical 是 `metadata_only`、`abstract_only`、无有效全文标记或正文不足，接入方应将论文留在待审核状态，而不是用 PDF 旁路补抽取。正文级 `content_kind=fulltext` 且长度达标时，可覆盖历史遗留的外层 quality 标记。若图谱证据出现 `.pdf`、URL 或 `external_pdf:`，接纳阶段应拒绝替换旧图。
 
+PaperBase 的论文内容可以被 Git 忽略而仍由 Graphify 扫描。`.gitignore` 负责“是否进入版本库”，`library/papers/.graphifyignore` 负责“是否进入语义抽取”；后者通过 `!p_*.md` 重新纳入本地 Canonical，并用更靠后的规则排除 `BLOCKED` 文件。两者不要合并，也不要用强制暂存论文文件替代 Graphify ignore 配置。
+
 ## 6. 核心工作流
 
 Graphify 的完整构建流程可以理解为：

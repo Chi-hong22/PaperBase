@@ -33,7 +33,7 @@ description: >
 Agent: 
   1. 检查 paper-fetch 是否可用
   2. 识别 DOI 并调用 paper-fetch CLI
-  3. 提取元数据并生成 paper.md (状态: NORMALIZED)
+  3. 提取元数据并生成 `library/papers/p_<storage_id>.md`（状态: NORMALIZED）
   4. 更新知识图谱 (状态 → READY)
   完成！论文已加入知识库
 
@@ -75,7 +75,7 @@ PDF/DOI → NORMALIZED → READY
 人类: "更新知识图谱"
 Agent:
   1. 运行 `paperbase graph preflight`，先报告正文不足或需要审核的论文
-  2. 若预检有 `NEEDS_REVIEW`，先修复并重试；有阻塞项时 PaperBase 不会启动或接纳 Graphify
+  2. 若预检有 `NEEDS_REVIEW`，先修复并重试；`BLOCKED` 论文保持排除，不进入增量候选或 Graphify corpus
   3. 没有阻塞项时，只对 Canonical Markdown 调用 Graphify skill：`/graphify library/papers --update --no-viz`
   4. 调用 `paperbase graph adopt`，只接纳 graphify-out 并推进状态，不读取本地 LLM 配置
   完成：节点 +5，边 +12
@@ -89,8 +89,8 @@ Agent:
 
 **关键命令**：
 ```bash
-paperbase graph preflight              # 建图前检查 Canonical 正文质量
-paperbase graph preflight --force      # 检查全部论文
+paperbase graph preflight             # 建图前检查 Canonical 正文质量
+paperbase graph preflight --force     # 检查全部论文
 paperbase graph adopt                 # 接纳 Agent 已生成的 graphify-out（默认增量）
 paperbase graph adopt --force         # 接纳 Agent 全量图谱
 paperbase graph update                # 手动 headless 更新，读取本地 LLM 配置
@@ -109,16 +109,19 @@ paperbase graph status                # 查看统计
 - PDF/网页只能先经过摄入或修复流程，转换结果写回 Canonical Markdown，并重算 manifest 哈希后才能建图。
 - Zotero 元数据优先于 PDF 元数据；PDF 只能补正文或缺失字段，不能覆盖 Zotero 的标题、作者、年份等权威字段。
 - `content_kind=metadata_only/abstract_only`、无有效全文标记或正文不足的论文保持 `NEEDS_REVIEW`，不推进 `READY`；正文级 `content_kind=fulltext` 且长度达标时，可覆盖历史遗留的外层 quality 标记。
+- `BLOCKED` 论文不属于可重试候选：增量检测跳过它，`.graphifyignore` 也必须排除其 Canonical；解除阻塞后再恢复扫描。
 - Graphify 产物若含 `.pdf`、URL 或 `external_pdf:` 证据，`paperbase graph adopt` 会拒绝整批投影，避免污染现有图谱。
 - 只要存在未修复的 `NEEDS_REVIEW` 论文，`update` 和 `adopt` 都会在耗时建图/投影前停止；先修复 Canonical，再重跑，避免“状态未就绪但图谱已收录”。
 
 **推荐重跑顺序**：
 ```bash
 paperbase graph preflight
-/graphify library/papers --update --no-viz
+# Agent 中运行：/graphify library/papers --update --no-viz
 paperbase graph adopt
 paperbase doctor
 ```
+
+**本地私有语料边界**：真实 Canonical、manifest、源 PDF、Registry 与图谱产物只保留在本地并由 Git 忽略；仓库跟踪的 `library/papers/.graphifyignore` 用 `!p_*.md` 重新纳入本地 Canonical，因此不需要、也不得用 `git add -f` 让 Graphify 工作。
 
 预检发现 `NEEDS_REVIEW` 时，先修复对应 Canonical Markdown；PaperBase 会保留旧图谱且不调用 Graphify，再重复上述四步。不要在 Graphify 阶段绕过 Canonical 去读取 PDF。
 
@@ -251,7 +254,7 @@ Agent:
 
 人类: "删除论文 doi:10.1234/abc"
 Agent:
-  已删除：paper.md, source PDF, registry 记录
+  已删除：Canonical Markdown、source PDF、registry 记录
   完成！（默认非交互模式）
 
 人类: "我想确认后再删除"
@@ -298,7 +301,7 @@ Agent:
     - 标题: "Attention Is All You Need"
     - 作者: Vaswani et al.
     - 年份: 2017
-  步骤 3: 生成 paper.md
+  步骤 3: 生成 `library/papers/p_<storage_id>.md`
     - SHA256: 6b77f95d...
     - 状态: NORMALIZED
   步骤 4: 更新图谱
@@ -350,7 +353,7 @@ Agent:
     问题 1: graphify 未安装
       解决: uv tool install graphify
     问题 2: 2 篇论文待处理
-      解决: paperbase graph update --incremental
+      解决: paperbase graph preflight → /graphify library/papers --update --no-viz → paperbase graph adopt
   
   是否执行修复? (y/n)
 ```
@@ -363,7 +366,7 @@ Agent:
 
 ```
 Layer 0: 真相源
-  paper.md (Canonical Markdown)
+  library/papers/p_<storage_id>.md (Canonical Markdown)
   └─ frontmatter (元数据) + body (正文)
 
 Layer 1: 投影层（可重建）
@@ -378,10 +381,10 @@ Layer 2: 状态机
 
 ```
 PaperBase/
-├── library/papers/{storage_id}/
-│   ├── paper.md                # 唯一真相源
-│   ├── manifest.json           # 状态追踪
-│   └── source/source.pdf       # 原始 PDF
+├── library/papers/p_<storage_id>.md   # 内容真相源
+├── library/papers/p_<storage_id>/
+│   ├── manifest.json                  # 状态与溯源
+│   └── source/source.pdf              # 原始 PDF
 ├── registry/papers.db          # 可重建
 ├── graph/                      # 可重建
 └── config/paperbase.yaml
@@ -542,10 +545,11 @@ graph:
 
 ### 第一性原理
 
-1. **唯一真相源**：paper.md 是所有数据的源头
-2. **可重建投影**：registry 和 graph 可从 paper.md 重建
-3. **幂等状态机**：所有操作可重复执行
-4. **双轨查询**：结构化 + 语义正交互补
+1. **唯一内容真相源**：`library/papers/p_<storage_id>.md` 是论文内容的源头
+2. **状态与溯源**：同名目录中的 `manifest.json` 记录状态、来源和处理历史
+3. **可重建投影**：registry 和 graph 可从 Canonical 与 manifest 重建
+4. **幂等状态机**：所有操作可重复执行
+5. **双轨查询**：结构化 + 语义正交互补
 
 ### 用户体验
 
@@ -556,4 +560,4 @@ graph:
 
 ---
 
-**版本**: v1.0 | **架构**: 简化状态机 (NORMALIZED → READY) | **更新**: 2026-07-09
+**版本**: v1.1 | **架构**: 平面 Canonical + 简化状态机 (NORMALIZED → READY) | **更新**: 2026-07-16
