@@ -1,6 +1,8 @@
 """图谱工作流集成测试"""
 
 import json
+import shutil
+import subprocess
 import pytest
 from pathlib import Path
 from click.testing import CliRunner
@@ -26,6 +28,51 @@ def test_graphify_installed(skip_if_no_graphify):
     """测试 graphify 是否可用"""
     from paperbase.adapters.graphify_adapter import check_graphify_installed
     assert check_graphify_installed() is True
+
+
+def test_graphifyignore_excludes_blocked_canonical_from_detect_and_extract(
+    skip_if_no_graphify, tmp_path
+):
+    """Graphify 扫描与提取边界都必须排除 BLOCKED canonical。"""
+    papers_dir = tmp_path / "library" / "papers"
+    papers_dir.mkdir(parents=True)
+    blocked_path = papers_dir / "p_blocked.md"
+    active_path = papers_dir / "p_active.md"
+    blocked_path.write_text("# Blocked", encoding="utf-8")
+    active_path.write_text("# Active", encoding="utf-8")
+    (papers_dir / ".graphifyignore").write_text(
+        "p_blocked.md\n",
+        encoding="utf-8",
+    )
+
+    graphify_executable = Path(shutil.which("graphify"))
+    graphify_python = graphify_executable.parent.parent / "python.exe"
+    probe = subprocess.run(
+        [
+            str(graphify_python),
+            "-c",
+            (
+                "import json,sys; from pathlib import Path; "
+                "from graphify.detect import detect; "
+                "from graphify.extract import collect_files; "
+                "root=Path(sys.argv[1]); result=detect(root); "
+                "print(json.dumps({'detected':[p for paths in result['files'].values() for p in paths],"
+                "'extracted':[str(p) for p in collect_files(root)]}))"
+            ),
+            str(papers_dir),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = json.loads(probe.stdout)
+    detected_files = {Path(path).resolve() for path in result["detected"]}
+    extraction_files = {Path(path).resolve() for path in result["extracted"]}
+
+    assert active_path.resolve() in detected_files
+    assert active_path.resolve() in extraction_files
+    assert blocked_path.resolve() not in detected_files
+    assert blocked_path.resolve() not in extraction_files
 
 
 def test_graph_workflow_end_to_end(monkeypatch, tmp_path):
@@ -169,6 +216,35 @@ def test_graph_preflight_reports_metadata_only_canonical(tmp_path):
     assert "需审核: 1" in result.output
     assert paper["storage_id"] in result.output
     assert "quality.fulltext=false" in result.output
+
+
+def test_graph_preflight_skips_blocked_paper(tmp_path):
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    runner = CliRunner()
+    ingest_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+    assert ingest_result.exit_code == 0, ingest_result.output
+
+    with PaperRegistry(tmp_path / "registry" / "papers.db") as registry:
+        paper = registry.list_papers()[0]
+        registry.update_state(paper["paper_id"], PaperState.BLOCKED)
+
+    paths = PaperPaths(storage_id=paper["storage_id"], base_dir=tmp_path)
+    manifest = load_manifest(paths.manifest_json)
+    manifest.state = PaperState.BLOCKED
+    save_manifest(manifest, paths.manifest_json)
+
+    result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "preflight"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "可建图: 0" in result.output
+    assert "需审核: 0" in result.output
+    assert paper["storage_id"] not in result.output
 
 
 def test_graph_update_stops_before_graphify_for_blocked_canonical(
