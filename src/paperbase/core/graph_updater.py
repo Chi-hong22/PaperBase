@@ -53,6 +53,9 @@ def should_update_graph(manifest: ManifestSchema) -> bool:
     2. canonical_md SHA256 发生变化 → 需要更新
     3. graph.content_sha256_at_index 为空 → 需要更新（向后兼容）
     """
+    if manifest.state == PaperState.BLOCKED:
+        return False
+
     # 已记录过同一份 Canonical 的质量问题时，等待内容哈希变化再重试。
     if (
         manifest.state == PaperState.NEEDS_REVIEW
