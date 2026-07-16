@@ -1,5 +1,14 @@
 # PaperBase Skill - 更新日志
 
+## [2026-07-16-v1.1] - 私有语料与图谱边界同步
+
+- 将 Canonical 路径统一为 `library/papers/p_<storage_id>.md`，同名目录保存 manifest、源文件和派生数据。
+- 明确真实论文内容只保留在本地并由 Git 忽略；`.graphifyignore` 独立重新纳入 Canonical，避免与 Graphify 冲突。
+- 固化 Agent 建图顺序 `preflight → /graphify → adopt`，并说明 headless `graph update` 才读取本地 LLM 配置。
+- 将 `BLOCKED` 论文定义为不可重试候选，要求增量检测与 Graphify corpus 同时排除。
+
+---
+
 ## [2026-07-09-v2] - 查询系统全面优化
 
 ### ✨ 新增功能
@@ -217,4 +226,3 @@ dc3ca8a - docs(skill): 同步最新功能到全局 skill
 - 基础摄入和图谱功能
 - Registry 和状态管理
 - 文档框架建立
-

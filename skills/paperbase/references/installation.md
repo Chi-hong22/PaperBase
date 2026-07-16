@@ -51,7 +51,7 @@ graphify 是外部 CLI 工具，用于构建论文语义关联网络。
 
 - **架构**: 外部 CLI 工具
 - **职责**: 从 Markdown 文件构建知识图谱
-- **要求**: 需要配置 LLM（OpenAI API 或兼容接口）
+- **要求**: Agent 模式由宿主 Agent/Graphify skill 完成语义抽取；headless 模式才需要 PaperBase 本地 LLM 配置
 
 ### 安装命令
 
@@ -67,42 +67,18 @@ graphify --version
 
 Expected output: `graphify 0.9.10+`
 
-### LLM 配置（必需）
-
-graphify 需要 LLM 进行语义抽取，必须配置以下环境变量：
+### 推荐的 Agent 工作流
 
 ```bash
-# 方式 1: 使用 OpenAI 兼容 API
-export PAPERBASE_LLM_BASE_URL="https://api.openai.com/v1"
-export PAPERBASE_LLM_API_KEY="sk-..."
-export PAPERBASE_LLM_MODEL="gpt-4o-mini"
-
-# 方式 2: 使用其他提供商（如 Anthropic、Gemini 等）
-export PAPERBASE_LLM_BASE_URL="https://api.anthropic.com/v1"
-export PAPERBASE_LLM_API_KEY="sk-ant-..."
-export PAPERBASE_LLM_MODEL="claude-3-5-sonnet-20241022"
-```
-
-**重要说明：**
-- PaperBase 会自动将配置传递给 graphify（通过 `--backend openai --model <model>`）
-- 必须使用支持的模型名称（不能使用默认的 `gpt-4.1-mini`）
-- 配置存储在 `config/paperbase.yaml` 中
-
-### 验证 LLM 配置
-
-```bash
-paperbase config show
-```
-
-Expected output: 显示 LLM 配置有效
-
-或使用诊断命令：
-
-```bash
+paperbase graph preflight
+# Agent 中运行：/graphify library/papers --update --no-viz
+paperbase graph adopt
 paperbase doctor
 ```
 
-Expected output: `✓ graphify 已安装` 且 LLM 配置有效
+这条路径不读取 PaperBase 本地 LLM 配置。只有显式运行 `paperbase graph update` 时，才需要在 `config/paperbase.yaml` 中配置 OpenAI-compatible LLM；使用 `paperbase config show` 查看当前配置。不要在 skill、文档或 Git 提交中记录真实密钥。
+
+真实论文内容可以被 `.gitignore` 排除；`library/papers/.graphifyignore` 会用 `!p_*.md` 重新纳入本地 Canonical，二者不冲突。
 
 ---
 

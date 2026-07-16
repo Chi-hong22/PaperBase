@@ -71,6 +71,7 @@ paperbase graph status                  # 查看图谱统计
 - **质量门**: metadata-only、abstract-only、无有效全文标记或正文不足的论文进入 `NEEDS_REVIEW`；正文级 fulltext 标记且长度达标可覆盖历史遗留 quality 标记
 - **来源门**: `.pdf`、URL、`external_pdf:` 证据会让 adopt 整批失败，旧图保持不变
 - **阻塞门**: 只要存在未修复的 `NEEDS_REVIEW`，`update`/`adopt` 会在调用或接纳 Graphify 前停止；先修复 Canonical 再重试
+- **BLOCKED 排除**: `BLOCKED` 论文不进入增量候选，并应由 `.graphifyignore` 精确排除
 
 **示例**：
 ```bash
@@ -88,6 +89,8 @@ paperbase graph update --force
 ```
 
 **Canonical-only 约束**：Graphify 建图阶段只读取 `library/papers/*.md`。PDF、网页和 Zotero 附件必须先经过摄入/修复流程写回 Canonical Markdown；Zotero 元数据优先，PDF 不得覆盖权威元数据。
+
+**Git 边界**：真实 Canonical、manifest、源 PDF、Registry 与图谱产物只保留在本地。`.gitignore` 决定是否进入版本库，`.graphifyignore` 决定是否进入 Graphify corpus。
 
 ---
 
@@ -129,6 +132,7 @@ paperbase status --state ready
 paperbase status --year 2021 --state normalized
 ```
 
+```bash
 # 筛选已就绪的论文
 paperbase status --state ready
 

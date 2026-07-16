@@ -43,7 +43,9 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 
 ```bash
 paperbase-wrapper.sh ingest "doi:10.1234/abc"
-paperbase-wrapper.sh graph update
+paperbase-wrapper.sh graph preflight
+# Agent 中运行：/graphify library/papers --update --no-viz
+paperbase-wrapper.sh graph adopt
 paperbase-wrapper.sh status
 ```
 
@@ -75,7 +77,7 @@ paperbase/
 - Python 3.11+
 - uv (包管理器)
 - PaperBase CLI
-- graphify (可选，用于语义查询)
+- graphify（用于语义图谱）
 
 ## 更多信息
 

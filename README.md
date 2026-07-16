@@ -39,7 +39,7 @@ PDF → Markdown → 知识图谱 → 搜索/分析
 
 **核心概念速览：**
 
-- **Canonical Markdown**：每篇论文对应一个 `paper.md`，这是唯一真相源（source of truth），所有索引、图谱、分块都可从它重建
+- **Canonical Markdown**：每篇论文对应一个 `library/papers/p_<storage_id>.md`，这是内容真相源；同名目录中的 `manifest.json` 记录状态与溯源
 - **简化状态机**：论文处理仅 2 个主状态（摄入后 NORMALIZED → 加入图谱后 READY），可随时中断和恢复
 - **双检索系统**：SQLite FTS5 用于关键词搜索（"找到包含 transformer 的论文"），Graphify 用于关系查询（"这篇论文的引用脉络"）
 
@@ -230,7 +230,9 @@ paperbase/
 - **`registry/papers.db`**: SQLite 数据库，存储全文检索索引（FTS5）和元数据缓存，支持 `search` 命令的快速查询和过滤。
 - **`graph/graph.json`**: Graphify 知识图谱文件，存储论文节点和语义边（引用关系、相似度等），支持 `query` 命令的关系查询。
 
-**重要**：只有 `library/papers/*/paper.md` 和 `manifest.json` 是真相源，其他均可重建。
+**重要**：`library/papers/p_<storage_id>.md` 是论文内容真相源，`library/papers/p_<storage_id>/manifest.json` 是状态与溯源记录；Registry、Graphify 输出、chunks 和 references 均为本地派生数据。
+
+**隐私边界**：真实论文内容、源 PDF、manifest、Registry 和图谱产物只保留在本地，由 `.gitignore` 排除。仓库只跟踪目录占位与 `library/papers/.graphifyignore`；后者会重新纳入本地 `p_*.md` 供 Graphify 扫描，所以 Git 忽略与本地建图不冲突。
 
 **详细架构文档**：[存储布局说明](docs/architecture/storage-layout.md) - 完整的目录结构、文件格式、数据流和依赖关系。
 
@@ -241,7 +243,7 @@ paperbase/
 | --------------------- | -------------------------------- |
 | **个人知识库**      | 构建可搜索、可图谱化的学术文库 |
 | **AI Agent 数据源** | 为 LLM 应用提供结构化论文数据  |
-| **团队协作**        | 基于 Git 的文献管理版本控制    |
+| **团队协作**        | 共享代码、schema 与工作流；真实论文语料不进入 Git |
 | **领域知识图谱**    | 分析引用网络和方法论演进       |
 
 ## 📋 使用方法
@@ -317,16 +319,14 @@ uv tool install graphify
 安装后，可使用图谱功能：
 
 ```bash
-# 基本用法（使用默认配置）
-uv run paperbase graph update
+# Agent 推荐路径
+uv run paperbase graph preflight
+# 在支持 Graphify skill 的 Agent 中：/graphify library/papers --update --no-viz
+uv run paperbase graph adopt
 
-# 指定 LLM 后端和模型（覆盖配置文件）
-uv run paperbase graph update --backend openai --model gpt-4o-mini
+# 手动 headless 备用路径（读取 config/paperbase.yaml）
+uv run paperbase graph update --incremental
 ```
-
-**参数说明：**
-- `--backend`: LLM 后端类型（openai/anthropic/ollama 等），默认使用 `config/paperbase.yaml` 中的配置
-- `--model`: 模型名称（如 gpt-4o-mini/claude-3-5-sonnet-20241022），覆盖配置文件设置
 
 技术集成文档：[docs/guides/graphify-integration-guide.md](docs/guides/graphify-integration-guide.md)
 
@@ -334,7 +334,7 @@ uv run paperbase graph update --backend openai --model gpt-4o-mini
 
 PaperBase 核心功能（摄入、转换、SQLite FTS5 检索）**不依赖 LLM**。
 
-**Graphify 知识图谱功能是 PaperBase 的必需组件**，而 LLM 配置用于支持 Graphify 的语义分析能力。
+**Graphify 知识图谱功能是 PaperBase 的必需组件**。Agent 路径由宿主 Agent/Graphify skill 完成语义抽取；只有手动执行 headless `paperbase graph update` 时才读取 PaperBase 本地 LLM 配置。
 
 ###### **配置流程图**
 
@@ -593,9 +593,9 @@ uv run paperbase graph status
 
 **图谱更新策略**：
 
-- 默认：单篇摄入后自动更新图谱
-- 批量模式：延迟至全部摄入完成后统一更新
-- 增量更新：仅处理内容发生变化的论文（推荐定期维护）
+- CLI 默认：单篇摄入后尝试 headless 更新；未配置本地 LLM 时可用 `--no-graph` 跳过
+- Agent 推荐：统一执行 `preflight → /graphify library/papers --update --no-viz → adopt`
+- 增量更新：只处理内容发生变化的可建图论文；`BLOCKED` 和未修复的质量问题不会进入正常更新
 
 详见 [docs/graph-update-strategy.md](docs/graph-update-strategy.md)。
 
@@ -896,13 +896,13 @@ pip install -e .
 **解决方案：**
 
 1. **使用 OCR 工具预处理**（如 Adobe Acrobat、Tesseract）
-2. **手动编辑 paper.md**：
+2. **手动修复 Canonical Markdown**：
    ```bash
    # 查看转换结果
-   cat library/papers/<storage_id>/paper.md
+   Get-Content library/papers/p_<storage_id>.md
 
    # 手动补充内容
-   vim library/papers/<storage_id>/paper.md
+   notepad library/papers/p_<storage_id>.md
    ```
 3. **跳过该论文**，使用其他来源（如 arXiv 版本）
 

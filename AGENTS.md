@@ -9,7 +9,7 @@ PaperBase 是学术论文知识库基础设施，用于：
 
 ## Source of Truth
 
-**核心原则：`library/papers/<storage_id>/paper.md` 是唯一 source of truth**
+**核心原则：`library/papers/p_<storage_id>.md` 是论文内容的唯一 source of truth；同名目录中的 `manifest.json` 是状态与溯源记录。**
 
 其他都是 derived artifacts（可重建）：
 - `graph/` - Graphify 生成的知识图谱
@@ -51,15 +51,16 @@ paperbase/
    - `graphify`: 知识图谱构建
    - `zotero-mcp`: Zotero 集成
 5. **目录结构**：
-   - 立体结构：`library/papers/p_xxx/paper.md`（推荐）
-   - 每个 paper 独立文件夹，包含 paper.md、manifest.json、source/、assets/
+   - Canonical 使用平面结构：`library/papers/p_xxx.md`
+   - 同名目录 `library/papers/p_xxx/` 保存 `manifest.json`、`source/`、`assets/` 与派生文件
 6. **Graphify 扫描**：
-   - 扫描 `library/papers/` 及其子目录
-   - `.gitignore` 必须配置为 `library/papers/*/` 只排除子目录，不排除 .md 文件
-   - graphify 需要 `--model` 参数和环境变量（OPENAI_API_KEY, OPENAI_BASE_URL）
+   - 只扫描 `library/papers/p_*.md` Canonical，不在建图阶段读取 PDF、URL 或附件
+   - `.gitignore` 排除真实论文内容；`library/papers/.graphifyignore` 用 `!p_*.md` 重新纳入本地 Canonical，并精确排除 `BLOCKED` 文件
+   - Agent 路径不读取 PaperBase 本地 LLM 配置；headless `paperbase graph update` 才读取 `config/paperbase.yaml`
 7. **所有资产路径必须是相对路径**（`./assets/fig-001.png`）
 8. **状态转换必须更新 `manifest.json` 的 `updated_at`**
-9. **不修改 `paper.md` 的 frontmatter 必须保持 `canonical_content_sha256` 不变**
+9. **不修改 Canonical frontmatter/正文时必须保持 `canonical_content_sha256` 不变**
+10. **真实论文、源 PDF、manifest、Registry 和图谱产物只保留在本地，不得加入 Git 或远程历史**
 
 ## 工作流状态机
 
@@ -114,8 +115,13 @@ paperbase ingest --zotero-key <item-key>
 # 查询状态
 paperbase status <paper_id>
 
-# 更新图谱
-paperbase graph update
+# Agent 推荐的图谱更新
+paperbase graph preflight
+# /graphify library/papers --update --no-viz
+paperbase graph adopt
+
+# 手动 headless 备用路径
+paperbase graph update --incremental
 
 # 验证环境和知识库一致性
 paperbase doctor
@@ -126,11 +132,12 @@ paperbase sync
 
 任务完成的标准：
 - [ ] `manifest.json` 存在且 `state = "ready"`
-- [ ] `paper.md` 存在且通过 schema validation
-- [ ] `paper.md` 的 frontmatter 完整（title/authors/year/abstract）
+- [ ] `library/papers/p_<storage_id>.md` 存在且通过 schema validation
+- [ ] Canonical frontmatter 完整（title/authors/year/abstract）
 - [ ] `references.jsonl` 存在且所有引用已 resolved
 - [ ] `graph/` 已更新且 `manifest.json` 中 `graph.indexed = true`
 - [ ] 所有测试通过
+- [ ] `git ls-files library` 不包含真实论文、manifest、源 PDF 或派生索引
 
 ## 技术栈
 

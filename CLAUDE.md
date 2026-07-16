@@ -59,7 +59,9 @@ PaperBase 是论文知识库脚手架，核心理念：
 
 6. **更新知识图谱**
    ```bash
-   paperbase graph update
+   paperbase graph preflight
+   # 调用 Graphify skill：/graphify library/papers --update --no-viz
+   paperbase graph adopt
    ```
 
 ## 外部工具依赖
@@ -81,7 +83,8 @@ PaperBase 是论文知识库脚手架，核心理念：
 - **知识图谱**: `uv tool install graphify`
   - **定位**: 外部 CLI 工具
   - **职责**: 构建论文语义关联网络
-  - **要求**: 需要配置 LLM（OPENAI_API_KEY, OPENAI_BASE_URL, model）
+  - **Agent 路径**: 由宿主 Agent/Graphify skill 完成语义抽取，不读取 PaperBase 本地 LLM 配置
+  - **Headless 路径**: `paperbase graph update` 读取 `config/paperbase.yaml`
   - **验证**: `graphify --version`
 - **Zotero 集成**: `uv tool install zotero-mcp-server`
   - 从 Zotero 导入论文
@@ -118,14 +121,15 @@ PaperBase 是论文知识库脚手架，核心理念：
 ## 调试建议
 
 1. **查看 manifest.json** 确认状态
-2. **检查 paper.md frontmatter** 是否通过 schema 验证
+2. **检查 `library/papers/p_<storage_id>.md` frontmatter** 是否通过 schema 验证
 3. **查看 registry/papers.db** 确认索引状态
 4. **检查 graph/graph.json** 确认知识图谱状态
    - 位置: `<base_dir>/graph/graph.json`
    - 功能: 存储论文语义关联（节点 + 边）
-   - 生成: `paperbase graph update`
+   - 生成: Agent 路径 `preflight → /graphify → adopt`，或手动 headless `paperbase graph update`
    - 依赖: `query` 命令必需，`search` 不需要
-5. **检查 .graphifyignore** 确保 Graphify 不扫描重复内容
+5. **检查 `library/papers/.graphifyignore`**：`!p_*.md` 允许扫描本地 Canonical，更靠后的精确规则排除 `BLOCKED` 文件
+6. **检查 Git 边界**：真实论文、manifest、PDF、Registry 和图谱产物应只保留在本地，不得强制暂存
 
 ## Skills 使用
 
@@ -157,3 +161,13 @@ uv run pytest tests/unit/test_schemas.py -v
 # 测试覆盖率
 uv run pytest --cov=paperbase --cov-report=html
 ```
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked as local Markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+This repo uses a single-context domain documentation layout. See `docs/agents/domain.md`.

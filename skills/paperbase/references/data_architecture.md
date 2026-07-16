@@ -6,17 +6,18 @@ Understanding how PaperBase organizes and manages knowledge.
 
 ### 1. Canonical Markdown as Single Source of Truth
 
-Every paper has ONE authoritative representation: `paper.md`
+Every paper has one authoritative content representation: `library/papers/p_<storage_id>.md`. State and provenance live in the sibling manifest.
 
 ```
-library/papers/{storage_id}/
-├── paper.md          ← ONLY source of truth
-├── manifest.json     ← State tracking + SHA256 hashes
-└── source/
-    └── source.pdf    ← Original material (preserved)
+library/papers/
+├── p_<storage_id>.md          ← content source of truth
+└── p_<storage_id>/
+    ├── manifest.json          ← state, provenance, SHA256 hashes
+    └── source/
+        └── source.pdf         ← original material (preserved)
 ```
 
-**Key insight**: All derived data (registry, graph) can be rebuilt from `paper.md`.
+**Key insight**: Registry and graph projections can be rebuilt from Canonical Markdown plus manifest state.
 
 ---
 
@@ -33,7 +34,7 @@ PDF/DOI → NORMALIZED → READY
 
 | State | Meaning | Can Query? |
 |-------|---------|-----------|
-| `NORMALIZED` | Paper ingested, `paper.md` created | ❌ Registry only |
+| `NORMALIZED` | Paper ingested, Canonical Markdown created | ❌ Registry only |
 | `READY` | Added to graph, fully indexed | ✅ Both tracks |
 
 **Exception States** (edge cases):
@@ -44,14 +45,14 @@ PDF/DOI → NORMALIZED → READY
 
 **State Transitions**:
 - `ingest` → `NORMALIZED`
-- `graph update` → `READY`
+- `graph adopt` or successful headless `graph update` → `READY`
 - No backward transitions (monotonic)
 
 ---
 
 ### 3. Projection Layers (Rebuildable)
 
-Two derived indexes built from `paper.md`:
+Two derived indexes built from Canonical Markdown and manifest state:
 
 #### Registry (SQLite)
 
@@ -61,7 +62,7 @@ Two derived indexes built from `paper.md`:
 
 **Data Source**: 
 - `manifest.json` (state, timestamps)
-- `paper.md` frontmatter (title, authors, year, doi)
+- `library/papers/p_<storage_id>.md` frontmatter (title, authors, year, doi)
 
 **Schema**:
 ```sql
@@ -91,11 +92,13 @@ rm registry/papers.db
 **Location**: `graph/`
 
 **Data Source**: 
-- All `library/papers/*/paper.md` files
+- All Graphify-eligible `library/papers/p_*.md` files
 
 **Rebuild Command**:
 ```bash
-paperbase graph update --force
+paperbase graph preflight --force
+# /graphify library/papers --no-viz
+paperbase graph adopt --force
 ```
 
 ---
@@ -108,8 +111,8 @@ paperbase graph update --force
 PaperBase/
 ├── library/
 │   └── papers/
+│       ├── p_164622e0fc87.md            # Canonical Markdown
 │       └── p_164622e0fc87/              # storage_id (derived from paper_id)
-│           ├── paper.md                 # Canonical Markdown
 │           ├── manifest.json            # State + provenance
 │           ├── source/
 │           │   └── source.pdf           # Original PDF
@@ -126,7 +129,7 @@ PaperBase/
     └── paperbase.yaml                   # Configuration
 ```
 
-### paper.md Structure
+### Canonical Markdown Structure
 
 ```markdown
 ---
@@ -170,7 +173,7 @@ provenance:
   },
   
   "canonical_md": {
-    "path": "./paper.md",
+    "path": "../p_164622e0fc87.md",
     "sha256": "6b77f95dfc7c24...",
     "schema_version": "1.0"
   },
@@ -207,7 +210,7 @@ provenance:
 | Hash Location | Purpose |
 |--------------|---------|
 | `source_pdf.sha256` | PDF integrity verification |
-| `canonical_md.sha256` | Current paper.md content |
+| `canonical_md.sha256` | Current Canonical Markdown content |
 | `graph.content_sha256_at_index` | Content when last indexed |
 
 **Incremental Update Logic**:
@@ -245,8 +248,10 @@ python -m scripts.check_consistency
 rm registry/papers.db
 paperbase status  # Auto-rebuilds
 
-# Rebuild graph from paper.md files
-paperbase graph update --force
+# Rebuild graph from Canonical files
+paperbase graph preflight --force
+# /graphify library/papers --no-viz
+paperbase graph adopt --force
 ```
 
 ---
@@ -315,7 +320,7 @@ author:Zhang           → filter(authors__contains)
 
 | Component | Typical Size | Growth Rate |
 |-----------|-------------|-------------|
-| paper.md | 50-500 KB | Linear with papers |
+| Canonical Markdown | 50-500 KB | Linear with papers |
 | source.pdf | 1-10 MB | Linear with papers |
 | registry/papers.db | ~10 KB/paper | Linear |
 | graph/ | ~50 KB/paper | Linear |
@@ -339,14 +344,14 @@ author:Zhang           → filter(authors__contains)
 ### What to Backup
 
 **Essential** (cannot be rebuilt):
-- `library/papers/*/paper.md`
-- `library/papers/*/source/source.pdf`
-- `library/papers/*/manifest.json`
+- `library/papers/p_*.md`
+- `library/papers/p_*/source/source.pdf`
+- `library/papers/p_*/manifest.json`
 - `config/paperbase.yaml`
 
 **Optional** (can be rebuilt):
 - `registry/papers.db` → rebuild from manifests
-- `graph/` → rebuild with `graph update --force`
+- `graph/` → rebuild through Graphify and `graph adopt --force`
 
 ### Recovery Procedure
 
@@ -359,8 +364,10 @@ cp -r backup/config/ .
 rm -f registry/papers.db
 paperbase status  # Auto-rebuilds
 
-# 3. Rebuild graph
-paperbase graph update --force
+# 3. Rebuild graph (Agent path)
+paperbase graph preflight --force
+# /graphify library/papers --no-viz
+paperbase graph adopt --force
 ```
 
 ---
@@ -369,7 +376,7 @@ paperbase graph update --force
 
 ### Current Version
 
-`schema_version: "1.0"` (in paper.md frontmatter)
+`schema_version: "1.0"` (in Canonical frontmatter)
 
 ### Migration Strategy
 
@@ -379,7 +386,7 @@ When schema changes:
 3. Migration script converts old → new
 4. Old versions deprecated after 2 releases
 
-**No breaking changes to `paper.md`** - it's the source of truth.
+**No breaking changes to Canonical Markdown** - it is the content source of truth.
 
 ---
 
@@ -387,12 +394,12 @@ When schema changes:
 
 ### Why Not Store Metadata in Database?
 
-❌ **Bad**: Metadata in SQLite, paper.md is just text
-✅ **Good**: Metadata in paper.md frontmatter, SQLite is projection
+❌ **Bad**: Metadata in SQLite, Canonical Markdown is just text
+✅ **Good**: Metadata in Canonical frontmatter, SQLite is projection
 
 **Reason**: 
 - Single source of truth
-- Git-friendly (plain text)
+- Human-readable plain text while remaining local and Git-ignored for corpus privacy
 - Human-readable
 - Tool-independent
 

@@ -93,7 +93,7 @@ uv run paperbase ingest --file /path/to/paper.pdf
 
 **定位**: 外部 CLI 工具
 **职责**: 构建论文之间的语义关联网络
-**要求**: 需要配置 LLM API
+**要求**: Agent 模式由宿主 Agent/Graphify skill 完成语义抽取；只有 headless CLI 模式需要 PaperBase 本地 LLM 配置
 
 **安装：**
 ```bash
@@ -106,31 +106,15 @@ graphify --version
 # 应显示: graphify 0.9.10+
 ```
 
-**配置 LLM（必需）：**
-
-graphify 需要 LLM 进行语义抽取，必须配置以下环境变量：
+**推荐的 Agent 路径：**
 
 ```bash
-# 方式 1: 使用 OpenAI 兼容 API
-export PAPERBASE_LLM_BASE_URL="https://api.openai.com/v1"
-export PAPERBASE_LLM_API_KEY="sk-..."
-export PAPERBASE_LLM_MODEL="gpt-4o-mini"
-
-# 方式 2: 使用其他提供商（如 Anthropic、Gemini 等）
-export PAPERBASE_LLM_BASE_URL="https://api.anthropic.com/v1"
-export PAPERBASE_LLM_API_KEY="sk-ant-..."
-export PAPERBASE_LLM_MODEL="claude-3-5-sonnet-20241022"
+uv run paperbase graph preflight
+# 在支持 Graphify skill 的 Agent 中运行：/graphify library/papers --update --no-viz
+uv run paperbase graph adopt
 ```
 
-**重要说明：**
-- PaperBase 会自动将配置传递给 graphify（通过 `--backend openai --model <model>`）
-- 必须使用支持的模型名称（不能使用默认的 `gpt-4.1-mini`）
-- 配置存储在 `config/paperbase.yaml` 中
-
-**验证配置：**
-```bash
-uv run paperbase config check-llm
-```
+这条路径不读取 PaperBase 的本地 LLM 配置。只有显式运行 `uv run paperbase graph update` 时，才需要在 `config/paperbase.yaml` 中配置 OpenAI-compatible LLM；可用 `uv run paperbase config show` 查看生效配置，用 `uv run paperbase doctor` 检查 Graphify 是否可用。不要在文档或提交中记录真实密钥。
 
 ---
 
@@ -245,14 +229,12 @@ LLM Configuration: disabled
 ```
 
 **解决：**
-```bash
-# 设置环境变量
-export PAPERBASE_LLM_BASE_URL="https://api.openai.com/v1"
-export PAPERBASE_LLM_API_KEY="sk-your-key-here"
-export PAPERBASE_LLM_MODEL="gpt-4o-mini"
 
-# 验证
-uv run paperbase config check-llm
+Agent 路径无需 PaperBase 本地 LLM 配置；先运行 `uv run paperbase graph preflight`，再由 Graphify skill 建图并执行 `uv run paperbase graph adopt`。若明确使用 headless `paperbase graph update`，请在 `config/paperbase.yaml` 中配置 OpenAI-compatible LLM，并用以下命令检查：
+
+```bash
+uv run paperbase config show
+uv run paperbase doctor
 ```
 
 ---
@@ -298,7 +280,7 @@ JSON 输出
     ↓
 PaperBase Adapter (数据转换)
     ├─ 规范化为 Canonical Schema
-    ├─ 生成 paper.md
+    ├─ 生成 library/papers/p_<storage_id>.md
     └─ 更新 manifest.json
     ↓
 Canonical Markdown (唯一真相源)
@@ -311,7 +293,7 @@ Canonical Markdown (唯一真相源)
 - PaperBase 不关心 paper-fetch 的实现细节
 - 只依赖 CLI 接口契约（`--format both` 输出 JSON）
 - adapter 层负责数据格式转换
-- 投影层（registry/graph）可从 paper.md 重建
+- 投影层（registry/graph）可从 Canonical Markdown 与 manifest 重建
 
 ---
 

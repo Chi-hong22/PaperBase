@@ -2,6 +2,8 @@
 
 Common issues and solutions for PaperBase.
 
+Current storage boundary: Canonical files are `library/papers/p_<storage_id>.md`; real papers, manifests, PDFs, registry data, and graph artifacts remain local and Git-ignored. Agent graph maintenance uses `preflight → /graphify → adopt` unless the user explicitly chooses the headless CLI path.
+
 ## Environment Issues
 
 ### Python Version Too Old
@@ -207,11 +209,10 @@ State: normalized  # Stuck here
 
 **Solution**:
 ```bash
-# Update graph
-paperbase graph update
-
-# If still stuck, force rebuild
-paperbase graph update --force
+# Recommended Agent path
+paperbase graph preflight
+# /graphify library/papers --update --no-viz
+paperbase graph adopt
 ```
 
 ---
@@ -269,10 +270,11 @@ rm -rf graph/
 paperbase graph update --force
 ```
 
-2. If still fails, check `paper.md` files:
+2. If still fails, validate the flat Canonical files with `paperbase doctor` before rebuilding.
 ```bash
-# Find invalid paper.md files
-find library/papers -name "paper.md" -exec python -c "
+# Historical validator for the old nested layout; current Canonical files are library/papers/p_*.md
+# Prefer: paperbase doctor
+find library/papers -name "p_*.md" -exec python -c "
 import sys
 import yaml
 try:
@@ -611,8 +613,8 @@ paperbase status "doi:10.1234/abc"
 ### Verify Data Integrity
 
 ```bash
-# Check paper.md files
-find library/papers -name "paper.md" -exec head -1 {} \;
+# Check Canonical files
+find library/papers -maxdepth 1 -name "p_*.md" -exec head -1 {} \;
 
 # Check manifest files
 find library/papers -name "manifest.json" -exec python -m json.tool {} \; > /dev/null

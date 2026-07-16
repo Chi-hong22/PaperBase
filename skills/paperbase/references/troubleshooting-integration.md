@@ -65,28 +65,29 @@ paper-fetch --version  # 确认版本 >= 3.0.1
 ```
 
 **根本原因**：
-`.gitignore` 配置错误，导致 graphify 无法扫描 `library/papers/` 目录。
+`.graphifyignore` 没有重新纳入本地 Canonical，或更靠后的规则把它们再次排除。
 
 **解决方法**：
 
-检查并修复 `.gitignore`：
+检查 `library/papers/.graphifyignore`：
 ```bash
-# 错误配置（会排除整个 papers 目录）
-library/papers/
+# Git 仍可忽略真实论文；Graphify 独立重新纳入 Canonical
+!p_*.md
 
-# 正确配置（只排除子目录，不排除 paper.md）
-library/papers/*/
-!library/papers/*.md
+# BLOCKED 论文用更靠后的精确规则排除
+p_<blocked_storage_id>.md
 ```
 
 **验证修复**：
 ```bash
 # 测试 graphify 是否能识别文件
-graphify library/papers 2>&1 | grep "found"
-# 应显示: found X docs, Y papers
+graphify detect library/papers
+# 文件数应等于可建图 Canonical 数，不包含 BLOCKED
 ```
 
-### graphify LLM 模型不支持
+不要用 `git add -f` 解决扫描问题；`.gitignore` 与 `.graphifyignore` 分别控制版本库和 Graphify corpus。
+
+### headless graphify LLM 模型不支持
 
 **症状**：
 ```
@@ -154,22 +155,11 @@ curl https://api.openai.com/v1/models \
 
 **扁平化优势**：
 1. graphify 工具可直接扫描 papers/ 目录（不需要递归）
-2. 相关文件集中管理（paper.md、source.pdf、assets）
+2. Canonical 与同名资源目录建立稳定映射
 3. graphify 效果更好（29 nodes vs 14 nodes）
 4. 符合设计理念
 
-**如果你使用了扁平化结构**：
-
-恢复到立体结构：
-```bash
-# 移动 .md 文件到子目录
-cd library/papers
-for file in *.md; do
-  storage_id="${file%.md}"
-  mkdir -p "$storage_id"
-  mv "$file" "$storage_id/paper.md"
-done
-```
+**不要恢复到旧的嵌套 `paper.md` 结构**。当前代码、Graphify 扫描和 manifest 路径都以 `p_xxx.md + p_xxx/` 为契约。真实论文保持 Git-ignored；由 `.graphifyignore` 独立控制本地扫描。
 
 ---
 

@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-198%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-240%20passed-brightgreen.svg)](tests/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Security](https://img.shields.io/badge/security-11%20fixes-orange.svg)](#security-improvements)
 
@@ -51,7 +51,7 @@ PDF → Markdown → Knowledge Graph → Search/Analysis
 - 💡 Both can be combined (PaperBase supports Zotero import)
 
 **Key Concepts:**
-- **Canonical Markdown**: Each paper corresponds to one `paper.md`, the single source of truth—all indexes, graphs, chunks can be rebuilt from it
+- **Canonical Markdown**: Each paper uses `library/papers/p_<storage_id>.md` as the content source of truth; the sibling directory stores `manifest.json` for state and provenance
 - **Simplified State Machine**: Paper processing has only 2 main states (NORMALIZED after ingestion → READY after graph update), interruptible and resumable
 - **Dual Search System**: SQLite FTS5 for keyword search ("find papers containing 'transformer'"), Graphify for relationship queries ("citation lineage of this paper")
 
@@ -114,10 +114,10 @@ Paper ID:    arxiv:1706.03762
 Storage ID:  p_a7f3b2c1d4e5
 State:       NORMALIZED
 Title:       Attention Is All You Need
-Location:    library/papers/p_a7f3b2c1d4e5/paper.md
+Location:    library/papers/p_a7f3b2c1d4e5.md
 
 Next steps:
-  - View paper: cat library/papers/p_a7f3b2c1d4e5/paper.md
+  - View paper: cat library/papers/p_a7f3b2c1d4e5.md
   - Search: uv run paperbase search "attention mechanism"
   - Build graph: uv run paperbase graph update
 ```
@@ -131,14 +131,16 @@ uv run paperbase status "arxiv:1706.03762"
 # Search content
 uv run paperbase search "attention mechanism"
 
-# Update knowledge graph
-uv run paperbase graph update
+# Recommended agent workflow
+uv run paperbase graph preflight
+# In a Graphify-enabled agent: /graphify library/papers --update --no-viz
+uv run paperbase graph adopt
 
 # Remove paper (hard delete, needs confirmation)
 uv run paperbase remove "arxiv:1706.03762"
 ```
 
-Papers are stored as `library/papers/<storage_id>/paper.md` with structured frontmatter.
+Papers are stored as flat Canonical files under `library/papers/p_<storage_id>.md`, with state and provenance under the sibling `library/papers/p_<storage_id>/manifest.json`.
 
 ## 📂 Repository Structure
 
@@ -147,8 +149,8 @@ paperbase/
 ├── library/                   # Knowledge base
 │   ├── sources/pdf/          # Content-addressed PDF storage (SHA256)
 │   ├── papers/               # Normalized papers
-│   │   └── p_<storage_id>/  # Single paper
-│   │       ├── paper.md      # Canonical Markdown (source of truth)
+│   │   ├── p_<storage_id>.md # Canonical Markdown (content source of truth)
+│   │   └── p_<storage_id>/  # Per-paper state and assets
 │   │       ├── manifest.json # State and provenance
 │   │       ├── chunks.jsonl  # Search chunks (derived)
 │   │       └── references.jsonl # Structured citations (derived)
@@ -161,7 +163,9 @@ paperbase/
 └── tests/                    # Test suite
 ```
 
-**Important**: Only `library/papers/*/paper.md` and `manifest.json` are source of truth—everything else is rebuildable.
+**Important**: `library/papers/p_<storage_id>.md` is the content source of truth, while the sibling `manifest.json` records state and provenance. Registry, graph, chunks, and references are local projections.
+
+**Privacy boundary**: Real paper content, PDFs, manifests, registry data, and graph artifacts remain local and are ignored by Git. The tracked `.graphifyignore` re-includes local `p_*.md` files for Graphify, so local graph construction does not require committing the corpus.
 
 ## 🎯 Use Cases
 
@@ -169,14 +173,14 @@ paperbase/
 |----------|-------------|
 | **Personal Knowledge Base** | Build a searchable, graph-based academic library |
 | **AI Agent Data Source** | Provide structured paper data for LLM applications |
-| **Team Collaboration** | Git-based version control for literature management |
+| **Team Collaboration** | Share code, schemas, and workflows without committing the private paper corpus |
 | **Domain Knowledge Graph** | Analyze citation networks and methodological evolution |
 
 ## 📋 Usage
 
 ### LLM Configuration (for Graphify)
 
-PaperBase core functions (ingest, convert, SQLite FTS5 search) **do not require LLM**.
+PaperBase core functions (ingest, convert, SQLite FTS5 search) **do not require LLM**. The recommended agent workflow uses the host agent/Graphify skill for semantic extraction; only headless `paperbase graph update` reads the local LLM configuration.
 
 **Graphify knowledge graph is a required component of PaperBase**, and LLM configuration is used to pass environment variables to Graphify.
 
@@ -201,9 +205,9 @@ PAPERBASE_LLM_API_KEY="sk-..."
 PAPERBASE_LLM_MODEL="gpt-4o-mini"
 ```
 
-**3. Verify Graphify works**
+**3. Verify the headless fallback**
 ```bash
-# PaperBase will pass config to graphify
+# Reads config/paperbase.yaml
 uv run paperbase graph update
 ```
 

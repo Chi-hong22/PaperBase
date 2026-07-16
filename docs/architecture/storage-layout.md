@@ -77,6 +77,13 @@ papers/
    - 记录处理历史和错误日志
    - Schema 定义: `src/paperbase/schemas/manifest.py`
 
+### Git 与 Graphify 边界
+
+- 真实论文内容只保留在本地：`library/papers/p_*.md`、论文子目录、源 PDF、Registry 和图谱产物均由 `.gitignore` 排除，不进入远程仓库。
+- 仓库只跟踪 `library/.gitkeep` 与 `library/papers/.graphifyignore`，用于保留目录和扫描规则。
+- Graphify 的 ignore 规则独立于 Git。`library/papers/.graphifyignore` 用 `!p_*.md` 重新纳入本地 Canonical Markdown，并可显式排除 `BLOCKED` 论文。
+- 因此“Git 不跟踪论文内容”不会阻止 Graphify 读取本地 Canonical；不要为了建图删除 `.gitignore` 规则或重新 `git add -f` 论文文件。
+
 **示例**:
 ```bash
 # 示例论文结构
