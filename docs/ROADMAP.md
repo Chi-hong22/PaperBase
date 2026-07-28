@@ -27,6 +27,9 @@
 ### P0 - 高优先级（核心功能增强）
 
 #### 1. 引用解析器集成
+**状态**：Open（`TD-REF-001`）
+**本地工单**：`.scratch/reference-network-coverage/issues/01-integrate-reference-parser.md`
+
 **目标**：建立论文间引用关系，增强知识图谱连接性
 
 **技术方案**：
@@ -75,6 +78,23 @@
 - 双向同步支持
 
 **工作量评估**：待按剩余功能重新评估
+
+---
+
+#### 3a. Zotero item key 溯源持久化
+**状态**：Open（`TD-ZOTERO-001`）
+**本地工单**：`.scratch/zotero-item-key-provenance/issues/01-persist-zotero-item-key.md`
+
+**问题**：Canonical 的 `source` 当前只能记录来源类型和原始 URL，不能持久化唯一的 Zotero item key；同一 DOI 的条目调整后，无法在本地数据中直接审计其对应的 Zotero 条目。
+
+**拟议解决方向**：
+- 为 `PaperSource` 增加可选 `zotero_item_key` 字段，并在 Zotero 摄入、原位重建和迁移流程中写入。
+- 对既有 Canonical 提供仅补齐溯源字段的迁移命令，不修改正文或 paper_id。
+- 在 Registry/CLI 状态输出中展示该字段，并以 Zotero key + DOI 做一致性诊断。
+
+**验收标准**：给定一个 Canonical 可反查其唯一 Zotero item key；条目附件更新后可在不改变 paper_id 的前提下完成原位重建。
+
+**优先级**：P1（已记录，暂未实现）
 
 ---
 
@@ -147,15 +167,19 @@
 
 ## 📋 技术债务
 
-### 已知问题
-1. ⚠️ query related 功能受限（依赖 P0-1 引用解析器）
-2. ⚠️ 大批量摄入时内存占用较高
-3. ⚠️ PDF 转换质量依赖 paper-fetch
+内部技术债的权威内容和状态统一维护在 `.scratch/`；总索引见 `.scratch/INDEX.md`。本路线图只保留摘要：
 
-### 性能优化
-1. Registry 反向映射优化（添加索引）
-2. 图谱查询性能优化（缓存机制）
-3. 全文检索分词优化（中文支持）
+| ID | 状态 | 优先级 | 本地工单 |
+|---|---|---:|---|
+| `TD-REF-001` | open | P0 | `.scratch/reference-network-coverage/issues/01-integrate-reference-parser.md` |
+| `TD-GRAPH-001` | open | P1 | `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md` |
+| `TD-ZOTERO-001` | open | P1 | `.scratch/zotero-item-key-provenance/issues/01-persist-zotero-item-key.md` |
+| `TD-INGEST-001` | open | P2 | `.scratch/batch-ingest-memory/issues/01-profile-and-bound-memory.md` |
+| `TD-PDF-001` | open | P2 | `.scratch/pdf-conversion-quality/issues/01-define-quality-gates.md` |
+| `TD-REGISTRY-001` | open | P2 | `.scratch/performance-optimizations/issues/01-registry-reverse-index.md` |
+| `TD-GRAPH-QUERY-001` | open | P2 | `.scratch/performance-optimizations/issues/02-graph-query-cache.md` |
+| `TD-SEARCH-001` | open | P2 | `.scratch/performance-optimizations/issues/03-chinese-tokenization.md` |
+| `TD-PROCESS-001` | open | P2 | `.scratch/legacy-debt-audit/issues/01-audit-legacy-debt-snapshot.md` |
 
 ---
 
@@ -203,9 +227,9 @@
 - **P1**: 重要功能，提升易用性
 - **P2**: 高级功能，面向特定场景
 
-提交 Issue 或 PR 前，请查看当前路线图，避免重复工作。
+内部工程任务、spec 和技术债以本地 `.scratch/` tracker 为准。GitHub Issue 和 PR 仅作为外部问题反馈与代码贡献入口。
 
 ---
 
-**最后更新**：2026-07-09  
+**最后更新**：2026-07-16
 **维护者**：[@Chi-hong22](https://github.com/Chi-hong22)

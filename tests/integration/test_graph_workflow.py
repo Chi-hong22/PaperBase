@@ -3,14 +3,16 @@
 import json
 import shutil
 import subprocess
-import pytest
 from pathlib import Path
+
+import click
+import pytest
 from click.testing import CliRunner
 
 from paperbase.adapters.graphify_adapter import check_graphify_installed
 from paperbase.cli.main import main
-from paperbase.core.manifest import load_manifest, save_manifest
 from paperbase.core.graph_updater import detect_changed_papers
+from paperbase.core.manifest import load_manifest, save_manifest
 from paperbase.core.paths import PaperPaths
 from paperbase.core.registry import PaperRegistry
 from paperbase.schemas.manifest import PaperState
@@ -30,18 +32,22 @@ def test_graphify_installed(skip_if_no_graphify):
     assert check_graphify_installed() is True
 
 
-def test_graphifyignore_excludes_blocked_canonical_from_detect_and_extract(
+def test_canonical_markdown_enters_semantic_queue_and_blocked_is_excluded(
     skip_if_no_graphify, tmp_path
 ):
-    """Graphify 扫描与提取边界都必须排除 BLOCKED canonical。"""
+    """正文 Markdown 必须进入 semantic queue，BLOCKED canonical 必须排除。"""
     papers_dir = tmp_path / "library" / "papers"
     papers_dir.mkdir(parents=True)
     blocked_path = papers_dir / "p_blocked.md"
     active_path = papers_dir / "p_active.md"
-    blocked_path.write_text("# Blocked", encoding="utf-8")
-    active_path.write_text("# Active", encoding="utf-8")
+    blocked_path.write_text("# Blocked\n\nBlocked paper body.", encoding="utf-8")
+    active_path.write_text(
+        "# Active\n\n## Method\n\nSemantic processing must read this paper body.",
+        encoding="utf-8",
+    )
+    (papers_dir / ".gitignore").write_text("p_*.md\n", encoding="utf-8")
     (papers_dir / ".graphifyignore").write_text(
-        "p_blocked.md\n",
+        "!p_*.md\np_blocked.md\n",
         encoding="utf-8",
     )
 
@@ -54,10 +60,14 @@ def test_graphifyignore_excludes_blocked_canonical_from_detect_and_extract(
             (
                 "import json,sys; from pathlib import Path; "
                 "from graphify.detect import detect; "
-                "from graphify.extract import collect_files; "
+                "from graphify.cache import check_semantic_cache; "
                 "root=Path(sys.argv[1]); result=detect(root); "
-                "print(json.dumps({'detected':[p for paths in result['files'].values() for p in paths],"
-                "'extracted':[str(p) for p in collect_files(root)]}))"
+                "semantic=[p for kind in ('document','paper','image') "
+                "for p in result['files'].get(kind,[])]; "
+                "cached_nodes,cached_edges,cached_hyperedges,uncached="
+                "check_semantic_cache(semantic,root=root); "
+                "print(json.dumps({'detected':[p for paths in result['files'].values() "
+                "for p in paths],'semantic':semantic,'uncached':uncached}))"
             ),
             str(papers_dir),
         ],
@@ -67,12 +77,39 @@ def test_graphifyignore_excludes_blocked_canonical_from_detect_and_extract(
     )
     result = json.loads(probe.stdout)
     detected_files = {Path(path).resolve() for path in result["detected"]}
-    extraction_files = {Path(path).resolve() for path in result["extracted"]}
+    semantic_files = {Path(path).resolve() for path in result["semantic"]}
+    uncached_files = {Path(path).resolve() for path in result["uncached"]}
 
     assert active_path.resolve() in detected_files
-    assert active_path.resolve() in extraction_files
+    assert active_path.resolve() in semantic_files
+    assert active_path.resolve() in uncached_files
     assert blocked_path.resolve() not in detected_files
-    assert blocked_path.resolve() not in extraction_files
+    assert blocked_path.resolve() not in semantic_files
+    assert blocked_path.resolve() not in uncached_files
+
+
+def test_local_pdf_ingest_hands_off_graph_to_agent_by_default(monkeypatch, tmp_path):
+    """本地 PDF 默认保持 NORMALIZED，并交给 Agent 语义建图。"""
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    graph_calls = []
+
+    @click.command()
+    @click.option("--force", is_flag=True)
+    def fake_graph_update(force):
+        graph_calls.append(force)
+
+    monkeypatch.setattr("paperbase.cli.commands.graph.update", fake_graph_update)
+
+    result = CliRunner().invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert graph_calls == []
+    assert "paperbase graph preflight" in result.output
+    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "paperbase graph adopt" in result.output
 
 
 def test_graph_workflow_end_to_end(monkeypatch, tmp_path):

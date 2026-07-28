@@ -12,7 +12,8 @@ Complete reference for all PaperBase CLI commands.
 paperbase ingest <identifier>           # 摄入单篇论文
 paperbase ingest --file <path>          # 摄入本地 PDF
 paperbase ingest --batch <file>         # 批量摄入
-paperbase ingest <id> --no-graph        # 跳过图谱更新
+paperbase ingest <id> --no-graph        # 跳过本次索引和图谱后续处理
+paperbase ingest <id> --headless-graph  # 显式使用本地 LLM 备用路径
 ```
 
 **支持的输入格式**：
@@ -27,6 +28,8 @@ paperbase ingest <id> --no-graph        # 跳过图谱更新
 - 自动检测重复论文（基于 DOI 和标题）
 - 防止重复摄入相同论文
 - 支持单篇、本地文件、批量处理
+- 默认完成 FTS 后输出 Agent 建图交接，不调用本地 LLM
+- 语义 Agent 只编排和验收；2 篇及以上由至少 2 个 subagents 并行抽取，单篇也必须委派
 
 **示例**：
 ```bash
@@ -38,12 +41,12 @@ paperbase ingest "https://www.nature.com/articles/..."
 # 本地 PDF
 paperbase ingest --file ~/Downloads/paper.pdf
 
-# 批量摄入（推荐使用 --no-graph 延迟图谱更新）
-paperbase ingest --batch papers.txt --no-graph
-paperbase graph update  # 统一更新图谱
+# 批量摄入（默认交接给 Agent）
+paperbase ingest --batch papers.txt
+# Agent 继续：preflight → /graphify library/papers --update --no-viz → adopt
 
-# 注意：--batch 模式本身不会跳过图谱更新，需要显式加 --no-graph
-# 建议：批量摄入时总是使用 --no-graph，最后统一更新图谱（性能提升 3-5 倍）
+# 只有需要本地 LLM 降级时才显式启用
+paperbase ingest --batch papers.txt --headless-graph
 ```
 
 ---
@@ -89,6 +92,14 @@ paperbase graph update --force
 ```
 
 **Canonical-only 约束**：Graphify 建图阶段只读取 `library/papers/*.md`。PDF、网页和 Zotero 附件必须先经过摄入/修复流程写回 Canonical Markdown；Zotero 元数据优先，PDF 不得覆盖权威元数据。
+
+**Semantic queue 约束**：活动 Canonical `.md` 必须进入 Graphify 的 `document`/`paper` semantic extraction 集合并产出语义节点/关系；仅 detect 或结构抽取不算完成。
+
+**并行 subagents 约束**：语义 Agent 不直接读取正文。2 篇及以上必须在同一轮调用至少 2 个 subagents 并行处理，单篇也交给 subagent；等待全部结果并通过来源、schema、端点和置信度校验后才能合并。宿主不支持 subagents 时报告阻塞，不得自动使用本地 LLM。
+
+**扫描根约束**：Agent 增量建图的 detect、semantic cache、`build_merge(root=...)` 和 `save_manifest(root=...)` 必须统一使用 `<base_dir>/library/papers`，相关 Python 步骤在该目录执行。若发现 `p_xxx.md` 与 `library/papers/p_xxx.md` 两种来源形式并存，立即停止合并和 `adopt`；权威工单为 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`（`TD-GRAPH-001`）。
+
+**Zotero item key 限制**：当前 item key 尚未持久化到 Manifest/Registry，摄入后不能保证反查 Zotero 条目。权威工单为 `.scratch/zotero-item-key-provenance/issues/01-persist-zotero-item-key.md`（`TD-ZOTERO-001`，`Status: open`）。
 
 **Git 边界**：真实 Canonical、manifest、源 PDF、Registry 与图谱产物只保留在本地。`.gitignore` 决定是否进入版本库，`.graphifyignore` 决定是否进入 Graphify corpus。
 

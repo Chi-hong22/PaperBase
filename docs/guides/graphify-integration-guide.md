@@ -267,6 +267,13 @@ graphify update <path>
 
 Agent 模式下，semantic extraction 可由 host agent 或 Gemini 完成。
 
+对 PaperBase 而言，活动 Canonical Markdown 必须出现在 Graphify 的
+`document` / `paper` semantic queue 中，并实际产出语义节点和关系。仅在
+detect 结果中发现 `paper.md`，或只完成结构抽取，不能视为正文已经完成语义处理。
+PaperBase 进一步要求语义 Agent 只负责编排和验收：2 篇及以上必须调用至少
+2 个 subagents 并行抽取，单篇也必须委派给 subagent；不支持 subagents 时
+应报告阻塞，不得自动降级到项目本地 LLM。
+
 Headless CLI 下，需要显式 backend 或可自动检测的 API key。可用 backend 以本机 `graphify --help` 为准：
 
 ```text

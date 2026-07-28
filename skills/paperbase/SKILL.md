@@ -34,7 +34,7 @@ Agent:
   1. 检查 paper-fetch 是否可用
   2. 识别 DOI 并调用 paper-fetch CLI
   3. 提取元数据并生成 `library/papers/p_<storage_id>.md`（状态: NORMALIZED）
-  4. 更新知识图谱 (状态 → READY)
+  4. 接收 CLI 输出的 Agent 建图交接，执行 preflight → /graphify → adopt（状态 → READY）
   完成！论文已加入知识库
 
 人类: "批量摄入 papers.txt 中的所有论文"
@@ -50,7 +50,8 @@ Agent:
 paperbase ingest <identifier>        # 单篇摄入
 paperbase ingest --file <path>       # 本地 PDF
 paperbase ingest --batch <file>      # 批量摄入
-paperbase ingest <id> --no-graph     # 跳过图谱
+paperbase ingest <id> --no-graph     # 跳过本次索引和图谱后续处理
+paperbase ingest <id> --headless-graph  # 显式本地 LLM 备用路径
 ```
 
 **辅助脚本**：
@@ -100,14 +101,20 @@ paperbase graph status                # 查看统计
 ```
 
 **LLM 优先级约定**：
-- Agent 调用本 skill 时，语义抽取优先使用 Graphify skill 的 Agent/self/subagent 能力；不得把 `config/paperbase.yaml` 的本地 LLM 配置注入该流程。
-- 只有人类明确执行 `paperbase graph update` 时，才使用 PaperBase 的本地 OpenAI-compatible LLM 配置。
+- Agent 调用本 skill 时，语义 Agent 只负责编排、合并和验收，不得自行读取正文或直接完成语义抽取；不得把 `config/paperbase.yaml` 的本地 LLM 配置注入该流程。
+- semantic queue 有 2 篇及以上时，语义 Agent 必须在同一轮调用至少 2 个 subagents 并行抽取；只有 1 篇时也必须交给 subagent。每个 subagent 只读取分配到的 Canonical Markdown，返回结构化节点、边和超边。
+- 语义 Agent 必须等待全部 subagents，验证来源覆盖、schema、端点和置信度后再合并。宿主不支持 subagents 时应报告阻塞，不得静默切换到本地 LLM。
+- 默认 `paperbase ingest` 只交接 Agent 建图；只有人类明确添加 `--headless-graph` 或执行 `paperbase graph update` 时，才使用 PaperBase 的本地 OpenAI-compatible LLM 配置。
 - `paperbase graph adopt` 是无 LLM 的确定性状态投影步骤。
 
 **Canonical-only 图谱约束**：
 - Graphify 语义抽取的唯一输入是 `library/papers/*.md`；不得在建图阶段打开 `source/*.pdf`、访问 `original_url` 或直接从 URL/PDF 补抽取。
+- Graphify detect 后，活动 Canonical `.md` 必须进入 `document`/`paper` semantic queue，并由并行 subagents 产出语义节点和关系；只检测文件、只做 AST/结构抽取或由编排 Agent 串行代做都不算完成。
+- Agent 增量流程的 detect、semantic cache、`build_merge(root=...)` 与 `save_manifest(root=...)` 必须统一使用 `<base_dir>/library/papers`；相关 Graphify Python 步骤也必须在该目录执行。若旧图与本次根不一致，停止合并和 `adopt`，恢复备份后用正确根重跑。
+- 接纳前检查 `source_file` 不得同时出现 `p_xxx.md` 与 `library/papers/p_xxx.md` 两种形式。代码级硬校验尚未实现，权威工单为 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`（`TD-GRAPH-001`）。
 - PDF/网页只能先经过摄入或修复流程，转换结果写回 Canonical Markdown，并重算 manifest 哈希后才能建图。
 - Zotero 元数据优先于 PDF 元数据；PDF 只能补正文或缺失字段，不能覆盖 Zotero 的标题、作者、年份等权威字段。
+- Zotero item key 当前只存在于摄入运行时，尚未持久化到 Manifest/Registry；不要声称可稳定反查。权威工单为 `.scratch/zotero-item-key-provenance/issues/01-persist-zotero-item-key.md`（`TD-ZOTERO-001`，`Status: open`）。
 - `content_kind=metadata_only/abstract_only`、无有效全文标记或正文不足的论文保持 `NEEDS_REVIEW`，不推进 `READY`；正文级 `content_kind=fulltext` 且长度达标时，可覆盖历史遗留的外层 quality 标记。
 - `BLOCKED` 论文不属于可重试候选：增量检测跳过它，`.graphifyignore` 也必须排除其 Canonical；解除阻塞后再恢复扫描。
 - Graphify 产物若含 `.pdf`、URL 或 `external_pdf:` 证据，`paperbase graph adopt` 会拒绝整批投影，避免污染现有图谱。
@@ -560,4 +567,4 @@ graph:
 
 ---
 
-**版本**: v1.1 | **架构**: 平面 Canonical + 简化状态机 (NORMALIZED → READY) | **更新**: 2026-07-16
+**版本**: v1.4 | **架构**: Agent-first 并行语义建图 + 扫描根一致性护栏 | **更新**: 2026-07-16

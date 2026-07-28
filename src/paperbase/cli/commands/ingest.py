@@ -28,6 +28,15 @@ def _target_is_local_file(target: str | None) -> bool:
     return Path(target).expanduser().exists()
 
 
+def _print_agent_graph_handoff(console: Console) -> None:
+    """输出 Agent-first 语义建图的后续步骤。"""
+    console.print("[cyan]下一步（Agent 语义图谱流程）:[/cyan]")
+    console.print("   paperbase graph preflight")
+    console.print("   /graphify library/papers --update --no-viz")
+    console.print("   语义 Agent 必须调用 subagents 并行处理 Canonical Markdown")
+    console.print("   paperbase graph adopt")
+
+
 def _create_zotero_adapter(ctx):
     """从配置和环境变量创建 ZoteroAdapter
 
@@ -187,7 +196,7 @@ def _create_paper_from_metadata(base_dir, metadata_dict, paper_id, storage_id, s
     return paths
 
 
-def _ingest_online(ctx, query: str, no_graph: bool):
+def _ingest_online(ctx, query: str, no_graph: bool, headless_graph: bool):
     console = Console()
     base_dir = ctx.obj["base_dir"]
     try:
@@ -200,7 +209,6 @@ def _ingest_online(ctx, query: str, no_graph: bool):
     console.print("[green]✓ 论文已成功添加到知识库[/green]")
     console.print(f"论文标识: {result.paper_id}")
 
-    # 更新全文检索索引
     if not no_graph:
         console.print("[yellow]更新全文检索索引...[/yellow]")
         try:
@@ -214,6 +222,7 @@ def _ingest_online(ctx, query: str, no_graph: bool):
             console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
             console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
 
+    if headless_graph:
         console.print("[yellow]更新知识图谱...[/yellow]")
         try:
             from paperbase.cli.commands.graph import update as graph_update
@@ -221,13 +230,17 @@ def _ingest_online(ctx, query: str, no_graph: bool):
         except Exception as e:
             console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
             console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
+    elif no_graph:
+        console.print("[dim]跳过语义图谱更新（--no-graph）[/dim]")
     else:
-        console.print("[dim]跳过索引更新（--no-graph）[/dim]")
+        _print_agent_graph_handoff(console)
 
     return result
 
 
-def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
+def _ingest_local_pdf(
+    ctx, pdf_path: Path, no_graph: bool, headless_graph: bool
+):
     """摄入本地 PDF 文件"""
     console = Console()
     base_dir = ctx.obj["base_dir"]
@@ -380,14 +393,16 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
                 console.print(f"[yellow]   ⚠ 索引更新失败: {e}[/yellow]")
                 console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
 
-            console.print("\n[yellow]12. 更新知识图谱...[/yellow]")
-            try:
-                from paperbase.cli.commands.graph import update as graph_update
-                # 调用 graph update 命令
-                ctx.invoke(graph_update, force=False)
-            except Exception as e:
-                console.print(f"[yellow]   ⚠ 知识图谱更新失败: {e}[/yellow]")
-                console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
+            if headless_graph:
+                console.print("\n[yellow]12. 更新知识图谱...[/yellow]")
+                try:
+                    from paperbase.cli.commands.graph import update as graph_update
+                    ctx.invoke(graph_update, force=False)
+                except Exception as e:
+                    console.print(f"[yellow]   ⚠ 知识图谱更新失败: {e}[/yellow]")
+                    console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
+            else:
+                _print_agent_graph_handoff(console)
         else:
             console.print("\n[dim]跳过索引更新（--no-graph）[/dim]")
             console.print("   稍后可运行: [cyan]paperbase index[/cyan] 和 [cyan]paperbase graph update[/cyan]")
@@ -401,7 +416,9 @@ def _ingest_local_pdf(ctx, pdf_path: Path, no_graph: bool):
         raise
 
 
-def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
+def _ingest_from_zotero(
+    ctx, item_key: str, no_graph: bool, headless_graph: bool
+):
     """从 Zotero 导入单篇论文
 
     Args:
@@ -620,12 +637,15 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
                     except Exception as e:
                         console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
 
-                    console.print("[yellow]更新知识图谱...[/yellow]")
-                    try:
-                        from paperbase.cli.commands.graph import update as graph_update
-                        ctx.invoke(graph_update, force=False)
-                    except Exception as e:
-                        console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
+                    if headless_graph:
+                        console.print("[yellow]更新知识图谱...[/yellow]")
+                        try:
+                            from paperbase.cli.commands.graph import update as graph_update
+                            ctx.invoke(graph_update, force=False)
+                        except Exception as e:
+                            console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
+                    else:
+                        _print_agent_graph_handoff(console)
 
                 console.print(f"\n[green]✓ 摄入完成（含 PDF 全文）[/green]")
                 return "success"
@@ -661,13 +681,15 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
         console.print(f"\n[green]✓ 论文元数据已保存到知识库[/green]")
         console.print(f"   路径: {paths.paper_dir}")
 
-        if not no_graph:
+        if headless_graph:
             console.print("[yellow]更新知识图谱...[/yellow]")
             try:
                 from paperbase.cli.commands.graph import update as graph_update
                 ctx.invoke(graph_update, force=False)
             except Exception as e:
                 console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
+        elif not no_graph:
+            _print_agent_graph_handoff(console)
 
         console.print(f"\n[green]✓ 摄入完成[/green]")
         return "success"
@@ -677,7 +699,9 @@ def _ingest_from_zotero(ctx, item_key: str, no_graph: bool):
         raise
 
 
-def _ingest_zotero_recent(ctx, limit: int, no_graph: bool):
+def _ingest_zotero_recent(
+    ctx, limit: int, no_graph: bool, headless_graph: bool
+):
     """从 Zotero 批量导入最近论文
 
     Args:
@@ -715,7 +739,12 @@ def _ingest_zotero_recent(ctx, limit: int, no_graph: bool):
 
             try:
                 # 调用单篇导入函数（强制 no_graph=True）
-                result = _ingest_from_zotero(ctx, item.key, no_graph=True)
+                result = _ingest_from_zotero(
+                    ctx,
+                    item.key,
+                    no_graph=True,
+                    headless_graph=False,
+                )
                 if result == "success":
                     success_count += 1
                 elif result == "skipped":
@@ -747,13 +776,16 @@ def _ingest_zotero_recent(ctx, limit: int, no_graph: bool):
                 console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
                 console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
 
-            console.print("\n[yellow]更新知识图谱...[/yellow]")
-            try:
-                from paperbase.cli.commands.graph import update as graph_update
-                ctx.invoke(graph_update, force=False)
-            except Exception as e:
-                console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
-                console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
+            if headless_graph:
+                console.print("\n[yellow]更新知识图谱...[/yellow]")
+                try:
+                    from paperbase.cli.commands.graph import update as graph_update
+                    ctx.invoke(graph_update, force=False)
+                except Exception as e:
+                    console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
+                    console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
+            else:
+                _print_agent_graph_handoff(console)
         elif no_graph:
             console.print("\n[dim]跳过索引更新（--no-graph）[/dim]")
             console.print("   稍后可运行: [cyan]paperbase index[/cyan] 和 [cyan]paperbase graph update[/cyan]")
@@ -766,14 +798,22 @@ def _ingest_zotero_recent(ctx, limit: int, no_graph: bool):
 @click.command()
 @click.argument("target", required=False)
 @click.option("--file", "file_path", type=click.Path(exists=True, path_type=Path), help="本地 PDF 文件路径")
-@click.option("--no-graph", is_flag=True, help="跳过图谱更新")
+@click.option("--no-graph", is_flag=True, help="跳过本次索引和图谱后续处理")
+@click.option(
+    "--headless-graph",
+    is_flag=True,
+    help="显式使用本地 LLM 执行 headless 图谱更新（备用路径）",
+)
 @click.option("--batch", type=click.Path(exists=True, path_type=Path), help="批量摄入文件列表（每行一个路径、DOI、URL 或标题）")
 @click.option("--zotero-key", type=str, help="从 Zotero 导入指定 item key 的论文")
 @click.option("--zotero-recent", type=int, metavar="N", help="从 Zotero 批量导入最近 N 篇论文")
 @click.pass_context
-def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, batch: Path | None, zotero_key: str | None, zotero_recent: int | None):
+def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, headless_graph: bool, batch: Path | None, zotero_key: str | None, zotero_recent: int | None):
     """摄入论文：本地 PDF 或 DOI/URL/title"""
     console = Console()
+    if no_graph and headless_graph:
+        raise click.UsageError("--no-graph 和 --headless-graph 不能同时使用")
+
 
     # 互斥检查
     if sum([bool(target), bool(file_path), bool(batch), bool(zotero_key), bool(zotero_recent)]) > 1:
@@ -786,35 +826,37 @@ def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, batc
 
     # Zotero 批量模式
     if zotero_recent:
-        _ingest_zotero_recent(ctx, zotero_recent, no_graph)
+        _ingest_zotero_recent(ctx, zotero_recent, no_graph, headless_graph)
         return
 
     # Zotero 单篇模式
     if zotero_key:
-        _ingest_from_zotero(ctx, zotero_key, no_graph)
+        _ingest_from_zotero(ctx, zotero_key, no_graph, headless_graph)
         return
 
     # 批量模式
     if batch:
-        _ingest_batch(ctx, batch, no_graph)
+        _ingest_batch(ctx, batch, no_graph, headless_graph)
         return
 
     # 本地文件模式
     if file_path is not None:
-        _ingest_local_pdf(ctx, file_path, no_graph)
+        _ingest_local_pdf(ctx, file_path, no_graph, headless_graph)
         return
 
     if target and _target_is_local_file(target):
-        _ingest_local_pdf(ctx, Path(target), no_graph)
+        _ingest_local_pdf(ctx, Path(target), no_graph, headless_graph)
         return
 
     # 在线查询模式
     if target:
-        _ingest_online(ctx, target, no_graph)
+        _ingest_online(ctx, target, no_graph, headless_graph)
         return
 
 
-def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
+def _ingest_batch(
+    ctx, batch_file: Path, no_graph: bool, headless_graph: bool
+):
     """批量摄入论文"""
     console = Console()
     base_dir = ctx.obj["base_dir"]
@@ -846,7 +888,13 @@ def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
             console.print(f"[cyan][{i}/{len(targets)}] {display_name}[/cyan]")
             try:
                 # 调用主 ingest 命令，让它自动路由
-                ctx.invoke(ingest, target=target, no_graph=True, batch=None)
+                ctx.invoke(
+                    ingest,
+                    target=target,
+                    no_graph=True,
+                    headless_graph=False,
+                    batch=None,
+                )
                 success_count += 1
             except Exception as e:
                 console.print(f"[red]✗ 失败: {e}[/red]")
@@ -873,13 +921,16 @@ def _ingest_batch(ctx, batch_file: Path, no_graph: bool):
                 console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
                 console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
 
-            console.print("\n[yellow]更新知识图谱...[/yellow]")
-            try:
-                from paperbase.cli.commands.graph import update as graph_update
-                ctx.invoke(graph_update, force=False)
-            except Exception as e:
-                console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
-                console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
+            if headless_graph:
+                console.print("\n[yellow]更新知识图谱...[/yellow]")
+                try:
+                    from paperbase.cli.commands.graph import update as graph_update
+                    ctx.invoke(graph_update, force=False)
+                except Exception as e:
+                    console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
+                    console.print("   可稍后手动运行: [cyan]paperbase graph update[/cyan]")
+            else:
+                _print_agent_graph_handoff(console)
         elif no_graph:
             console.print("\n[dim]跳过索引更新（--no-graph）[/dim]")
             console.print("   稍后可运行: [cyan]paperbase index[/cyan] 和 [cyan]paperbase graph update[/cyan]")
