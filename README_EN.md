@@ -119,7 +119,7 @@ Location:    library/papers/p_a7f3b2c1d4e5.md
 Next steps:
   - View paper: cat library/papers/p_a7f3b2c1d4e5.md
   - Search: uv run paperbase search "attention mechanism"
-  - Build graph: uv run paperbase graph update
+  - Build graph: run `paperbase graph preflight`, `/graphify library/papers --update --no-viz`, then `paperbase graph adopt`
 ```
 
 **Try More Operations:**
@@ -299,8 +299,11 @@ C:\path\to\paper3.pdf
 
 uv run paperbase ingest --batch papers.txt
 
-# Skip automatic graph update (for continuous ingestion)
+# Skip indexing and graph follow-up for this ingest
 uv run paperbase ingest paper.pdf --no-graph
+
+# Explicit local-LLM headless fallback
+uv run paperbase ingest paper.pdf --headless-graph
 ```
 
 ### Search and Query
@@ -319,10 +322,12 @@ uv run paperbase search "transformer architecture" -n 20
 ### Knowledge Graph
 
 ```bash
-# Update graph (process newly ingested papers)
-uv run paperbase graph update
+# Agent-first semantic processing of Canonical Markdown
+uv run paperbase graph preflight
+# In an Agent: /graphify library/papers --update --no-viz
+uv run paperbase graph adopt
 
-# Incremental update (only papers with content changes)
+# Local-LLM headless fallback
 uv run paperbase graph update --incremental
 
 # Force rebuild graph
@@ -331,6 +336,11 @@ uv run paperbase graph update --force
 # View graph status
 uv run paperbase graph status
 ```
+
+The semantic Agent only orchestrates and validates extraction. With two or more
+Canonical Markdown files, it must dispatch at least two subagents in parallel;
+a single file is still delegated to a subagent. Lack of subagent support is a
+reported blocker, not an implicit switch to the local LLM fallback.
 
 ## 🤖 AI Agent Integration
 

@@ -45,6 +45,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 paperbase-wrapper.sh ingest "doi:10.1234/abc"
 paperbase-wrapper.sh graph preflight
 # Agent 中运行：/graphify library/papers --update --no-viz
+# 语义 Agent 编排多个 subagents 并行抽取 Canonical Markdown
 paperbase-wrapper.sh graph adopt
 paperbase-wrapper.sh status
 ```

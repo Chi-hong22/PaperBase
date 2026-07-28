@@ -1,5 +1,29 @@
 # PaperBase Skill - 更新日志
 
+## [2026-07-16-v1.4] - Graphify 扫描根一致性护栏
+
+- 固定 Agent 增量流程的唯一扫描根为 `<base_dir>/library/papers`，覆盖 detect、cache、merge 和 manifest。
+- 发现旧图与本次根不一致或混合 `source_file` 形式时，停止合并和 `adopt`，先恢复旧图。
+- 将代码级根身份校验登记到本地工单 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`（`TD-GRAPH-001`）。
+
+---
+
+## [2026-07-16-v1.3] - 并行语义 subagents 契约
+
+- 语义 Agent 固定为编排者，不得自行读取正文或串行代做语义抽取。
+- 2 篇及以上 Canonical Markdown 必须由至少 2 个 subagents 并行处理；单篇也必须委派给 subagent。
+- 宿主不支持 subagents 时明确报告阻塞，不得静默切换到 PaperBase 本地 LLM。
+
+---
+
+## [2026-07-16-v1.2] - Agent-first CLI 优先级
+
+- `paperbase ingest` 默认完成摄入和全文索引后交接给 Graphify Agent，不再自动调用本地 LLM。
+- 新增 `--headless-graph`，仅在明确降级时读取 `config/paperbase.yaml`；与 `--no-graph` 互斥。
+- 增加 Canonical Markdown 进入 Graphify semantic queue 的回归契约，确保正文执行语义抽取而非仅被扫描。
+
+---
+
 ## [2026-07-16-v1.1] - 私有语料与图谱边界同步
 
 - 将 Canonical 路径统一为 `library/papers/p_<storage_id>.md`，同名目录保存 manifest、源文件和派生数据。

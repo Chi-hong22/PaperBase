@@ -182,7 +182,9 @@ def test_ingest_zotero_recent_uses_public_item_key(mock_create_adapter, tmp_path
     assert len(list((tmp_path / "library" / "papers").glob("p_*.md"))) == 1
 
 
-def test_zotero_metadata_ingest_updates_fts_then_graph_by_default(monkeypatch, tmp_path):
+def test_zotero_metadata_ingest_hands_off_graph_to_agent_by_default(
+    monkeypatch, tmp_path
+):
     calls = []
     adapter = Mock()
     adapter.fetch_item.return_value = ZoteroItem(
@@ -208,10 +210,15 @@ def test_zotero_metadata_ingest_updates_fts_then_graph_by_default(monkeypatch, t
     )
 
     assert result.exit_code == 0, result.output
-    assert calls == ["fts", "graph"]
+    assert calls == ["fts"]
+    assert "paperbase graph preflight" in result.output
+    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "paperbase graph adopt" in result.output
 
 
-def test_zotero_pdf_ingest_keeps_zotero_metadata_and_updates_graph(monkeypatch, tmp_path):
+def test_zotero_pdf_ingest_keeps_metadata_and_hands_off_graph_to_agent(
+    monkeypatch, tmp_path
+):
     calls = []
     pdf_path = tmp_path / "zotero-source.pdf"
     pdf_path.write_bytes(b"zotero pdf")
@@ -253,7 +260,10 @@ def test_zotero_pdf_ingest_keeps_zotero_metadata_and_updates_graph(monkeypatch, 
     )
 
     assert result.exit_code == 0, result.output
-    assert calls == ["fts", "graph"]
+    assert calls == ["fts"]
+    assert "paperbase graph preflight" in result.output
+    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "paperbase graph adopt" in result.output
     canonical_path = next((tmp_path / "library" / "papers").glob("p_*.md"))
     frontmatter, _ = parse_frontmatter(canonical_path.read_text(encoding="utf-8"))
     assert frontmatter["title"] == "Zotero Title"
@@ -427,7 +437,9 @@ def test_zotero_single_no_graph_skips_graph_update(monkeypatch, tmp_path, with_p
     assert calls == []
 
 
-def test_zotero_recent_updates_fts_and_graph_once_after_success(monkeypatch, tmp_path):
+def test_zotero_recent_updates_fts_once_and_hands_off_graph_to_agent(
+    monkeypatch, tmp_path
+):
     calls = []
     item = ZoteroItem(
         key="RECENT01",
@@ -455,7 +467,10 @@ def test_zotero_recent_updates_fts_and_graph_once_after_success(monkeypatch, tmp
     )
 
     assert result.exit_code == 0, result.output
-    assert calls == ["fts", "graph"]
+    assert calls == ["fts"]
+    assert "paperbase graph preflight" in result.output
+    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "paperbase graph adopt" in result.output
 
 
 def test_zotero_recent_does_not_update_graph_when_every_item_fails(monkeypatch, tmp_path):

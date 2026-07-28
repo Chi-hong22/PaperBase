@@ -89,7 +89,7 @@ update_frontmatter_file(paper_md_path, {"year": 2025})
 
 ## 问题反馈
 
-如有问题，请提交 Issue 并包含：
+外部用户如有问题，请提交 GitHub Issue；内部工程任务和技术债应写入本地 `.scratch/` tracker。外部反馈请包含：
 - PaperBase 版本
 - Python 版本
 - `paperbase doctor` 输出

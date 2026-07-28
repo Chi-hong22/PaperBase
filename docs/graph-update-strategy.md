@@ -6,28 +6,32 @@ PaperBase 的知识图谱由 Graphify 生成。CLI 与 Agent 有两条明确分�
 
 1. **Agent 路径（推荐）**：`preflight → /graphify library/papers --update --no-viz → adopt`
 2. **Headless CLI 路径**：`paperbase graph update`，读取 `config/paperbase.yaml` 的本地 LLM 配置
-3. **延迟/增量更新**：摄入时使用 `--no-graph`，完成后统一建图或仅处理内容变化的论文
+3. **显式备用路径**：只有 `--headless-graph` 或直接执行 `paperbase graph update` 才使用本地 LLM
 
 ## 更新时机说明
 
-### CLI 默认行为：自动尝试 headless 更新
+### CLI 默认行为：交接给 Agent 建图
 
-直接运行 CLI 摄入且未指定 `--no-graph` 时，会在摄入完成后尝试全文索引和 headless 图谱更新：
+直接运行 CLI 摄入且未指定图谱参数时，会更新全文索引并输出 Agent 建图步骤，不调用本地 LLM：
 
-```bash
+```text
 paperbase ingest paper.pdf
-# 自动尝试 paperbase graph update
+-> paperbase graph preflight
+-> /graphify library/papers --update --no-viz
+-> paperbase graph adopt
 ```
 
 **适用场景**：
-- 偶尔添加 1-2 篇论文
-- 已配置 `config/paperbase.yaml` 中的本地 LLM
+- Agent/自然语言工作流
+- 单篇、批量、Zotero 和本地 PDF 摄入
 
-Agent 操作论文库时，建议显式加 `--no-graph`，完成摄入后统一走预检、Graphify skill 和 `adopt`，避免把 Agent 路径与本地 headless LLM 配置混用。
+宿主 Agent 接到交接后必须继续执行预检、Graphify semantic extraction 和 `adopt`，不能只停在文件检测。语义 Agent 只负责编排、合并和验收，不直接读取正文：semantic queue 有 2 篇及以上时，必须在同一轮调用至少 2 个 subagents 并行抽取；只有 1 篇时也必须交给 subagent。若宿主不支持 subagents，应报告阻塞，不得静默改用本地 LLM。
 
-### 跳过自动更新：--no-graph
+所有 Agent 增量步骤必须把 `library/papers` 作为唯一扫描根。detect、semantic cache、`build_merge(root=...)` 与 `save_manifest(root=...)` 不得混用 PaperBase 仓库根；否则同一 Canonical 会产生两种 `source_file` 身份。代码级硬校验记录在 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`，实现前按 [Graphify 故障排查](troubleshooting/graphify-issues.md#问题-5增量合并出现路径根告警或节点碰撞) 的规避流程执行。
 
-使用 `--no-graph` 参数跳过自动图谱更新：
+### 跳过后续处理：--no-graph
+
+使用 `--no-graph` 跳过本次全文索引和图谱后续处理：
 
 ```bash
 paperbase ingest paper.pdf --no-graph
@@ -37,6 +41,16 @@ paperbase ingest paper.pdf --no-graph
 - 连续摄入多篇论文
 - 图谱更新失败但不想阻塞摄入流程
 - 手动控制图谱更新时机
+
+### 本地 LLM 备用：--headless-graph
+
+只有明确需要降级到项目本地 LLM API 时使用：
+
+```bash
+paperbase ingest paper.pdf --headless-graph
+```
+
+该参数与 `--no-graph` 互斥，并读取 `config/paperbase.yaml`。Agent 正常路径不得自动添加它。
 
 ### 批量摄入模式：--batch
 
@@ -98,7 +112,7 @@ paperbase graph update --incremental
 
 ### 日常使用
 
-**单篇摄入**：使用默认行为
+**单篇摄入**：使用默认 Agent 交接行为
 ```bash
 paperbase ingest paper.pdf
 ```
@@ -113,11 +127,10 @@ paperbase ingest --batch papers.txt
 摄入大量论文时，分阶段处理：
 
 ```bash
-# 1. 批量摄入（跳过图谱）
-paperbase ingest --batch papers.txt --no-graph
+# 1. 批量摄入（默认完成后交接给 Agent）
+paperbase ingest --batch papers.txt
 
-# 2. 统一构建图谱
-paperbase graph update
+# 2. Agent 继续执行输出的 preflight → /graphify → adopt
 ```
 
 ### 定期维护
@@ -141,6 +154,7 @@ paperbase graph update --incremental
 ### 重跑时的耗时与稳定性优化
 
 - **先预检再抽取**：先定位 metadata-only、abstract-only、解析失败和正文过短的论文，避免 Agent 读到一半才发现输入不可用。
+- **正文进入 semantic queue**：Graphify detect 后只将 `document`、`paper`、`image` 类输入送入 semantic extraction；活动 `p_*.md` 必须出现在该集合中，不能只做文件检测或 AST 处理。
 - **按论文/分块重试**：语义 Agent 结果先落盘为 chunk，单个 chunk 失败只重试该 chunk；不要重跑整库，也不要让长 JSON 依赖一次聊天响应传回。
 - **复用两类缓存**：保留 `library/papers/graphify-out/cache/semantic/`，内容哈希未变化的论文直接复用；只有 Canonical 哈希变化才重新抽取。
 - **失败不覆盖旧图**：Graphify 进程失败、来源门失败或健康检查失败时，保留当前 `graph/`；只有通过来源和质量门后才原子替换。

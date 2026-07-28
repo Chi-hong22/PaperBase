@@ -658,7 +658,8 @@ df -h .   # Disk space
 
 ### Where to Get Help
 
-- GitHub Issues: `https://github.com/Chi-hong22/PaperBase/issues`
+- External support only: GitHub Issues `https://github.com/Chi-hong22/PaperBase/issues`
+- Internal engineering tracker: local `.scratch/` Markdown files; see `docs/agents/issue-tracker.md`
 - Documentation: `README.md`, `AGENTS.md`
 - This guide: `references/troubleshooting.md`
 

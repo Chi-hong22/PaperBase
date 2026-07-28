@@ -68,6 +68,8 @@ library/papers/graphify-out/
 
 registry/
 graph/
+# 本地恢复备份可能包含 Canonical、chunks、manifest 和 Registry
+backups/
 # 向量索引
 index/
 *.db
@@ -87,10 +89,14 @@ INGEST_VERIFICATION.md
 *_REPORT.md
 *_PROGRESS*.md
 *_PLANNING*.md
-docs/archive/            # 开发归档文档
-docs/superpowers/     # Superpowers 工作流文档
-docs/MIGRATION-GUIDE.md  # 内部迁移指南
-docs/ROADMAP.md          # 内部路线图
+# 开发归档文档
+docs/archive/
+# Superpowers 工作流文档
+docs/superpowers/
+# 内部迁移指南
+docs/MIGRATION-GUIDE.md
+# 内部路线图
+docs/ROADMAP.md
 
 # Manual test scripts (可能包含真实论文标识)
 test_*_manual.py
@@ -101,5 +107,3 @@ scripts/verify_*.py
 .agents
 .codex
 .claude
-# Technical debt tracking (internal only)
-TECHNICAL_DEBT.md

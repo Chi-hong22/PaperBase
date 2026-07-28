@@ -53,7 +53,9 @@ def test_ingest_routes_non_file_identifier_to_online_adapter(monkeypatch, tmp_pa
     assert "论文标识" in result.output or "论文已成功添加" in result.output
 
 
-def test_online_ingest_updates_fts_then_graph_by_default(monkeypatch, tmp_path):
+def test_online_ingest_updates_fts_and_hands_off_graph_to_agent_by_default(
+    monkeypatch, tmp_path
+):
     calls = []
 
     class FakeAdapter:
@@ -92,4 +94,118 @@ def test_online_ingest_updates_fts_then_graph_by_default(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0, result.output
+    assert calls == ["fts"]
+    assert "paperbase graph preflight" in result.output
+    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "语义 Agent 必须调用 subagents 并行处理 Canonical Markdown" in result.output
+    assert "paperbase graph adopt" in result.output
+
+
+def test_online_ingest_runs_headless_graph_only_when_explicit(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeAdapter:
+        def fetch(self, query):
+            return object()
+
+    class FakeSearchEngine:
+        def __init__(self, index_path, library_path):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def build_index(self):
+            calls.append("fts")
+
+    @click.command()
+    @click.option("--force", is_flag=True)
+    def fake_graph_update(force):
+        calls.append("graph")
+
+    monkeypatch.setattr("paperbase.cli.commands.ingest.PaperFetchAdapter", FakeAdapter)
+    monkeypatch.setattr(
+        "paperbase.cli.commands.ingest.ingest_fetched_paper",
+        lambda base_dir, fetched: FakeOnlineResult(),
+    )
+    monkeypatch.setattr("paperbase.core.search_engine.SearchEngine", FakeSearchEngine)
+    monkeypatch.setattr("paperbase.cli.commands.graph.update", fake_graph_update)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "--base-dir",
+            str(tmp_path),
+            "ingest",
+            "10.1234/example",
+            "--headless-graph",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
     assert calls == ["fts", "graph"]
+
+
+def test_batch_ingest_updates_fts_once_and_hands_off_graph_to_agent(
+    monkeypatch, tmp_path
+):
+    calls = []
+    batch_file = tmp_path / "papers.txt"
+    batch_file.write_text("10.1234/example\n", encoding="utf-8")
+
+    class FakeAdapter:
+        def fetch(self, query):
+            return object()
+
+    class FakeSearchEngine:
+        def __init__(self, index_path, library_path):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def build_index(self):
+            calls.append("fts")
+
+    @click.command()
+    @click.option("--force", is_flag=True)
+    def fake_graph_update(force):
+        calls.append("graph")
+
+    monkeypatch.setattr("paperbase.cli.commands.ingest.PaperFetchAdapter", FakeAdapter)
+    monkeypatch.setattr(
+        "paperbase.cli.commands.ingest.ingest_fetched_paper",
+        lambda base_dir, fetched: FakeOnlineResult(),
+    )
+    monkeypatch.setattr("paperbase.core.search_engine.SearchEngine", FakeSearchEngine)
+    monkeypatch.setattr("paperbase.cli.commands.graph.update", fake_graph_update)
+
+    result = CliRunner().invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--batch", str(batch_file)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["fts"]
+    assert "/graphify library/papers --update --no-viz" in result.output
+
+
+def test_ingest_rejects_conflicting_graph_modes():
+    result = CliRunner().invoke(
+        main,
+        [
+            "ingest",
+            "10.1234/example",
+            "--no-graph",
+            "--headless-graph",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--no-graph 和 --headless-graph 不能同时使用" in result.output

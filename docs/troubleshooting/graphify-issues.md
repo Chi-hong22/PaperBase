@@ -62,6 +62,24 @@ uv run paperbase doctor
 
 `library/papers/graphify-out/` 是正常的 Graphify 输出和缓存目录。增量更新依赖其中的 manifest、graph 和 cache；不要把“目录存在”当作故障原因，也不要在每次运行前删除。只有确认需要全量重建且已接受成本时，才使用 Graphify/PaperBase 提供的强制重建流程。
 
+## 问题 5：增量合并出现路径根告警或节点碰撞
+
+**问题编号**：`TD-GRAPH-001`
+
+**症状**：旧图以 `library/papers` 为扫描根，但增量步骤使用仓库根；同一文件同时出现 `p_xxx.md` 与 `library/papers/p_xxx.md` 两种 `source_file`，Graphify 报节点 ID 碰撞或合并后节点异常增长。
+
+**原因**：Graphify 使用相对于 `root` 的来源路径参与文件和节点身份匹配。detect、cache、`build_merge`、`save_manifest` 的根不一致时，增量替换会把同一 Canonical 当成两个来源。节点数量没有下降时，shrink guard 不一定能发现这种错误。
+
+**当前规避**：
+
+1. 所有增量步骤固定使用 `F:\__PaperBase__\library\papers` 作为 `root`；
+2. Graphify Python 步骤在 `library/papers` 目录执行，确保 manifest 写入正确的 `graphify-out/`；
+3. 合并前备份旧 `graph.json`；
+4. 接纳前验证来源集合只含活动 `p_*.md`，且不存在 PDF、URL、`p_xxx.md`/`library/papers/p_xxx.md` 混合形式；
+5. 出现根不一致时停止接纳、恢复旧图，再用正确根重新合并。
+
+**未来修复**：权威工单为 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`。代码应在写图前比较持久化扫描根与本次根，不一致时直接失败，并增加对应回归测试。
+
 ## 相关文档
 
 - [知识图谱更新策略](../graph-update-strategy.md)

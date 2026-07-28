@@ -57,6 +57,10 @@ paperbase/
    - 只扫描 `library/papers/p_*.md` Canonical，不在建图阶段读取 PDF、URL 或附件
    - `.gitignore` 排除真实论文内容；`library/papers/.graphifyignore` 用 `!p_*.md` 重新纳入本地 Canonical，并精确排除 `BLOCKED` 文件
    - Agent 路径不读取 PaperBase 本地 LLM 配置；headless `paperbase graph update` 才读取 `config/paperbase.yaml`
+   - 默认 `paperbase ingest` 只输出 Agent 建图交接；只有显式 `--headless-graph` 才允许摄入流程调用本地 LLM
+   - 可建图 Canonical `.md` 必须进入 Graphify semantic queue，不得只做 detect 或结构抽取
+   - 语义 Agent 只负责编排和验收，不得自行抽取正文；2 篇及以上必须调用至少 2 个 subagents 并行处理，单篇也必须交给 subagent
+   - Graphify detect、cache、`build_merge(root=...)` 与 `save_manifest(root=...)` 必须统一使用 `library/papers` 扫描根；不得与仓库根混用
 7. **所有资产路径必须是相对路径**（`./assets/fig-001.png`）
 8. **状态转换必须更新 `manifest.json` 的 `updated_at`**
 9. **不修改 Canonical frontmatter/正文时必须保持 `canonical_content_sha256` 不变**
@@ -105,6 +109,7 @@ NORMALIZED → READY
 paperbase ingest "10.1038/s41586-026-10265-5"
 paperbase ingest "arxiv:2401.12345"
 paperbase ingest --file paper.pdf
+# 显式本地 LLM 备用：paperbase ingest --file paper.pdf --headless-graph
 
 # 搜索论文
 paperbase search "machine learning"
