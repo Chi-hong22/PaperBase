@@ -655,8 +655,13 @@ uv run paperbase config path
 PaperBase 提供全局 skill，适配 Claude Code 和 Codex：
 
 ```bash
-# 一键安装
+# Unix/Linux/macOS
 ./skills/paperbase/install.sh
+
+# Windows（默认安装到 Codex）
+powershell -ExecutionPolicy Bypass -File .\skills\paperbase\install.ps1
+powershell -ExecutionPolicy Bypass -File .\skills\paperbase\install.ps1 -Agent claude
+powershell -ExecutionPolicy Bypass -File .\skills\paperbase\install.ps1 -Agent both
 
 # 或手动安装
 # 适用于 Claude Code / Codex:

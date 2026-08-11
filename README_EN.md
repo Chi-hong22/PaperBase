@@ -349,12 +349,18 @@ reported blocker, not an implicit switch to the local LLM fallback.
 PaperBase provides a global skill for Claude Code and Codex:
 
 ```bash
-# One-command setup
+# Unix/Linux/macOS
 ./skills/paperbase/install.sh
+
+# Windows (installs to Codex by default)
+powershell -ExecutionPolicy Bypass -File .\skills\paperbase\install.ps1
+powershell -ExecutionPolicy Bypass -File .\skills\paperbase\install.ps1 -Agent claude
+powershell -ExecutionPolicy Bypass -File .\skills\paperbase\install.ps1 -Agent both
 
 # Or manual installation
 # For Claude Code / Codex:
 cp -r skills/paperbase ~/.claude/skills/
+cp -r skills/paperbase ~/.codex/skills/
 ```
 
 After installation, invoke with `/paperbase` in any AI agent session:

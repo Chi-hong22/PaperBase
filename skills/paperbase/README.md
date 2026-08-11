@@ -13,17 +13,17 @@ PaperBase 统一交互接口，提供命令包装和查询路由功能。
 
 ```bash
 # Unix/Linux/macOS
-cd ~/.claude/skills  # 或 ~/.codex/skills
-git clone <repo-url> paperbase
-cd paperbase
+cd <PaperBase 仓库>/skills/paperbase
 ./install.sh
 
 # Windows
-cd ~/.claude/skills  # 或 ~/.codex/skills
-git clone <repo-url> paperbase
-cd paperbase
-powershell -ExecutionPolicy Bypass -File install.ps1
+cd <PaperBase 仓库>\skills\paperbase
+powershell -ExecutionPolicy Bypass -File install.ps1                 # 默认安装到 Codex
+powershell -ExecutionPolicy Bypass -File install.ps1 -Agent claude  # 安装到 Claude Code
+powershell -ExecutionPolicy Bypass -File install.ps1 -Agent both    # 同时安装到两者
 ```
+
+更新已有 skill 时，安装脚本会分别保留 Codex 和 Claude Code 原有的 `workspaces.json`。
 
 ### 手动安装
 
