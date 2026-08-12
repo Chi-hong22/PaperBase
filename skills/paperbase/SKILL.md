@@ -52,7 +52,16 @@ paperbase ingest --file <path>       # 本地 PDF
 paperbase ingest --batch <file>      # 批量摄入
 paperbase ingest <id> --no-graph     # 跳过本次索引和图谱后续处理
 paperbase ingest <id> --headless-graph  # 显式本地 LLM 备用路径
+paperbase ingest --file paper.pdf --accept-visual-warnings  # 仅在用户确认视觉警告后使用
 ```
+
+### 视觉 PDF 任务包（按需加载）
+
+普通 `paperbase ingest` 返回 `AgentActionRequired(task_package)` 时，读取
+`references/visual_pdf_conversion.md`，按任务包交给 Agent Host 的视觉 worker 继续处理；不要寻找或虚构独立的视觉转换命令。
+
+若普通 ingest 返回视觉警告，先向用户展示 warnings。只有用户明确确认后，才在**同一原始 ingest 命令**上添加
+`--accept-visual-warnings` 后重复执行；Agent 不得自行确认。
 
 **辅助脚本**：
 ```bash
