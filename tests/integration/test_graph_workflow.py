@@ -10,10 +10,12 @@ import pytest
 from click.testing import CliRunner
 
 from paperbase.adapters.graphify_adapter import check_graphify_installed
+from paperbase.cli.commands import ingest as ingest_command
 from paperbase.cli.main import main
 from paperbase.core.graph_updater import detect_changed_papers
 from paperbase.core.manifest import load_manifest, save_manifest
 from paperbase.core.paths import PaperPaths
+from paperbase.core.pdf_conversion import ReadyConversionOutcome
 from paperbase.core.registry import PaperRegistry
 from paperbase.schemas.manifest import PaperState
 from paperbase.utils.markdown import generate_canonical_markdown, parse_frontmatter
@@ -26,9 +28,21 @@ def skip_if_no_graphify():
         pytest.skip("graphify 未安装，跳过集成测试")
 
 
+@pytest.fixture(autouse=True)
+def graph_workflow_uses_graphable_pdf_conversion(monkeypatch):
+    """Keep graph workflow tests focused on graph behavior with valid Canonical text."""
+    markdown = "# Full paper\n\n" + ("Detailed graphable content. " * 40)
+    monkeypatch.setattr(
+        ingest_command,
+        "progressPdfConversion",
+        lambda source_pdf, conversion_config: ReadyConversionOutcome(markdown),
+    )
+
+
 def test_graphify_installed(skip_if_no_graphify):
     """测试 graphify 是否可用"""
     from paperbase.adapters.graphify_adapter import check_graphify_installed
+
     assert check_graphify_installed() is True
 
 
@@ -284,9 +298,7 @@ def test_graph_preflight_skips_blocked_paper(tmp_path):
     assert paper["storage_id"] not in result.output
 
 
-def test_graph_update_stops_before_graphify_for_blocked_canonical(
-    monkeypatch, tmp_path
-):
+def test_graph_update_stops_before_graphify_for_blocked_canonical(monkeypatch, tmp_path):
     """质量门失败时保留旧图谱，避免把 metadata-only 送入 Graphify。"""
     pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
     runner = CliRunner()
@@ -348,10 +360,8 @@ def test_graph_preflight_accepts_embedded_fulltext_over_stale_quality(tmp_path):
     metadata, _body = parse_frontmatter(paths.paper_md.read_text(encoding="utf-8"))
     metadata["quality"]["fulltext"] = False
     metadata["quality"]["needs_review"] = True
-    fulltext_body = (
-        "---\ncontent_kind: fulltext\nhas_fulltext: true\n---\n\n"
-        "# Full paper\n\n"
-        + ("Detailed canonical content. " * 40)
+    fulltext_body = "---\ncontent_kind: fulltext\nhas_fulltext: true\n---\n\n# Full paper\n\n" + (
+        "Detailed canonical content. " * 40
     )
     paths.paper_md.write_text(
         generate_canonical_markdown(metadata, fulltext_body),

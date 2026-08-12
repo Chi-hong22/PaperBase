@@ -1,13 +1,14 @@
 """配置系统单元测试"""
 
 import pytest
-from pathlib import Path
 from pydantic import ValidationError
+
 from paperbase.config.models import (
-    LLMConfig,
-    GraphConfig,
-    PaperBaseConfig,
     ConfigError,
+    GraphConfig,
+    LLMConfig,
+    PaperBaseConfig,
+    VisualPdfConfig,
 )
 
 
@@ -72,6 +73,39 @@ class TestGraphConfig:
         config = GraphConfig(auto_update=False)
         assert config.auto_update == "never"
         assert config.get_triggers() == []
+
+
+class TestVisualPdfConfig:
+    """测试视觉 PDF 转换的最小配置契约。"""
+
+    def test_defaults_keep_visual_conversion_off(self):
+        """未配置用户保持原有确定性转换行为。"""
+        visual = PaperBaseConfig().conversion.pdf.visual
+
+        assert visual.mode == "off"
+        assert visual.model == ""
+        assert visual.chunk_pages == 5
+        assert visual.retry == 1
+
+    @pytest.mark.parametrize("mode", ["off", "auto", "always"])
+    def test_accepts_documented_visual_modes(self, mode):
+        """三个文档化 mode 均可被模型配置接受。"""
+        assert VisualPdfConfig(mode=mode).mode == mode
+
+    @pytest.mark.parametrize(
+        "visual_config",
+        [
+            {"mode": "manual"},
+            {"chunk_pages": 0},
+            {"retry": -1},
+            {"retry": 2},
+            {"unknown_visual_option": True},
+        ],
+    )
+    def test_rejects_invalid_or_unknown_visual_options(self, visual_config):
+        """视觉段本身对枚举、数值与未知键给出稳定验证失败。"""
+        with pytest.raises(ValidationError):
+            VisualPdfConfig.model_validate(visual_config)
 
     def test_get_mode(self):
         """测试 get_mode"""
