@@ -1,10 +1,12 @@
 """测试配置加载（集成测试）"""
 
-import pytest
-from pathlib import Path
-import yaml
 import tempfile
-from paperbase.config import load_config, ConfigError
+from pathlib import Path
+
+import pytest
+import yaml
+
+from paperbase.config import ConfigError, load_config
 
 
 class TestConfigLoader:
@@ -16,6 +18,38 @@ class TestConfigLoader:
         assert config is not None
         assert hasattr(config, "llm")
         assert hasattr(config, "graph")
+        assert config.conversion.pdf.visual.mode == "off"
+        assert config.conversion.pdf.visual.model == ""
+        assert config.conversion.pdf.visual.chunk_pages == 5
+        assert config.conversion.pdf.visual.retry == 1
+
+    def test_load_visual_pdf_config(self, tmp_path):
+        """显式视觉 PDF 配置应由加载器传递给对应的嵌套模型。"""
+        config_path = tmp_path / "paperbase.yaml"
+        config_path.write_text(
+            yaml.safe_dump(
+                {
+                    "conversion": {
+                        "pdf": {
+                            "visual": {
+                                "mode": "always",
+                                "model": "host-selected-model",
+                                "chunk_pages": 3,
+                                "retry": 0,
+                            }
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        config = load_config(config_path)
+
+        assert config.conversion.pdf.visual.mode == "always"
+        assert config.conversion.pdf.visual.model == "host-selected-model"
+        assert config.conversion.pdf.visual.chunk_pages == 3
+        assert config.conversion.pdf.visual.retry == 0
 
     def test_default_config_disables_scihub(self):
         """默认配置不得授权通过 Sci-Hub 绕过付费墙。"""

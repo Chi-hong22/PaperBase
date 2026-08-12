@@ -11,8 +11,14 @@ from paperbase.adapters.zotero_adapter import ZoteroItem
 from paperbase.cli.main import main
 from paperbase.core.identity import generate_storage_id
 from paperbase.core.manifest import load_manifest
+from paperbase.core.pdf_conversion import ReadyConversionOutcome
 from paperbase.core.registry import PaperRegistry
 from paperbase.utils.markdown import parse_frontmatter
+
+
+def _graphable_pdf_markdown(title: str, abstract: str) -> str:
+    """Return deterministic converted text that satisfies the adoption preflight."""
+    return f"# {title}\n\n{abstract}\n\n" + ("Detailed full-text evidence. " * 24)
 
 
 def _recording_search_engine(calls):
@@ -77,7 +83,7 @@ def test_ingest_from_zotero_doi_duplicate(mock_registry_class, mock_create_adapt
     mock_registry.find_by_doi.return_value = {
         "paper_id": "doi-10-1234-duplicate",
         "title": "Existing Paper",
-        "storage_id": "abc123"
+        "storage_id": "abc123",
     }
     mock_registry_class.return_value = mock_registry
 
@@ -89,11 +95,16 @@ def test_ingest_from_zotero_doi_duplicate(mock_registry_class, mock_create_adapt
         Path("registry/papers.db").touch()
         Path("config").mkdir()
 
-        result = runner.invoke(main, [
-            "ingest",
-            "--zotero-key", "ABCD1234",
-            "--no-graph",
-        ], obj={"base_dir": Path.cwd()})
+        result = runner.invoke(
+            main,
+            [
+                "ingest",
+                "--zotero-key",
+                "ABCD1234",
+                "--no-graph",
+            ],
+            obj={"base_dir": Path.cwd()},
+        )
 
         # Should check DOI and abort
         mock_registry.find_by_doi.assert_called_once_with("10.1234/duplicate")
@@ -182,9 +193,7 @@ def test_ingest_zotero_recent_uses_public_item_key(mock_create_adapter, tmp_path
     assert len(list((tmp_path / "library" / "papers").glob("p_*.md"))) == 1
 
 
-def test_zotero_metadata_ingest_hands_off_graph_to_agent_by_default(
-    monkeypatch, tmp_path
-):
+def test_zotero_metadata_ingest_hands_off_graph_to_agent_by_default(monkeypatch, tmp_path):
     calls = []
     adapter = Mock()
     adapter.fetch_item.return_value = ZoteroItem(
@@ -201,7 +210,9 @@ def test_zotero_metadata_ingest_hands_off_graph_to_agent_by_default(
     adapter.get_pdf_path.return_value = None
 
     monkeypatch.setattr("paperbase.cli.commands.ingest._create_zotero_adapter", lambda ctx: adapter)
-    monkeypatch.setattr("paperbase.core.search_engine.SearchEngine", _recording_search_engine(calls))
+    monkeypatch.setattr(
+        "paperbase.core.search_engine.SearchEngine", _recording_search_engine(calls)
+    )
     monkeypatch.setattr("paperbase.cli.commands.graph.update", _recording_graph_command(calls))
 
     result = CliRunner().invoke(
@@ -216,9 +227,7 @@ def test_zotero_metadata_ingest_hands_off_graph_to_agent_by_default(
     assert "paperbase graph adopt" in result.output
 
 
-def test_zotero_pdf_ingest_keeps_metadata_and_hands_off_graph_to_agent(
-    monkeypatch, tmp_path
-):
+def test_zotero_pdf_ingest_keeps_metadata_and_hands_off_graph_to_agent(monkeypatch, tmp_path):
     calls = []
     pdf_path = tmp_path / "zotero-source.pdf"
     pdf_path.write_bytes(b"zotero pdf")
@@ -248,10 +257,17 @@ def test_zotero_pdf_ingest_keeps_metadata_and_hands_off_graph_to_agent(
         },
     )
     monkeypatch.setattr(
-        "paperbase.cli.commands.ingest.convert_pdf_to_markdown",
-        lambda path: "# Conflicting PDF Title\n\nConflicting PDF abstract.",
+        "paperbase.cli.commands.ingest.progressPdfConversion",
+        lambda source_pdf, conversion_config: ReadyConversionOutcome(
+            _graphable_pdf_markdown(
+                "Conflicting PDF Title",
+                "Conflicting PDF abstract.",
+            )
+        ),
     )
-    monkeypatch.setattr("paperbase.core.search_engine.SearchEngine", _recording_search_engine(calls))
+    monkeypatch.setattr(
+        "paperbase.core.search_engine.SearchEngine", _recording_search_engine(calls)
+    )
     monkeypatch.setattr("paperbase.cli.commands.graph.update", _recording_graph_command(calls))
 
     result = CliRunner().invoke(
@@ -279,7 +295,10 @@ def test_zotero_pdf_ingest_keeps_metadata_and_hands_off_graph_to_agent(
     assert registered["title"] == "Zotero Title"
     assert registered["authors"] == ["Zotero Author"]
     assert registered["year"] == 2025
-    assert next((tmp_path / "library" / "papers").glob("p_*/source/source.pdf")).read_bytes() == b"zotero pdf"
+    assert (
+        next((tmp_path / "library" / "papers").glob("p_*/source/source.pdf")).read_bytes()
+        == b"zotero pdf"
+    )
 
 
 def test_zotero_pdf_doi_supplies_identity_when_zotero_has_no_stable_id(monkeypatch, tmp_path):
@@ -311,8 +330,10 @@ def test_zotero_pdf_doi_supplies_identity_when_zotero_has_no_stable_id(monkeypat
         },
     )
     monkeypatch.setattr(
-        "paperbase.cli.commands.ingest.convert_pdf_to_markdown",
-        lambda path: "# PDF Title\n\nPDF abstract.",
+        "paperbase.cli.commands.ingest.progressPdfConversion",
+        lambda source_pdf, conversion_config: ReadyConversionOutcome(
+            _graphable_pdf_markdown("PDF Title", "PDF abstract.")
+        ),
     )
 
     result = CliRunner().invoke(
@@ -374,8 +395,10 @@ def test_zotero_pdf_fills_only_missing_zotero_metadata(monkeypatch, tmp_path):
         },
     )
     monkeypatch.setattr(
-        "paperbase.cli.commands.ingest.convert_pdf_to_markdown",
-        lambda path: "# PDF Title\n\nPDF abstract.",
+        "paperbase.cli.commands.ingest.progressPdfConversion",
+        lambda source_pdf, conversion_config: ReadyConversionOutcome(
+            _graphable_pdf_markdown("PDF Title", "PDF abstract.")
+        ),
     )
 
     result = CliRunner().invoke(
@@ -419,8 +442,10 @@ def test_zotero_single_no_graph_skips_graph_update(monkeypatch, tmp_path, with_p
             lambda path: {"title": "PDF", "authors": ["PDF"], "year": 2000},
         )
         monkeypatch.setattr(
-            "paperbase.cli.commands.ingest.convert_pdf_to_markdown",
-            lambda path: "# PDF\n\nBody",
+            "paperbase.cli.commands.ingest.progressPdfConversion",
+            lambda source_pdf, conversion_config: ReadyConversionOutcome(
+                _graphable_pdf_markdown("PDF", "Body")
+            ),
         )
     else:
         adapter.get_pdf_path.return_value = None
@@ -437,9 +462,7 @@ def test_zotero_single_no_graph_skips_graph_update(monkeypatch, tmp_path, with_p
     assert calls == []
 
 
-def test_zotero_recent_updates_fts_once_and_hands_off_graph_to_agent(
-    monkeypatch, tmp_path
-):
+def test_zotero_recent_updates_fts_once_and_hands_off_graph_to_agent(monkeypatch, tmp_path):
     calls = []
     item = ZoteroItem(
         key="RECENT01",
@@ -458,7 +481,9 @@ def test_zotero_recent_updates_fts_once_and_hands_off_graph_to_agent(
     adapter.get_pdf_path.return_value = None
 
     monkeypatch.setattr("paperbase.cli.commands.ingest._create_zotero_adapter", lambda ctx: adapter)
-    monkeypatch.setattr("paperbase.core.search_engine.SearchEngine", _recording_search_engine(calls))
+    monkeypatch.setattr(
+        "paperbase.core.search_engine.SearchEngine", _recording_search_engine(calls)
+    )
     monkeypatch.setattr("paperbase.cli.commands.graph.update", _recording_graph_command(calls))
 
     result = CliRunner().invoke(
