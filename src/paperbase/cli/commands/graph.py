@@ -1,21 +1,23 @@
 """graph 命令实现"""
 
+from pathlib import Path
+
 import click
 from rich.console import Console
-from pathlib import Path
-from paperbase.utils.timestamp import now_iso8601
+
 from paperbase.adapters.graphify_adapter import (
-    check_graphify_installed,
-    run_graphify,
     adopt_graphify_output,
+    check_graphify_installed,
     get_graph_stats,
+    run_graphify,
 )
-from paperbase.core.registry import PaperRegistry
+from paperbase.core.canonical_adoption_gate import inspectCanonicalTextForGraph
+from paperbase.core.graph_updater import detect_changed_papers
 from paperbase.core.manifest import load_manifest, save_manifest
 from paperbase.core.paths import PaperPaths
-from paperbase.schemas.manifest import PaperState, GraphInfo
-from paperbase.core.graph_updater import detect_changed_papers
-from paperbase.utils.markdown import parse_frontmatter
+from paperbase.core.registry import PaperRegistry
+from paperbase.schemas.manifest import GraphInfo, PaperState
+from paperbase.utils.timestamp import now_iso8601
 
 
 @click.group()
@@ -308,43 +310,10 @@ def _inspect_canonical_for_graph(path: Path, minimum_chars: int) -> str | None:
         return "Canonical Markdown 不存在"
 
     try:
-        metadata, body = parse_frontmatter(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+        content = path.read_text(encoding="utf-8")
+    except OSError as exc:
         return f"Canonical Markdown 无法解析: {exc}"
-
-    body_metadata, body_text = _extract_embedded_metadata(body)
-    if body_metadata.get("content_kind") in {"metadata_only", "abstract_only"}:
-        return f"content_kind={body_metadata['content_kind']}"
-    if body_metadata.get("has_fulltext") is False:
-        return "has_fulltext=false"
-
-    # 正文级 paper-fetch 标记比历史 frontmatter quality 更接近实际内容。
-    embedded_fulltext = (
-        body_metadata.get("content_kind") == "fulltext"
-        or body_metadata.get("has_fulltext") is True
-    )
-    quality = metadata.get("quality") or {}
-    if not embedded_fulltext:
-        if quality.get("fulltext") is False:
-            return "quality.fulltext=false"
-        if quality.get("needs_review") is True:
-            return "quality.needs_review=true"
-
-    if len(body_text.strip()) < minimum_chars:
-        return f"Canonical 正文不足 {minimum_chars} 字符"
-    return None
-
-
-def _extract_embedded_metadata(body: str) -> tuple[dict, str]:
-    """解析 paper-fetch 写入的正文级质量块，不改变 Canonical 内容。"""
-    stripped = body.lstrip()
-    if not stripped.startswith("---\n"):
-        return {}, body
-    try:
-        metadata, remainder = parse_frontmatter(stripped)
-    except ValueError:
-        return {}, body
-    return metadata, remainder
+    return inspectCanonicalTextForGraph(content, minimum_chars)
 
 
 def _project_index_state(base_dir: Path, papers: list[dict]) -> int:

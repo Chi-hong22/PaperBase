@@ -1,25 +1,44 @@
 """ingest 命令实现"""
 
 import os
-import yaml
-import click
-from rich.console import Console
+import shutil
+import stat
 from pathlib import Path
-from paperbase.core.identity import normalize_paper_id, generate_storage_id
-from paperbase.core.paths import PaperPaths
-from paperbase.core.registry import PaperRegistry
-from paperbase.core.manifest import create_manifest, save_manifest
-from paperbase.adapters.pdf_extractor import extract_pdf_metadata
-from paperbase.adapters.pdf_converter import convert_pdf_to_markdown
+
+import click
+import yaml
+from rich.console import Console
+
 from paperbase.adapters.paper_fetch_adapter import PaperFetchAdapter, PaperFetchUnavailable
+from paperbase.adapters.pdf_extractor import extract_pdf_metadata
+from paperbase.config.loader import load_config
+from paperbase.config.models import PdfConversionConfig
+from paperbase.core.canonical_adoption_gate import (
+    CanonicalAdoptionGateError,
+    validateCanonicalAdoption,
+)
+from paperbase.core.chunker import generate_chunks, write_chunks_jsonl
+from paperbase.core.identity import generate_storage_id, normalize_paper_id
+from paperbase.core.manifest import create_manifest, load_manifest, save_manifest
 from paperbase.core.normalizer import normalize_paper
 from paperbase.core.online_ingest import ingest_fetched_paper
-from paperbase.schemas.manifest import PaperState, SourcePDF, CanonicalMD, PipelineInfo
+from paperbase.core.paths import PaperPaths
+from paperbase.core.pdf_conversion import (
+    AgentActionRequiredOutcome,
+    FailedConversionOutcome,
+    NeedsConfirmationOutcome,
+    PdfConversionOutcome,
+    ReadyConversionOutcome,
+    progressPdfConversion,
+)
+from paperbase.core.registry import PaperRegistry
+from paperbase.core.visual_adoption import cleanupReadyVisualRuns
+from paperbase.core.visual_repair_run import isPathReparsePoint
+from paperbase.schemas.manifest import CanonicalMD, PaperState, PipelineInfo, SourcePDF
 from paperbase.schemas.paper import PaperIdentifiers
-from paperbase.core.chunker import generate_chunks, write_chunks_jsonl
 from paperbase.utils.hash import sha256_file, sha256_string
 from paperbase.utils.markdown import generate_canonical_markdown
-import shutil
+from paperbase.utils.timestamp import now_iso8601
 
 
 def _target_is_local_file(target: str | None) -> bool:
@@ -35,6 +54,246 @@ def _print_agent_graph_handoff(console: Console) -> None:
     console.print("   /graphify library/papers --update --no-viz")
     console.print("   语义 Agent 必须调用 subagents 并行处理 Canonical Markdown")
     console.print("   paperbase graph adopt")
+
+
+def _save_incomplete_local_pdf_manifest(
+    paths: PaperPaths,
+    paper_id: str,
+    storage_id: str,
+    pdf_sha256: str,
+    state: PaperState,
+) -> None:
+    """保存未采用 PDF 转换的可恢复状态。"""
+    if paths.manifest_json.exists():
+        manifest = load_manifest(paths.manifest_json)
+    else:
+        manifest = create_manifest(paper_id, storage_id)
+
+    acquired_at = now_iso8601()
+    if manifest.source_pdf and manifest.source_pdf.sha256 == pdf_sha256:
+        acquired_at = manifest.source_pdf.acquired_at
+
+    manifest.state = state
+    manifest.source_pdf = SourcePDF(
+        path="./source/source.pdf",
+        sha256=pdf_sha256,
+        acquired_at=acquired_at,
+    )
+    manifest.canonical_md = None
+    manifest.pipeline = PipelineInfo(
+        converter="markitdown",
+        converter_version="0.0.1",
+        normalizer_version="1.0.0",
+    )
+    save_manifest(manifest, paths.manifest_json)
+
+
+def _passesCanonicalAdoptionGate(  # noqa: N802
+    console: Console,
+    paths: PaperPaths,
+    paper_id: str,
+    storage_id: str,
+    pdf_sha256: str,
+    canonical_md: str,
+    minimum_body_chars: int,
+) -> bool:
+    """Validate a Canonical candidate before any final adoption writes."""
+    try:
+        validateCanonicalAdoption(
+            canonical_md,
+            expected_paper_id=paper_id,
+            expected_storage_id=storage_id,
+            minimum_body_chars=minimum_body_chars,
+        )
+    except CanonicalAdoptionGateError as exc:
+        _save_incomplete_local_pdf_manifest(
+            paths,
+            paper_id,
+            storage_id,
+            pdf_sha256,
+            PaperState.NEEDS_REVIEW,
+        )
+        console.print("[red]❌ Canonical 采用前门禁失败[/red]")
+        console.print(f"   error: {exc.code}")
+        console.print(f"   reason: {exc.reason}")
+        return False
+    return True
+
+
+def _validateReadyAssets(  # noqa: N802
+    paths: PaperPaths, assets: tuple[str, ...]
+) -> None:
+    """Require every conversion asset to be a local, non-link regular file."""
+    if not assets:
+        return
+
+    assets_root = paths.paper_dir / "assets"
+    if isPathReparsePoint(assets_root) or not assets_root.is_dir():
+        raise ValueError("conversion assets directory is missing or unsafe")
+
+    for asset_path in assets:
+        if not isinstance(asset_path, str) or not asset_path.startswith("./assets/"):
+            raise ValueError("conversion asset path is invalid")
+        relative_path = asset_path.removeprefix("./assets/")
+        path_parts = relative_path.split("/")
+        if (
+            not relative_path
+            or "\\" in asset_path
+            or any(
+                part in {"", ".", ".."} or ":" in part
+                for part in path_parts
+            )
+        ):
+            raise ValueError("conversion asset path is invalid")
+
+        parent_dir = assets_root
+        for part in path_parts[:-1]:
+            parent_dir = parent_dir / part
+            if isPathReparsePoint(parent_dir) or not parent_dir.is_dir():
+                raise ValueError("conversion asset parent is missing or unsafe")
+        target_path = assets_root.joinpath(*path_parts)
+        if isPathReparsePoint(target_path):
+            raise ValueError("conversion asset target is unsafe")
+        try:
+            target_mode = os.stat(target_path, follow_symlinks=False).st_mode
+        except FileNotFoundError as exc:
+            raise ValueError("conversion asset target is missing") from exc
+        if not stat.S_ISREG(target_mode):
+            raise ValueError("conversion asset target must be a regular file")
+
+
+def _stateForConversionFailure(error_code: str) -> PaperState:  # noqa: N802
+    """Keep local-PDF and Zotero-PDF conversion failure states aligned."""
+    blocked_codes = {
+        "visual_model_required",
+        "visual_model_invalid",
+        "visual_model_unsupported",
+        "visual_auto_routing_unavailable",
+        "visual_host_capability_missing",
+        "visual_subagent_capability_missing",
+        "visual_agent_host_unavailable",
+    }
+    retryable_codes = {
+        "visual_progress_failed",
+        "visual_transient_failure_exhausted",
+    }
+    review_codes = {
+        "visual_auto_audit_result_invalid",
+        "visual_boundary_review_invalid",
+        "visual_quality_blocked",
+        "visual_worker_result_invalid",
+    }
+    is_visual_capability_error = (
+        error_code.startswith("visual_") and "capability" in error_code
+    )
+    if error_code in blocked_codes or is_visual_capability_error:
+        return PaperState.BLOCKED
+    if error_code in retryable_codes:
+        return PaperState.FAILED_RETRYABLE
+    if error_code in review_codes:
+        return PaperState.NEEDS_REVIEW
+    return PaperState.FAILED_PERMANENT
+
+
+def _progressPdfConversionForIngest(  # noqa: N802
+    source_pdf: Path,
+    conversion_config: PdfConversionConfig,
+    accept_visual_warnings: bool,
+) -> PdfConversionOutcome:
+    """Preserve the legacy two-argument progress seam unless acceptance is explicit."""
+    if accept_visual_warnings:
+        return progressPdfConversion(
+            source_pdf,
+            conversion_config,
+            accept_visual_warnings=True,
+        )
+    return progressPdfConversion(source_pdf, conversion_config)
+
+
+def _candidateFromConversionOutcome(  # noqa: N802
+    console: Console,
+    paths: PaperPaths,
+    paper_id: str,
+    storage_id: str,
+    pdf_sha256: str,
+    conversion_outcome: PdfConversionOutcome,
+) -> str | None:
+    """Apply the shared conversion quality gate and return only adoptable Markdown."""
+    if isinstance(conversion_outcome, AgentActionRequiredOutcome):
+        _save_incomplete_local_pdf_manifest(
+            paths,
+            paper_id,
+            storage_id,
+            pdf_sha256,
+            PaperState.BLOCKED,
+        )
+        task_package = conversion_outcome.task_package.resolve()
+        console.print("[yellow]⚠ PDF 视觉转换等待 Agent Host 继续[/yellow]")
+        console.print(f"   task_package: {task_package}")
+        console.print("   需 Agent Host 继续处理此视觉转换任务。")
+        return None
+
+    if isinstance(conversion_outcome, NeedsConfirmationOutcome):
+        _save_incomplete_local_pdf_manifest(
+            paths,
+            paper_id,
+            storage_id,
+            pdf_sha256,
+            PaperState.NEEDS_REVIEW,
+        )
+        console.print("[yellow]⚠ PDF 转换存在待确认警告，未自动采用[/yellow]")
+        for warning in conversion_outcome.warnings:
+            console.print(f"   - {warning}")
+        return None
+
+    if isinstance(conversion_outcome, FailedConversionOutcome):
+        _save_incomplete_local_pdf_manifest(
+            paths,
+            paper_id,
+            storage_id,
+            pdf_sha256,
+            _stateForConversionFailure(conversion_outcome.error.code),
+        )
+        console.print("[red]❌ PDF 转换未完成[/red]")
+        console.print(
+            f"   {conversion_outcome.error.code}: "
+            f"{conversion_outcome.error.message}"
+        )
+        return None
+
+    if not isinstance(conversion_outcome, ReadyConversionOutcome):
+        raise RuntimeError("未知的 PDF 转换结果")
+
+    try:
+        _validateReadyAssets(paths, conversion_outcome.assets)
+    except ValueError as exc:
+        _save_incomplete_local_pdf_manifest(
+            paths,
+            paper_id,
+            storage_id,
+            pdf_sha256,
+            PaperState.NEEDS_REVIEW,
+        )
+        console.print("[red]❌ PDF 转换资产未通过采用校验[/red]")
+        console.print(f"   原因: {exc}")
+        return None
+    return conversion_outcome.markdown
+
+
+def _cleanupVisualRunsAfterAdoption(  # noqa: N802
+    console: Console,
+    paths: PaperPaths,
+    conversion_config: PdfConversionConfig,
+    primary_adoption_succeeded: bool,
+) -> None:
+    """Best-effort cleanup only after the primary visual adoption succeeds."""
+    if conversion_config.visual.mode == "off" or not primary_adoption_succeeded:
+        return
+    try:
+        cleanupReadyVisualRuns(paths.paper_dir)
+    except Exception as exc:
+        console.print("[yellow]⚠ 视觉临时运行清理失败，已保留现场[/yellow]")
+        console.print(f"   原因: {exc}")
 
 
 def _create_zotero_adapter(ctx):
@@ -239,7 +498,12 @@ def _ingest_online(ctx, query: str, no_graph: bool, headless_graph: bool):
 
 
 def _ingest_local_pdf(
-    ctx, pdf_path: Path, no_graph: bool, headless_graph: bool
+    ctx,
+    pdf_path: Path,
+    no_graph: bool,
+    headless_graph: bool,
+    *,
+    accept_visual_warnings: bool = False,
 ):
     """摄入本地 PDF 文件"""
     console = Console()
@@ -309,9 +573,43 @@ def _ingest_local_pdf(
         pdf_sha256 = sha256_file(paths.source_pdf)
         console.print(f"   SHA256: {pdf_sha256[:16]}...")
 
-        # Step 5: 转换为 Markdown
+        # Step 5: 推进 PDF 转换质量门
         console.print("[yellow]5. 转换为 Markdown...[/yellow]")
-        candidate_md = convert_pdf_to_markdown(pdf_path)
+        try:
+            paperbase_config = load_config(
+                base_dir / "config" / "paperbase.yaml"
+            )
+            conversion_config = paperbase_config.conversion.pdf
+            minimum_body_chars = (
+                paperbase_config.graph.get_minimum_canonical_body_chars()
+            )
+            conversion_outcome = _progressPdfConversionForIngest(
+                paths.source_pdf,
+                conversion_config,
+                accept_visual_warnings,
+            )
+        except Exception as exc:
+            _save_incomplete_local_pdf_manifest(
+                paths,
+                paper_id,
+                storage_id,
+                pdf_sha256,
+                PaperState.FAILED_PERMANENT,
+            )
+            console.print("[red]❌ PDF 转换质量门初始化失败[/red]")
+            console.print(f"   原因: {exc}")
+            return
+
+        candidate_md = _candidateFromConversionOutcome(
+            console,
+            paths,
+            paper_id,
+            storage_id,
+            pdf_sha256,
+            conversion_outcome,
+        )
+        if candidate_md is None:
+            return
         console.print(f"   长度: {len(candidate_md)} 字符")
 
         # Step 6: 整理论文信息
@@ -329,6 +627,16 @@ def _ingest_local_pdf(
         # 转换 PaperMetadata 为字典
         metadata_dict = paper_metadata.model_dump(mode="json", exclude_none=True)
         canonical_md = generate_canonical_markdown(metadata_dict, candidate_md)
+        if not _passesCanonicalAdoptionGate(
+            console,
+            paths,
+            paper_id,
+            storage_id,
+            pdf_sha256,
+            canonical_md,
+            minimum_body_chars,
+        ):
+            return
         paths.paper_md.write_text(canonical_md, encoding="utf-8")
         canonical_sha256 = sha256_string(canonical_md)
 
@@ -380,6 +688,7 @@ def _ingest_local_pdf(
         console.print(f"   路径: {paths.paper_dir}")
 
         # Step 11: 更新全文检索索引和知识图谱（可选）
+        primary_adoption_succeeded = True
         if not no_graph:
             console.print("\n[yellow]11. 更新全文检索索引...[/yellow]")
             try:
@@ -390,6 +699,7 @@ def _ingest_local_pdf(
                     engine.build_index()
                 console.print("[green]   ✓ 全文检索索引更新完成[/green]")
             except Exception as e:
+                primary_adoption_succeeded = False
                 console.print(f"[yellow]   ⚠ 索引更新失败: {e}[/yellow]")
                 console.print("   可稍后手动运行: [cyan]paperbase index[/cyan]")
 
@@ -407,6 +717,13 @@ def _ingest_local_pdf(
             console.print("\n[dim]跳过索引更新（--no-graph）[/dim]")
             console.print("   稍后可运行: [cyan]paperbase index[/cyan] 和 [cyan]paperbase graph update[/cyan]")
 
+        _cleanupVisualRunsAfterAdoption(
+            console,
+            paths,
+            conversion_config,
+            primary_adoption_succeeded,
+        )
+
         # 摄入流程完成
         console.print(f"\n[green]✓ 摄入完成[/green]")
         console.print(f"   论文已成功添加到知识库")
@@ -417,7 +734,12 @@ def _ingest_local_pdf(
 
 
 def _ingest_from_zotero(
-    ctx, item_key: str, no_graph: bool, headless_graph: bool
+    ctx,
+    item_key: str,
+    no_graph: bool,
+    headless_graph: bool,
+    *,
+    accept_visual_warnings: bool = False,
 ):
     """从 Zotero 导入单篇论文
 
@@ -555,7 +877,41 @@ def _ingest_from_zotero(
                 pdf_sha256 = sha256_file(paths.source_pdf)
 
                 console.print("[yellow]   5.4. 转换为 Markdown...[/yellow]")
-                candidate_md = convert_pdf_to_markdown(pdf_path)
+                try:
+                    paperbase_config = load_config(
+                        base_dir / "config" / "paperbase.yaml"
+                    )
+                    conversion_config = paperbase_config.conversion.pdf
+                    minimum_body_chars = (
+                        paperbase_config.graph.get_minimum_canonical_body_chars()
+                    )
+                    conversion_outcome = _progressPdfConversionForIngest(
+                        paths.source_pdf,
+                        conversion_config,
+                        accept_visual_warnings,
+                    )
+                except Exception as exc:
+                    _save_incomplete_local_pdf_manifest(
+                        paths,
+                        paper_id,
+                        storage_id,
+                        pdf_sha256,
+                        PaperState.FAILED_PERMANENT,
+                    )
+                    console.print("[red]❌ PDF 转换质量门初始化失败[/red]")
+                    console.print(f"   原因: {exc}")
+                    return "incomplete"
+
+                candidate_md = _candidateFromConversionOutcome(
+                    console,
+                    paths,
+                    paper_id,
+                    storage_id,
+                    pdf_sha256,
+                    conversion_outcome,
+                )
+                if candidate_md is None:
+                    return "incomplete"
                 console.print(f"      长度: {len(candidate_md)} 字符")
 
                 console.print("[yellow]   5.5. 整理论文信息...[/yellow]")
@@ -577,6 +933,16 @@ def _ingest_from_zotero(
                 console.print("[yellow]   5.6. 生成标准格式文档...[/yellow]")
                 metadata_dict = paper_metadata.model_dump(mode="json", exclude_none=True)
                 canonical_md = generate_canonical_markdown(metadata_dict, candidate_md)
+                if not _passesCanonicalAdoptionGate(
+                    console,
+                    paths,
+                    paper_id,
+                    storage_id,
+                    pdf_sha256,
+                    canonical_md,
+                    minimum_body_chars,
+                ):
+                    return "incomplete"
                 paths.paper_md.write_text(canonical_md, encoding="utf-8")
                 canonical_sha256 = sha256_string(canonical_md)
 
@@ -625,6 +991,7 @@ def _ingest_from_zotero(
                 console.print(f"   路径: {paths.paper_dir}")
 
                 # 更新索引
+                primary_adoption_succeeded = True
                 if not no_graph:
                     console.print("\n[yellow]更新全文检索索引...[/yellow]")
                     try:
@@ -635,6 +1002,7 @@ def _ingest_from_zotero(
                             engine.build_index()
                         console.print("[green]✓ 索引更新完成[/green]")
                     except Exception as e:
+                        primary_adoption_succeeded = False
                         console.print(f"[yellow]⚠ 索引更新失败: {e}[/yellow]")
 
                     if headless_graph:
@@ -646,6 +1014,13 @@ def _ingest_from_zotero(
                             console.print(f"[yellow]⚠ 知识图谱更新失败: {e}[/yellow]")
                     else:
                         _print_agent_graph_handoff(console)
+
+                _cleanupVisualRunsAfterAdoption(
+                    console,
+                    paths,
+                    conversion_config,
+                    primary_adoption_succeeded,
+                )
 
                 console.print(f"\n[green]✓ 摄入完成（含 PDF 全文）[/green]")
                 return "success"
@@ -700,7 +1075,12 @@ def _ingest_from_zotero(
 
 
 def _ingest_zotero_recent(
-    ctx, limit: int, no_graph: bool, headless_graph: bool
+    ctx,
+    limit: int,
+    no_graph: bool,
+    headless_graph: bool,
+    *,
+    accept_visual_warnings: bool = False,
 ):
     """从 Zotero 批量导入最近论文
 
@@ -744,11 +1124,14 @@ def _ingest_zotero_recent(
                     item.key,
                     no_graph=True,
                     headless_graph=False,
+                    accept_visual_warnings=accept_visual_warnings,
                 )
                 if result == "success":
                     success_count += 1
                 elif result == "skipped":
                     skip_count += 1
+                else:
+                    failed_count += 1
             except Exception as e:
                 # 单篇失败不影响其他论文
                 console.print(f"[red]✗ 失败: {e}[/red]")
@@ -798,6 +1181,11 @@ def _ingest_zotero_recent(
 @click.command()
 @click.argument("target", required=False)
 @click.option("--file", "file_path", type=click.Path(exists=True, path_type=Path), help="本地 PDF 文件路径")
+@click.option(
+    "--accept-visual-warnings",
+    is_flag=True,
+    help="显式采用已完成视觉转换中的低风险警告",
+)
 @click.option("--no-graph", is_flag=True, help="跳过本次索引和图谱后续处理")
 @click.option(
     "--headless-graph",
@@ -808,7 +1196,17 @@ def _ingest_zotero_recent(
 @click.option("--zotero-key", type=str, help="从 Zotero 导入指定 item key 的论文")
 @click.option("--zotero-recent", type=int, metavar="N", help="从 Zotero 批量导入最近 N 篇论文")
 @click.pass_context
-def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, headless_graph: bool, batch: Path | None, zotero_key: str | None, zotero_recent: int | None):
+def ingest(
+    ctx,
+    target: str | None,
+    file_path: Path | None,
+    accept_visual_warnings: bool,
+    no_graph: bool,
+    headless_graph: bool,
+    batch: Path | None,
+    zotero_key: str | None,
+    zotero_recent: int | None,
+):
     """摄入论文：本地 PDF 或 DOI/URL/title"""
     console = Console()
     if no_graph and headless_graph:
@@ -826,26 +1224,56 @@ def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, head
 
     # Zotero 批量模式
     if zotero_recent:
-        _ingest_zotero_recent(ctx, zotero_recent, no_graph, headless_graph)
+        _ingest_zotero_recent(
+            ctx,
+            zotero_recent,
+            no_graph,
+            headless_graph,
+            accept_visual_warnings=accept_visual_warnings,
+        )
         return
 
     # Zotero 单篇模式
     if zotero_key:
-        _ingest_from_zotero(ctx, zotero_key, no_graph, headless_graph)
+        _ingest_from_zotero(
+            ctx,
+            zotero_key,
+            no_graph,
+            headless_graph,
+            accept_visual_warnings=accept_visual_warnings,
+        )
         return
 
     # 批量模式
     if batch:
-        _ingest_batch(ctx, batch, no_graph, headless_graph)
+        _ingest_batch(
+            ctx,
+            batch,
+            no_graph,
+            headless_graph,
+            accept_visual_warnings=accept_visual_warnings,
+        )
         return
 
     # 本地文件模式
     if file_path is not None:
-        _ingest_local_pdf(ctx, file_path, no_graph, headless_graph)
+        _ingest_local_pdf(
+            ctx,
+            file_path,
+            no_graph,
+            headless_graph,
+            accept_visual_warnings=accept_visual_warnings,
+        )
         return
 
     if target and _target_is_local_file(target):
-        _ingest_local_pdf(ctx, Path(target), no_graph, headless_graph)
+        _ingest_local_pdf(
+            ctx,
+            Path(target),
+            no_graph,
+            headless_graph,
+            accept_visual_warnings=accept_visual_warnings,
+        )
         return
 
     # 在线查询模式
@@ -855,7 +1283,12 @@ def ingest(ctx, target: str | None, file_path: Path | None, no_graph: bool, head
 
 
 def _ingest_batch(
-    ctx, batch_file: Path, no_graph: bool, headless_graph: bool
+    ctx,
+    batch_file: Path,
+    no_graph: bool,
+    headless_graph: bool,
+    *,
+    accept_visual_warnings: bool = False,
 ):
     """批量摄入论文"""
     console = Console()
@@ -891,6 +1324,7 @@ def _ingest_batch(
                 ctx.invoke(
                     ingest,
                     target=target,
+                    accept_visual_warnings=accept_visual_warnings,
                     no_graph=True,
                     headless_graph=False,
                     batch=None,

@@ -5,13 +5,17 @@ Checks system dependencies, configuration, and library health.
 """
 
 import json
-import sys
-import subprocess
+import os
 import shutil
-import click
+import subprocess
+import sys
 from pathlib import Path
 from typing import List, Tuple
+
+import click
+
 from paperbase.utils.markdown import find_local_absolute_image_paths
+
 
 def check_python_version() -> Tuple[bool, str]:
     """Check Python version >= 3.11"""
@@ -20,6 +24,7 @@ def check_python_version() -> Tuple[bool, str]:
         return True, f"Python {version.major}.{version.minor}.{version.micro}"
     else:
         return False, f"Python {version.major}.{version.minor}.{version.micro} (3.11+ required)"
+
 
 def check_uv() -> Tuple[bool, str]:
     """Check if uv is available"""
@@ -34,11 +39,14 @@ def check_uv() -> Tuple[bool, str]:
             return False, "uv found but version check failed"
     return False, "uv not found"
 
+
 def check_graphify() -> Tuple[bool, str]:
     """Check if graphify is available"""
     if shutil.which("graphify"):
         try:
-            result = subprocess.run(["graphify", "--version"], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(
+                ["graphify", "--version"], capture_output=True, text=True, timeout=5
+            )
             if result.returncode != 0:
                 return False, f"graphify command failed: {result.stderr.strip()}"
             version = result.stdout.strip()
@@ -47,10 +55,12 @@ def check_graphify() -> Tuple[bool, str]:
             return True, "graphify (version unknown)"
     return False, "graphify not found (optional)"
 
+
 def check_sqlite_version() -> Tuple[bool, str]:
     """Check SQLite version for FTS5 support"""
     try:
         import sqlite3
+
         version = sqlite3.sqlite_version
         major, minor, patch = map(int, version.split("."))
 
@@ -61,6 +71,7 @@ def check_sqlite_version() -> Tuple[bool, str]:
     except Exception as e:
         return False, f"SQLite check failed: {e}"
 
+
 def check_library(base_dir: Path) -> Tuple[bool, str]:
     """Check if PaperBase library exists"""
     # 优先使用 Registry 统计论文数量
@@ -68,6 +79,7 @@ def check_library(base_dir: Path) -> Tuple[bool, str]:
     if registry_path.exists():
         try:
             from paperbase.core.registry import PaperRegistry
+
             with PaperRegistry(registry_path) as registry:
                 paper_count = len(registry.list_papers())
             return True, f"Library found ({paper_count} papers)"
@@ -85,6 +97,7 @@ def check_library(base_dir: Path) -> Tuple[bool, str]:
             return False, "Library exists but papers/ directory missing"
     return False, "Library not found (run from PaperBase root or set PAPERBASE_LIBRARY)"
 
+
 def check_registry(base_dir: Path) -> Tuple[bool, str]:
     """Check registry database"""
     registry_path = base_dir / "registry" / "papers.db"
@@ -92,6 +105,7 @@ def check_registry(base_dir: Path) -> Tuple[bool, str]:
         size = registry_path.stat().st_size / 1024  # KB
         return True, f"Registry database found ({size:.1f} KB)"
     return False, "Registry database not found (will auto-create on first use)"
+
 
 def check_library_consistency(base_dir: Path) -> Tuple[bool, str]:
     """Check that Registry records and Canonical Markdown agree."""
@@ -103,6 +117,7 @@ def check_library_consistency(base_dir: Path) -> Tuple[bool, str]:
     canonical_ids = {path.stem for path in papers_dir.glob("p_*.md")}
     try:
         from paperbase.core.registry import PaperRegistry
+
         with PaperRegistry(registry_path) as registry:
             registry_ids = {paper["storage_id"] for paper in registry.list_papers()}
     except Exception as e:
@@ -136,8 +151,12 @@ def check_canonical_asset_paths(base_dir: Path) -> Tuple[bool, str]:
             violations.append(paper_path.name)
 
     if violations:
-        return False, f"Canonical Markdown contains local absolute asset paths: {len(violations)} files"
+        return (
+            False,
+            f"Canonical Markdown contains local absolute asset paths: {len(violations)} files",
+        )
     return True, "Canonical Markdown asset paths are portable"
+
 
 def check_graph(base_dir: Path) -> Tuple[bool, str]:
     """Check knowledge graph"""
@@ -154,21 +173,25 @@ def check_graph(base_dir: Path) -> Tuple[bool, str]:
     except (json.JSONDecodeError, OSError) as e:
         return False, f"Knowledge graph graph.json is invalid: {e}"
 
-    edges = graph_data.get("links", graph_data.get("edges")) if isinstance(graph_data, dict) else None
-    if not isinstance(graph_data, dict) or not isinstance(graph_data.get("nodes"), list) or not isinstance(edges, list):
+    edges = (
+        graph_data.get("links", graph_data.get("edges")) if isinstance(graph_data, dict) else None
+    )
+    if (
+        not isinstance(graph_data, dict)
+        or not isinstance(graph_data.get("nodes"), list)
+        or not isinstance(edges, list)
+    ):
         return False, "Knowledge graph graph.json has invalid node-link structure"
 
     return True, "Knowledge graph found (graph.json)"
+
 
 def check_paper_fetch() -> Tuple[bool, str]:
     """Check if paper-fetch CLI is available"""
     if shutil.which("paper-fetch"):
         try:
             result = subprocess.run(
-                ["paper-fetch", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["paper-fetch", "--version"], capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0:
                 version = result.stdout.strip()
@@ -177,7 +200,11 @@ def check_paper_fetch() -> Tuple[bool, str]:
                 return True, "paper-fetch (version unknown)"
         except Exception:
             return True, "paper-fetch (version check failed)"
-    return False, "not installed (optional); install with: uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git"
+    return (
+        False,
+        "not installed (optional); install with: uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git",
+    )
+
 
 def check_llm_config(base_dir: Path | None = None) -> Tuple[bool, str]:
     """Check LLM configuration"""
@@ -196,14 +223,104 @@ def check_llm_config(base_dir: Path | None = None) -> Tuple[bool, str]:
 
         if not model or not base_url:
             missing = []
-            if not base_url: missing.append("base_url")
-            if not model: missing.append("model")
+            if not base_url:
+                missing.append("base_url")
+            if not model:
+                missing.append("model")
             return False, f"enabled but missing: {', '.join(missing)}"
 
         return True, f"enabled ({model})"
 
     except Exception as e:
         return False, f"check failed: {e}"
+
+
+def checkVisualPdfConfig(base_dir: Path) -> Tuple[bool, str]:  # noqa: N802
+    """Check only local visual-PDF prerequisites; never contact a model host."""
+    try:
+        from paperbase.config.loader import load_config
+
+        config = load_config(base_dir / "config" / "paperbase.yaml")
+    except Exception as exc:
+        return False, f"Visual PDF configuration is invalid: {exc}"
+
+    visual_config = config.conversion.pdf.visual
+    if visual_config.mode == "off":
+        return True, "Visual PDF conversion is disabled (mode=off)"
+    if not visual_config.model.strip():
+        return False, (f"Visual PDF mode={visual_config.mode} requires a non-empty model")
+    try:
+        import pymupdf  # noqa: F401
+    except Exception as exc:
+        return False, f"Visual PDF requires PyMuPDF: {exc}"
+
+    return True, (
+        f"Visual PDF mode={visual_config.mode}, model={visual_config.model}, "
+        f"chunk_pages={visual_config.chunk_pages}, retry={visual_config.retry}; "
+        "model validity, visual inputs, and native subagent capability are "
+        "validated by the Agent Host when it runs a task; doctor does not call "
+        "vendor APIs or a local LLM"
+    )
+
+
+def checkVisualRuns(base_dir: Path) -> Tuple[bool, str]:  # noqa: N802
+    """Safely summarize visual runs without recovering, modifying, or deleting them."""
+    from paperbase.core.visual_repair_run import isPathReparsePoint, loadVisualRun
+
+    papers_dir = base_dir / "library" / "papers"
+    if not papers_dir.exists():
+        return True, "Visual PDF runs: none (library unavailable)"
+    if isPathReparsePoint(papers_dir) or not papers_dir.is_dir():
+        return False, "Visual PDF runs root is unsafe or unavailable"
+
+    counts = {state: 0 for state in ("prepared", "running", "failed", "ready_to_adopt")}
+    try:
+        with os.scandir(papers_dir) as paper_entries:
+            for paper_entry in paper_entries:
+                if not paper_entry.name.startswith("p_"):
+                    continue
+                paper_dir = Path(paper_entry.path)
+                if isPathReparsePoint(paper_dir):
+                    return False, f"Visual PDF paper directory is unsafe: {paper_entry.name}"
+                if not paper_entry.is_dir(follow_symlinks=False):
+                    continue
+
+                runs_root = paper_dir / ".visual-runs"
+                if not runs_root.exists() and not isPathReparsePoint(runs_root):
+                    continue
+                if isPathReparsePoint(runs_root) or not runs_root.is_dir():
+                    return False, f"Visual PDF runs root is unsafe: {paper_entry.name}"
+
+                with os.scandir(runs_root) as run_entries:
+                    for run_entry in run_entries:
+                        if run_entry.name == ".operations.lock":
+                            continue
+                        run_dir = Path(run_entry.path)
+                        if isPathReparsePoint(run_dir):
+                            return (
+                                False,
+                                f"Visual PDF run is unsafe: {paper_entry.name}/{run_entry.name}",
+                            )
+                        if not run_entry.is_dir(follow_symlinks=False):
+                            return (
+                                False,
+                                f"Visual PDF run is invalid: {paper_entry.name}/{run_entry.name}",
+                            )
+                        try:
+                            run = loadVisualRun(run_dir)
+                        except (FileNotFoundError, OSError, ValueError) as exc:
+                            return False, (
+                                f"Visual PDF run is invalid: {paper_entry.name}/"
+                                f"{run_entry.name}: {exc}"
+                            )
+                        counts[run.state] += 1
+    except OSError as exc:
+        return False, f"Visual PDF run scan failed: {exc}"
+
+    summary = ", ".join(f"{state}={counts[state]}" for state in counts)
+    if counts["prepared"] or counts["running"] or counts["failed"]:
+        return False, f"Visual PDF runs need attention: {summary}"
+    return True, f"Visual PDF runs: {summary}"
 
 
 def main(base_dir: Path | None = None):
@@ -218,6 +335,8 @@ def main(base_dir: Path | None = None):
         ("paper-fetch (optional)", check_paper_fetch()),
         ("SQLite Version", check_sqlite_version()),
         ("LLM Configuration", check_llm_config(base_dir)),
+        ("Visual PDF Configuration", checkVisualPdfConfig(base_dir)),
+        ("Visual PDF Runs", checkVisualRuns(base_dir)),
         ("PaperBase Library", check_library(base_dir)),
         ("Registry Database", check_registry(base_dir)),
         ("Library Consistency", check_library_consistency(base_dir)),
@@ -259,11 +378,13 @@ def main(base_dir: Path | None = None):
     print("\nDocumentation: https://github.com/Chi-hong22/PaperBase")
     print("Issues: https://github.com/Chi-hong22/PaperBase/issues")
 
+
 @click.command()
 @click.pass_context
 def doctor(ctx):
     """Run environment diagnostics"""
     main(ctx.obj["base_dir"])
+
 
 if __name__ == "__main__":
     main()
