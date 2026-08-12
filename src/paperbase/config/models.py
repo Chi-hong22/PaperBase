@@ -1,10 +1,9 @@
 """配置数据模型（使用 Pydantic 验证）"""
 
-import os
-from typing import Literal
-from pathlib import Path
-from pydantic import BaseModel, field_validator, model_validator, Field
 import logging
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +220,33 @@ class GraphifyConfig(BaseModel):
         return self
 
 
+class VisualPdfConfig(BaseModel):
+    """视觉 PDF 转换配置。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["off", "auto", "always"] = "off"
+    model: str = ""
+    chunk_pages: int = Field(default=5, ge=1)
+    retry: int = Field(default=1, ge=0, le=1)
+
+
+class PdfConversionConfig(BaseModel):
+    """PDF 转换配置。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    visual: VisualPdfConfig = Field(default_factory=VisualPdfConfig)
+
+
+class ConversionConfig(BaseModel):
+    """论文内容转换配置。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pdf: PdfConversionConfig = Field(default_factory=PdfConversionConfig)
+
+
 class PaperBaseConfig(BaseModel):
     """PaperBase 完整配置"""
 
@@ -230,6 +256,7 @@ class PaperBaseConfig(BaseModel):
     # 核心配置
     llm: LLMConfig = LLMConfig()
     graph: GraphConfig = GraphConfig()
+    conversion: ConversionConfig = Field(default_factory=ConversionConfig)
 
     # Adapter 配置
     adapters: dict = Field(default_factory=dict)
