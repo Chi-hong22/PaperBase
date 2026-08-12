@@ -21,6 +21,12 @@ state_machine:
   initial_state: "discovered"  # 初始状态
   final_state: "ready"         # 最终状态
 
+# === PDF 转换配置 ===
+conversion:
+  pdf:
+    visual:
+      mode: "off"  # 默认保持确定性转换路径
+
 # === LLM 配置（可选） ===
 # 仅用于传递给 graphify 工具的环境变量配置
 # PaperBase 核心功能（摄入、转换、检索）不依赖 LLM
