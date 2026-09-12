@@ -112,3 +112,8 @@ scripts/verify_*.py
 .agents
 .codex
 .claude
+
+# project-log:begin
+# 用户裁决（2026-09-12）：.log/ 项目日志只保留本地，不接入 Git 跟踪。
+.log/
+# project-log:end
