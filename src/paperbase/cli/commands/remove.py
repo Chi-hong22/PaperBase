@@ -1,12 +1,15 @@
 """remove 命令实现 - 硬删除论文"""
 
+import shutil
+from pathlib import Path
+
 import click
 from rich.console import Console
-from pathlib import Path
-import shutil
+
+from paperbase.core.manifest import load_manifest
 from paperbase.core.paths import PaperPaths
 from paperbase.core.registry import PaperRegistry
-from paperbase.core.manifest import load_manifest
+from paperbase.core.visual_repair_run import isPathReparsePoint
 
 
 @click.command()
@@ -95,6 +98,9 @@ def remove(ctx, paper_id: str, yes: bool, force: bool, interactive: bool):
     except Exception as e:
         console.print(f"[yellow]⚠️  读取 manifest 失败: {e}[/yellow]")
 
+    # 4.1.5: 保留视觉审计缓存到 library/audits-stash（供重摄入同一 PDF 时复用）
+    _stash_visual_auto_audit(console, base_dir, paths)
+
     # 4.2: 删除论文目录
     console.print("[yellow]1. 删除论文目录...[/yellow]")
     try:
@@ -140,6 +146,37 @@ def remove(ctx, paper_id: str, yes: bool, force: bool, interactive: bool):
     console.print("\n[green]✅ 删除完成！[/green]")
     console.print("\n[yellow]⚠️  请运行以下命令更新知识图谱：[/yellow]")
     console.print("   [cyan]paperbase graph update --force[/cyan]")
+
+
+def _stash_visual_auto_audit(console: Console, base_dir: Path, paths: PaperPaths) -> None:
+    """删除论文目录前，将视觉审计缓存移到 library/audits-stash 保留
+
+    缓存目录 paper_dir/.visual-auto-audit/ 按 source_pdf_sha256 键控，重摄入同一 PDF
+    时移回原位即可复用审计结果。仅处理真实目录（排除 symlink/reparse point）。
+    """
+    audit_dir = paths.paper_dir / ".visual-auto-audit"
+    if isPathReparsePoint(audit_dir) or not audit_dir.is_dir():
+        return
+
+    stash_root = base_dir / "library" / "audits-stash"
+    target = stash_root / paths.storage_id
+    try:
+        stash_root.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            suffix = 2
+            while (stash_root / f"{paths.storage_id}-{suffix}").exists():
+                suffix += 1
+            target = stash_root / f"{paths.storage_id}-{suffix}"
+        shutil.move(str(audit_dir), str(target))
+    except Exception as e:
+        console.print(f"[yellow]⚠️  视觉审计缓存暂存失败，将继续删除论文目录: {e}[/yellow]")
+        return
+
+    console.print(f"[green]✅ 视觉审计缓存已保留: {target}[/green]")
+    console.print(
+        f"   重摄入同一 PDF 前，把该目录移回"
+        f" `library/papers/{paths.storage_id}/.visual-auto-audit` 即可复用审计结果"
+    )
 
 
 def _check_pdf_orphaned(base_dir: Path, pdf_sha256: str) -> bool:

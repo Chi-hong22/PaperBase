@@ -47,6 +47,7 @@ def prepareOrProgressPdfAutoAudit(  # noqa: N802
     visual_config: VisualPdfConfig,
     *,
     accept_visual_warnings: bool = False,
+    re_review: bool = False,
 ) -> PdfConversionOutcome:
     """Return the next auto-routing outcome without invoking an Agent Host.
 
@@ -109,6 +110,14 @@ def prepareOrProgressPdfAutoAudit(  # noqa: N802
 
     from paperbase.core.visual_progress import prepareOrProgressVisualConversion
 
+    if re_review:
+        return prepareOrProgressVisualConversion(
+            source_path,
+            candidate_markdown,
+            visual_config,
+            accept_visual_warnings=accept_visual_warnings,
+            re_review=True,
+        )
     if accept_visual_warnings:
         return prepareOrProgressVisualConversion(
             source_path,

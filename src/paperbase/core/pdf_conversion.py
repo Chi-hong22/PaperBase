@@ -96,6 +96,7 @@ def progressPdfConversion(  # noqa: N802
     conversion_config: PdfConversionConfig,
     *,
     accept_visual_warnings: bool = False,
+    re_review: bool = False,
 ) -> PdfConversionOutcome:
     """推进一次 PDF 转换，而不绑定具体 Agent Host。"""
     visual_config = conversion_config.visual
@@ -120,7 +121,15 @@ def progressPdfConversion(  # noqa: N802
 
         if visual_config.mode == "auto":
             try:
-                if accept_visual_warnings:
+                if re_review:
+                    auto_outcome = prepareOrProgressPdfAutoAudit(
+                        source_pdf,
+                        candidate_markdown,
+                        visual_config,
+                        accept_visual_warnings=accept_visual_warnings,
+                        re_review=True,
+                    )
+                elif accept_visual_warnings:
                     auto_outcome = prepareOrProgressPdfAutoAudit(
                         source_pdf,
                         candidate_markdown,
@@ -147,6 +156,7 @@ def progressPdfConversion(  # noqa: N802
             candidate_markdown,
             visual_config,
             accept_visual_warnings,
+            re_review,
         )
 
     try:
@@ -167,7 +177,17 @@ def _progressVisualConversion(  # noqa: N802
     candidate_markdown: str,
     visual_config: VisualPdfConfig,
     accept_visual_warnings: bool,
+    re_review: bool = False,
 ) -> PdfConversionOutcome:
+    # 默认路径保持既有调用形状不变；只有显式 re_review 才透传新关键字。
+    if re_review:
+        return prepareOrProgressVisualConversion(
+            source_pdf,
+            candidate_markdown,
+            visual_config,
+            accept_visual_warnings=accept_visual_warnings,
+            re_review=True,
+        )
     if accept_visual_warnings:
         return prepareOrProgressVisualConversion(
             source_pdf,

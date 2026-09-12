@@ -6,7 +6,10 @@
 import json
 import re
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
+
+# 引用条目必须以 [数字] 编号开头（如 [1]、[2]），作者-年份式条目不受支持
+_NUMBERED_REFERENCE_PATTERN = re.compile(r'^\[\d+\]')
 
 
 def extract_references(markdown: str, paper_id: str) -> List[Dict[str, any]]:
@@ -45,6 +48,29 @@ def extract_references(markdown: str, paper_id: str) -> List[Dict[str, any]]:
     references = _parse_references(references_text, paper_id)
 
     return references
+
+
+def count_unnumbered_reference_lines(markdown: str) -> int | None:
+    """
+    统计 References 段落中未以 [n] 编号开头的非空行数（最小诊断信息）。
+
+    仅供 references_unparseable 错误指路使用：本解析器只支持 [1]..[n] 连续编号条目，
+    不解析作者-年份式（APA）条目。返回 None 表示未定位到 References 段落。
+
+    Args:
+        markdown: 完整 Markdown 文本
+
+    Returns:
+        int | None: 未编号非空行数；无 References 段落时返回 None
+    """
+    references_text = _extract_references_section(markdown)
+    if not references_text:
+        return None
+    return sum(
+        1
+        for line in references_text.split('\n')
+        if line.strip() and not _NUMBERED_REFERENCE_PATTERN.match(line.strip())
+    )
 
 
 def _extract_references_section(markdown: str) -> str:
@@ -107,10 +133,7 @@ def _parse_references(references_text: str, paper_id: str) -> List[Dict[str, any
     if not references_text:
         return []
 
-    # 按引用条目分割（通常以 [数字] 开头）
-    # 匹配 [1], [2], 等等
-    pattern = r'^\[\d+\]'
-
+    # 按引用条目分割（必须以 [数字] 编号开头）
     lines = references_text.split('\n')
     references = []
     current_ref = []
@@ -122,7 +145,7 @@ def _parse_references(references_text: str, paper_id: str) -> List[Dict[str, any
             continue
 
         # 如果是新引用的开始
-        if re.match(pattern, line):
+        if _NUMBERED_REFERENCE_PATTERN.match(line):
             # 处理前一个引用
             if current_ref:
                 ref_text = ' '.join(current_ref)

@@ -61,9 +61,7 @@ def prepareVisualFallbackAssets(run_dir: Path) -> VisualFallbackAssets:
     if not any(result.crop_requests for result in chunk_results):
         fallback_root = normalized_run_dir / "fallback-assets"
         if fallback_root.exists() or isPathReparsePoint(fallback_root):
-            raise VisualFallbackAssetsError(
-                "fallback-assets exists although no crop requests are present"
-            )
+            raise VisualFallbackAssetsError(_noCropResidualFallbackMessage(fallback_root))
         warnings = tuple(warning for result in chunk_results for warning in result.warnings)
         return VisualFallbackAssets(merged_markdown, (), warnings)
 
@@ -201,16 +199,60 @@ def _validateExistingFallbackAssets(fallback_root: Path, expected_files: dict[st
             actual_files.add(entry.name)
     unexpected_files = actual_files - set(expected_files)
     if unexpected_files:
-        raise VisualFallbackAssetsError("fallback-assets contains an unexpected file")
+        unexpected_paths = tuple(sorted(f"fallback-assets/{name}" for name in unexpected_files))
+        raise VisualFallbackAssetsError(
+            "fallback-assets contains unexpected residual files from a previous "
+            f"conversion attempt: {_formatResidualFileList(unexpected_paths)}. "
+            "Fix: delete the listed residual files inside the run's fallback-assets/ "
+            "directory, then retry visual warning adoption."
+        )
+    conflicting_files: list[str] = []
     for filename, expected_bytes in expected_files.items():
         asset_path = fallback_root / filename
-        if asset_path.exists():
-            if asset_path.read_bytes() != expected_bytes:
-                raise VisualFallbackAssetsError(
-                    "existing fallback asset conflicts with the current crop"
-                )
-        else:
+        if not asset_path.exists():
             _writeNewBytes(asset_path, expected_bytes)
+            continue
+        if asset_path.read_bytes() != expected_bytes:
+            conflicting_files.append(f"fallback-assets/{filename}")
+    if conflicting_files:
+        raise VisualFallbackAssetsError(
+            "existing run-local fallback asset conflicts with the current crop: "
+            f"{_formatResidualFileList(tuple(conflicting_files))} differ from the freshly "
+            "rendered bytes. Fix: delete the listed stale files inside the run's "
+            "fallback-assets/ directory, then retry visual warning adoption."
+        )
+
+
+def _noCropResidualFallbackMessage(fallback_root: Path) -> str:
+    base_message = "fallback-assets exists although no crop requests are present"
+    residual_names = _residualFallbackAssetNames(fallback_root)
+    if not residual_names:
+        return base_message
+    residual_paths = tuple(f"fallback-assets/{name}" for name in residual_names)
+    return (
+        f"{base_message}: {_formatResidualFileList(residual_paths)} are leftover files from a "
+        "previous conversion attempt. Fix: delete the listed residual files inside the run's "
+        "fallback-assets/ directory, then retry visual warning adoption."
+    )
+
+
+def _residualFallbackAssetNames(fallback_root: Path) -> tuple[str, ...]:
+    """Best-effort names inside an unexpected fallback-assets directory; empty when unsafe."""
+    if isPathReparsePoint(fallback_root) or not fallback_root.is_dir():
+        return ()
+    try:
+        with os.scandir(fallback_root) as entries:
+            names = [entry.name for entry in entries]
+    except OSError:
+        return ()
+    return tuple(sorted(names))
+
+
+def _formatResidualFileList(residual_paths: Sequence[str]) -> str:
+    preview = ", ".join(residual_paths[:10])
+    if len(residual_paths) > 10:
+        return f"{preview} (first 10 of {len(residual_paths)})"
+    return preview
 
 
 def _mergeInjectedPages(

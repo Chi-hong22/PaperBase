@@ -50,7 +50,7 @@ def adoptConfirmedVisualWarnings(run_dir: Path) -> VisualAdoption:
     try:
         fallback = prepareVisualFallbackAssets(normalized_run_dir)
     except VisualFallbackAssetsError as exc:
-        raise VisualAdoptionError("visual fallback plan is invalid") from exc
+        raise VisualAdoptionError(f"visual fallback plan is invalid: {exc}") from exc
     warnings = tuple(dict.fromkeys((*boundary.result.warnings, *fallback.warnings)))
     if not warnings:
         raise VisualAdoptionError("explicit adoption requires existing visual warnings")
@@ -146,6 +146,9 @@ def _copyFallbackAssets(paper_dir: Path, run_dir: Path, assets: tuple[object, ..
     fallback_root = run_dir / "fallback-assets"
     if isPathReparsePoint(fallback_root) or not fallback_root.is_dir():
         raise VisualAdoptionError("run-local fallback-assets directory is missing or unsafe")
+    conflicting_targets = _findConflictingAssetTargets(assets_root, fallback_root, assets)
+    if conflicting_targets:
+        raise VisualAdoptionError(_conflictingAssetTargetsMessage(conflicting_targets))
     for asset in assets:
         source_path = getattr(asset, "source_path", None)
         canonical_relative_path = getattr(asset, "canonical_relative_path", None)
@@ -156,7 +159,7 @@ def _copyFallbackAssets(paper_dir: Path, run_dir: Path, assets: tuple[object, ..
             raise VisualAdoptionError(
                 "visual fallback asset source does not match its run-local plan"
             )
-        _copyOneAsset(source_path, assets_root / filename)
+        _copyOneAsset(source_path, assets_root / filename, canonical_relative_path)
 
 
 def _ensureAssetsRoot(assets_root: Path) -> None:
@@ -170,14 +173,16 @@ def _ensureAssetsRoot(assets_root: Path) -> None:
         _ensureAssetsRoot(assets_root)
 
 
-def _copyOneAsset(source_path: Path, destination_path: Path) -> None:
+def _copyOneAsset(
+    source_path: Path,
+    destination_path: Path,
+    canonical_relative_path: str,
+) -> None:
     _requireRegularFile(source_path, "run-local fallback asset")
     if destination_path.exists() or isPathReparsePoint(destination_path):
         _requireRegularFile(destination_path, "paper asset target")
         if not _filesEqual(source_path, destination_path):
-            raise VisualAdoptionError(
-                "paper asset target conflicts with the run-local fallback asset"
-            )
+            raise VisualAdoptionError(_singleConflictingAssetTargetMessage(canonical_relative_path))
         return
 
     temporary_path: Path | None = None
@@ -200,11 +205,80 @@ def _copyOneAsset(source_path: Path, destination_path: Path) -> None:
             _requireRegularFile(destination_path, "paper asset target")
             if not _filesEqual(source_path, destination_path):
                 raise VisualAdoptionError(
-                    "paper asset target conflicts with the run-local fallback asset"
+                    _singleConflictingAssetTargetMessage(canonical_relative_path)
                 )
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+def _findConflictingAssetTargets(
+    assets_root: Path,
+    fallback_root: Path,
+    assets: tuple[object, ...],
+) -> tuple[str, ...]:
+    """Collect canonical relative paths whose adoption target already holds stale bytes.
+
+    Assets that would fail validation for non-conflict reasons are skipped here so
+    the copy loop still raises their original errors unchanged.
+    """
+    conflicting: list[str] = []
+    for asset in assets:
+        source_path = getattr(asset, "source_path", None)
+        canonical_relative_path = getattr(asset, "canonical_relative_path", None)
+        if not isinstance(source_path, Path) or not isinstance(canonical_relative_path, str):
+            continue
+        try:
+            filename = _validateCanonicalAssetPath(canonical_relative_path)
+        except ValueError:
+            continue
+        if source_path != fallback_root / filename:
+            continue
+        try:
+            if _isConflictingAssetTarget(source_path, assets_root / filename):
+                conflicting.append(canonical_relative_path)
+        except OSError:
+            continue
+    return tuple(conflicting)
+
+
+def _isConflictingAssetTarget(source_path: Path, destination_path: Path) -> bool:
+    """True only for the "stale target already exists" conflict; safety issues stay False."""
+    if not destination_path.exists() or isPathReparsePoint(destination_path):
+        return False
+    if not stat.S_ISREG(os.stat(destination_path, follow_symlinks=False).st_mode):
+        return False
+    if isPathReparsePoint(source_path) or not source_path.exists():
+        return False
+    if not stat.S_ISREG(os.stat(source_path, follow_symlinks=False).st_mode):
+        return False
+    return not _filesEqual(source_path, destination_path)
+
+
+def _conflictingAssetTargetsMessage(conflicting_targets: tuple[str, ...]) -> str:
+    preview = ", ".join(conflicting_targets[:10])
+    count_suffix = (
+        f" (first 10 of {len(conflicting_targets)} conflicting files)"
+        if len(conflicting_targets) > 10
+        else ""
+    )
+    return (
+        "paper asset target conflicts with the run-local fallback asset: "
+        "the paper assets/ directory already contains stale files from a previous "
+        f"visual conversion: {preview}{count_suffix}. "
+        "Fix: delete the listed stale files under the paper assets/ directory, "
+        "then retry visual warning adoption."
+    )
+
+
+def _singleConflictingAssetTargetMessage(canonical_relative_path: str) -> str:
+    return (
+        "paper asset target conflicts with the run-local fallback asset: "
+        f"{canonical_relative_path} already exists in the paper assets/ directory "
+        "with different content. "
+        "Fix: delete the stale file under the paper assets/ directory, "
+        "then retry visual warning adoption."
+    )
 
 
 def _requireRegularFile(path: Path, label: str) -> None:

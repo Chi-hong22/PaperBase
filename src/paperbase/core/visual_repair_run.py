@@ -375,6 +375,26 @@ def transitionRunState(  # noqa: N802
     run.updated_at = _formatTimestamp(_coerceUtc((clock or _utcNow)()))
 
 
+def reworkReadyRunForReReview(  # noqa: N802
+    run: VisualRepairRun,
+    *,
+    clock: Clock | None = None,
+) -> None:
+    """Re-review 入口的唯一合法出边：作废已消费的 Boundary Review，回到 running。
+
+    仅允许 ``ready_to_adopt -> running``；completed chunk 结果由调用方保留不动，
+    供 Boundary Review 对 Agent 返工后的输出重新检查。
+    """
+    _transitionState(
+        run.state,
+        "running",
+        {"ready_to_adopt": {"running"}},
+        "run",
+    )
+    run.state = "running"
+    run.updated_at = _formatTimestamp(_coerceUtc((clock or _utcNow)()))
+
+
 def transitionChunkState(  # noqa: N802
     run: VisualRepairRun,
     chunk_id: str,

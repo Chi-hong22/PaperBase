@@ -44,11 +44,11 @@ uv.lock
 htmlcov/
 .tox/
 
-# Superpowers 开发临时文件
-.superpowers/
+docs/agents/
 
 # PaperBase specific
 # 论文库内容仅保留在本地；Graphify 通过 library/papers/.graphifyignore 重新纳入 Canonical Markdown。
+library
 library/papers/p_*.md
 # 原始 PDF 等源文件
 library/sources/
@@ -65,10 +65,13 @@ library/papers/*/manifest.json
 library/papers/*/assets/
 # graphify 缓存
 library/papers/graphify-out/
+# 视觉审计缓存暂存（remove 时保留，重摄入同一 PDF 可复用）
+library/audits-stash/
 
 registry/
 graph/
 # 本地恢复备份可能包含 Canonical、chunks、manifest 和 Registry
+graphify-out
 backups/
 # 向量索引
 index/
@@ -83,6 +86,8 @@ Thumbs.db
 *.log
 
 # Development process artifacts (不对外开放)
+.scratch
+.stfolder
 PHASE*.md
 TASK*.md
 INGEST_VERIFICATION.md

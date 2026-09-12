@@ -13,13 +13,13 @@ class TestConfigLoader:
     """测试配置加载器"""
 
     def test_load_default_config(self):
-        """测试加载默认配置"""
+        """测试加载默认配置（visual.mode=auto 为 2026-09 有意调整的库默认值）"""
         config = load_config()
         assert config is not None
         assert hasattr(config, "llm")
         assert hasattr(config, "graph")
-        assert config.conversion.pdf.visual.mode == "off"
-        assert config.conversion.pdf.visual.model == ""
+        assert config.conversion.pdf.visual.mode == "auto"
+        assert config.conversion.pdf.visual.model == "agent-host-native-vision"
         assert config.conversion.pdf.visual.chunk_pages == 5
         assert config.conversion.pdf.visual.retry == 1
 

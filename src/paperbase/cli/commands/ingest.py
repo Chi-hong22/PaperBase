@@ -41,6 +41,11 @@ from paperbase.utils.markdown import generate_canonical_markdown
 from paperbase.utils.timestamp import now_iso8601
 
 
+def _reReviewKwargs(re_review: bool) -> dict[str, bool]:  # noqa: N802
+    """Only forward the new seam keyword when explicitly requested."""
+    return {"re_review": True} if re_review else {}
+
+
 def _target_is_local_file(target: str | None) -> bool:
     if not target:
         return False
@@ -116,6 +121,7 @@ def _passesCanonicalAdoptionGate(  # noqa: N802
         console.print("[red]❌ Canonical 采用前门禁失败[/red]")
         console.print(f"   error: {exc.code}")
         console.print(f"   reason: {exc.reason}")
+        console.print(f"   message: {exc.message}")
         return False
     return True
 
@@ -181,6 +187,7 @@ def _stateForConversionFailure(error_code: str) -> PaperState:  # noqa: N802
         "visual_auto_audit_result_invalid",
         "visual_boundary_review_invalid",
         "visual_quality_blocked",
+        "visual_re_review_invalid",
         "visual_worker_result_invalid",
     }
     is_visual_capability_error = (
@@ -199,8 +206,16 @@ def _progressPdfConversionForIngest(  # noqa: N802
     source_pdf: Path,
     conversion_config: PdfConversionConfig,
     accept_visual_warnings: bool,
+    re_review: bool = False,
 ) -> PdfConversionOutcome:
-    """Preserve the legacy two-argument progress seam unless acceptance is explicit."""
+    """Preserve the legacy progress seam unless acceptance or re-review is explicit."""
+    if re_review:
+        return progressPdfConversion(
+            source_pdf,
+            conversion_config,
+            accept_visual_warnings=accept_visual_warnings,
+            re_review=True,
+        )
     if accept_visual_warnings:
         return progressPdfConversion(
             source_pdf,
@@ -455,9 +470,50 @@ def _create_paper_from_metadata(base_dir, metadata_dict, paper_id, storage_id, s
     return paths
 
 
-def _ingest_online(ctx, query: str, no_graph: bool, headless_graph: bool):
+def _ingest_online(
+    ctx,
+    query: str,
+    no_graph: bool,
+    headless_graph: bool,
+    *,
+    accept_visual_warnings: bool = False,
+    re_review: bool = False,
+):
     console = Console()
     base_dir = ctx.obj["base_dir"]
+
+    if re_review:
+        # DOI/arXiv 等在线标识符的重审：用查询解析出的既有论文重入其视觉转换 run
+        paper_id = normalize_paper_id(query)
+        paths = PaperPaths(storage_id=generate_storage_id(paper_id), base_dir=base_dir)
+        if not paths.source_pdf.exists():
+            console.print(f"[red]❌ --re-review 未找到论文 {paper_id} 已保存的源 PDF[/red]")
+            console.print("   重审仅适用于已摄入并保存过源 PDF 的论文；首次摄入请去掉 --re-review")
+            raise click.Abort()
+        # 预检身份一致：_ingest_local_pdf 会从 PDF 元数据重新推导 paper_id，
+        # 若与查询解析的 paper_id 不同会落到新的论文目录，重审就找不到既有 run
+        metadata = extract_pdf_metadata(paths.source_pdf)
+        if metadata.get("doi"):
+            derived_id = normalize_paper_id(metadata["doi"])
+        else:
+            derived_id = normalize_paper_id(f"fallback:{sha256_file(paths.source_pdf)[:16]}")
+        if derived_id != paper_id:
+            console.print(
+                f"[red]❌ --re-review 身份不一致：源 PDF 元数据指向 {derived_id}，"
+                f"与查询解析的 {paper_id} 不同[/red]"
+            )
+            console.print("   请改用与该论文摄入时相同的标识符（或 --file 指向同一 PDF）重审")
+            raise click.Abort()
+        console.print(f"[dim]--re-review: 重入 {paper_id} 的视觉转换 run[/dim]")
+        return _ingest_local_pdf(
+            ctx,
+            paths.source_pdf,
+            no_graph,
+            headless_graph,
+            accept_visual_warnings=accept_visual_warnings,
+            re_review=True,
+        )
+
     try:
         fetched = PaperFetchAdapter().fetch(query)
     except PaperFetchUnavailable as exc:
@@ -504,6 +560,7 @@ def _ingest_local_pdf(
     headless_graph: bool,
     *,
     accept_visual_warnings: bool = False,
+    re_review: bool = False,
 ):
     """摄入本地 PDF 文件"""
     console = Console()
@@ -533,9 +590,11 @@ def _ingest_local_pdf(
         console.print(f"   paper_id: {paper_id}")
         console.print(f"   storage_id: {storage_id}")
 
-        # 查重检查
+        # 查重检查（--re-review 不短路：允许重入既有视觉转换 run）
+        if re_review:
+            console.print("[dim]--re-review: 跳过查重短路，重入既有视觉转换 run[/dim]")
         registry_path = base_dir / "registry" / "papers.db"
-        if registry_path.exists():
+        if registry_path.exists() and not re_review:
             registry = PaperRegistry(registry_path)
 
             # 检查 DOI 重复
@@ -567,9 +626,10 @@ def _ingest_local_pdf(
         paths = PaperPaths(storage_id=storage_id, base_dir=base_dir)
         paths.create_directories()
 
-        # Step 4: 复制 PDF 到 source
+        # Step 4: 复制 PDF 到 source（--re-review 重入时源 PDF 已在位，跳过自拷贝）
         console.print("[yellow]4. 保存源 PDF...[/yellow]")
-        shutil.copy2(pdf_path, paths.source_pdf)
+        if pdf_path.resolve() != paths.source_pdf.resolve():
+            shutil.copy2(pdf_path, paths.source_pdf)
         pdf_sha256 = sha256_file(paths.source_pdf)
         console.print(f"   SHA256: {pdf_sha256[:16]}...")
 
@@ -587,6 +647,7 @@ def _ingest_local_pdf(
                 paths.source_pdf,
                 conversion_config,
                 accept_visual_warnings,
+                re_review,
             )
         except Exception as exc:
             _save_incomplete_local_pdf_manifest(
@@ -740,6 +801,7 @@ def _ingest_from_zotero(
     headless_graph: bool,
     *,
     accept_visual_warnings: bool = False,
+    re_review: bool = False,
 ):
     """从 Zotero 导入单篇论文
 
@@ -823,10 +885,13 @@ def _ingest_from_zotero(
 
         merged_doi = item.doi or pdf_doi
 
-        # Step 4: 查重检查
+        # Step 4: 查重检查（--re-review 且有本地 PDF 时不短路，允许重入视觉转换 run）
         console.print("[yellow]4. 查重检查...[/yellow]")
         registry_path = base_dir / "registry" / "papers.db"
-        if registry_path.exists():
+        re_review_reentry = re_review and pdf_path is not None and pdf_path.exists()
+        if re_review_reentry:
+            console.print("[dim]--re-review: 论文已存在时重入其视觉转换 run[/dim]")
+        if registry_path.exists() and not re_review_reentry:
             registry = PaperRegistry(registry_path)
 
             # 检查 DOI 重复
@@ -889,6 +954,7 @@ def _ingest_from_zotero(
                         paths.source_pdf,
                         conversion_config,
                         accept_visual_warnings,
+                        re_review,
                     )
                 except Exception as exc:
                     _save_incomplete_local_pdf_manifest(
@@ -1081,6 +1147,7 @@ def _ingest_zotero_recent(
     headless_graph: bool,
     *,
     accept_visual_warnings: bool = False,
+    re_review: bool = False,
 ):
     """从 Zotero 批量导入最近论文
 
@@ -1125,6 +1192,7 @@ def _ingest_zotero_recent(
                     no_graph=True,
                     headless_graph=False,
                     accept_visual_warnings=accept_visual_warnings,
+                    **_reReviewKwargs(re_review),
                 )
                 if result == "success":
                     success_count += 1
@@ -1186,6 +1254,11 @@ def _ingest_zotero_recent(
     is_flag=True,
     help="显式采用已完成视觉转换中的低风险警告",
 )
+@click.option(
+    "--re-review",
+    is_flag=True,
+    help="重置 ready_to_adopt 视觉转换的边界审校并重新生成审校任务包（保留已完成的分块结果）",
+)
 @click.option("--no-graph", is_flag=True, help="跳过本次索引和图谱后续处理")
 @click.option(
     "--headless-graph",
@@ -1201,6 +1274,7 @@ def ingest(
     target: str | None,
     file_path: Path | None,
     accept_visual_warnings: bool,
+    re_review: bool,
     no_graph: bool,
     headless_graph: bool,
     batch: Path | None,
@@ -1230,6 +1304,7 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            **_reReviewKwargs(re_review),
         )
         return
 
@@ -1241,6 +1316,7 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            **_reReviewKwargs(re_review),
         )
         return
 
@@ -1252,6 +1328,7 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            **_reReviewKwargs(re_review),
         )
         return
 
@@ -1263,6 +1340,7 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            **_reReviewKwargs(re_review),
         )
         return
 
@@ -1273,12 +1351,20 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            **_reReviewKwargs(re_review),
         )
         return
 
     # 在线查询模式
     if target:
-        _ingest_online(ctx, target, no_graph, headless_graph)
+        _ingest_online(
+            ctx,
+            target,
+            no_graph,
+            headless_graph,
+            accept_visual_warnings=accept_visual_warnings,
+            **_reReviewKwargs(re_review),
+        )
         return
 
 
@@ -1289,6 +1375,7 @@ def _ingest_batch(
     headless_graph: bool,
     *,
     accept_visual_warnings: bool = False,
+    re_review: bool = False,
 ):
     """批量摄入论文"""
     console = Console()
@@ -1325,6 +1412,7 @@ def _ingest_batch(
                     ingest,
                     target=target,
                     accept_visual_warnings=accept_visual_warnings,
+                    re_review=re_review,
                     no_graph=True,
                     headless_graph=False,
                     batch=None,
