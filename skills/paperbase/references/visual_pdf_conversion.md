@@ -96,6 +96,45 @@ paperbase ingest --file paper.pdf --accept-visual-warnings
 
 该参数是普通 ingest 的确认门，不是独立工作流。Agent 不得自行确认，也不得把裁剪说成机器可读结果。
 
+## 故障恢复
+
+以下手法来自 2026-09 一次 34 篇批量视觉摄入的真实故障沉淀。恢复动作全部走普通 ingest，不引入新命令。
+
+### 改 chunk 后重审（Re-review）
+
+**症状**：Agent 在两次 ingest 调用之间直接修改了 `.visual-runs/<run_id>/chunks/` 下的 chunk 结果文件（修复接缝、补参考文献编号等）后，重复原 ingest 报 `visual_boundary_review_invalid`——run 已停在 `ready_to_adopt`，既有 boundary-review 产物基于返工前内容，已经失效。
+
+**恢复**：执行官方重审入口：
+
+```bash
+paperbase ingest <id> --re-review
+```
+
+`--re-review` 仅当 run 处于 `ready_to_adopt` 时有效：保留各 chunk 的 `completed` 状态（返工对象就是刚修复完成的输出，不重做），作废已失效的 boundary-review 产物与 run 局部 fallback-assets，状态回 `running`，并由同一次 ingest 调用重新准备边界复核任务包、返回新的 `AgentActionRequired` 交接。可与 `--accept-visual-warnings` 组合。run 不在 `ready_to_adopt` 时报 `visual_re_review_invalid`（映射 `NEEDS_REVIEW`），按错误信息去掉旗标重跑即可。
+
+不要手工编辑 `run.json` 的 state 或删除 `boundary-review/` 目录；那是本旗标取代的旧手工流程。
+
+### 采纳资产冲突
+
+**症状**：采纳阶段报 `visual_warning_adoption_failed` 或资产冲突类错误；错误信息现在会列出具体冲突文件路径。
+
+**处理**：按错误清单删除列出的残留文件，然后重复原 ingest 命令重跑采纳（若本轮本就需要用户确认警告，保留 `--accept-visual-warnings`）。这些冲突文件通常是上一轮中断的采纳留下的旧裁剪/fallback 资产：当时 Canonical 尚未写入，源 PDF 与 chunk 结果不受影响，删除是安全的；有效资产会在本次采纳中重新生成。
+
+### 无编号参考文献
+
+**症状**：`references_unparseable`。参考文献解析器仅支持 `[n]` 连续编号格式，作者-年份式（APA）文献列表无法解析。
+
+**处理**：在 chunk 结果中为文献补连续编号 `[1]..[n]`。注意编号必须跨 chunk 全文连续，不能只在单块内连续。补完后用 `--re-review` 重审（见上）。
+
+### Boundary Review 长行误报
+
+reviewer 所用的读取工具对超过 2000 字符的超长行会显示截断，可能据此误报"摘要被截断"或正文缺失。复核这类问题必须用程序化字符计数（例如对原始行做长度统计）验证，不能以工具显示的目测结果为准。
+
+### 其他
+
+- `paperbase remove` 会把 `paper_dir/.visual-auto-audit/` 审计缓存 stash 到 `library/audits-stash/<storage_id>/` 并打印恢复方法；重摄入同一 PDF 前把它移回 `library/papers/<storage_id>/.visual-auto-audit` 即可复用，不必重新自动审计。
+- 一次性的 `captcha verify failed` / `Model request failed` 直接重试原 ingest 即可，无需额外处理。
+
 ## 场景
 
 1. **普通双栏 auto / always**：`auto` 先完成 `pdf_auto_text_audit`；审计返回 `visual_required` 后重复原 ingest，

@@ -1,5 +1,14 @@
 # PaperBase Skill - 更新日志
 
+## [2026-09-12-v1.5] - 视觉返工重审入口与故障恢复文档
+
+- **新增 `paperbase ingest --re-review`**：仅当 run 处于 `ready_to_adopt` 时有效；保留各 chunk 的 `completed` 状态，作废已失效的 boundary-review 产物与 run 局部 fallback-assets，状态回 `running`，并由同一次调用重新准备边界复核任务包、返回 `AgentActionRequired`。可与 `--accept-visual-warnings` 组合；条件不满足报 `visual_re_review_invalid`（映射 `NEEDS_REVIEW`）。取代手工"改 `run.json` state + 删 `boundary-review/` 目录"的旧恢复流程。
+- **错误信息改进**：`visual_warning_adoption_failed` 及资产冲突类错误列出具体冲突文件路径；`references_unparseable` 说明解析器仅支持 `[n]` 连续编号文献，并指路"补编号后重跑"。
+- **`paperbase remove` 审计缓存 stash**：默认把 `paper_dir/.visual-auto-audit/` 保留到 `library/audits-stash/<storage_id>/` 并打印恢复方法；重摄入同一 PDF 前移回 `library/papers/<storage_id>/.visual-auto-audit` 即可复用。
+- **文档增补**：SKILL.md 新增视觉阶段协议小节、瘦身典型对话并与 `AGENTS.md` Invariants 去重（v1.5）；`references/visual_pdf_conversion.md` 新增"故障恢复"章节；`references/troubleshooting.md` 增加索引；新增 `docs/adr/0002-visual-rework-re-review-via-cli.md`；CONTEXT.md 收录 Re-review 术语；ROADMAP 登记作者-年份式（APA）参考文献解析工单。
+
+---
+
 ## [2026-07-16-v1.4] - Graphify 扫描根一致性护栏
 
 - 固定 Agent 增量流程的唯一扫描根为 `<base_dir>/library/papers`，覆盖 detect、cache、merge 和 manifest。

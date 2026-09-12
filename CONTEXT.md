@@ -52,6 +52,10 @@ _Avoid_: 文档分块、检索 Chunk、重叠写入范围
 在转换候选稿成为 Canonical Markdown 前，对页块接缝、风险页面和整体覆盖进行的独立视觉检查。
 _Avoid_: 全文重写、Graph preflight、抽样即通过
 
+**Re-review（重审）**:
+作废一次已完成的 Boundary Review、对当前 Visual Chunk 输出重新进行边界复核的受控状态回退；失败重试与返工重审都属于原 Visual Repair Run 生命周期。
+_Avoid_: 手工改 run.json、重跑摄入、重新分块
+
 **Visual Fallback Asset（视觉保真资产）**:
 当公式或复杂表格无法可靠转成机器可读文本时，用于忠实保留原页面内容的局部视觉资产。
 _Avoid_: OCR 结果、猜测性 LaTeX、普通插图
