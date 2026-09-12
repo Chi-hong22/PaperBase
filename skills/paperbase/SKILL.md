@@ -53,15 +53,18 @@ paperbase ingest --batch <file>      # 批量摄入
 paperbase ingest <id> --no-graph     # 跳过本次索引和图谱后续处理
 paperbase ingest <id> --headless-graph  # 显式本地 LLM 备用路径
 paperbase ingest --file paper.pdf --accept-visual-warnings  # 仅在用户确认视觉警告后使用
+paperbase ingest <id> --re-review       # Agent 修改 chunk 结果后的重审入口（仅 ready_to_adopt 有效）
 ```
 
-### 视觉 PDF 任务包（按需加载）
+### 视觉阶段协议（按需加载）
 
-普通 `paperbase ingest` 返回 `AgentActionRequired(task_package)` 时，读取
-`references/visual_pdf_conversion.md`，按任务包交给 Agent Host 的视觉 worker 继续处理；不要寻找或虚构独立的视觉转换命令。
+视觉论文在普通 `ingest`（推荐配合 `--no-graph`）下按阶段推进，**每次调用只推进一个阶段**：
+`auto audit（自动文字审计）→ chunk 转译 → Boundary Review → adopt`。每完成一批 Agent 侧工作，重复执行**同一条原 ingest 命令**，由 PaperBase 校验并进入下一阶段。
 
-若普通 ingest 返回视觉警告，先向用户展示 warnings。只有用户明确确认后，才在**同一原始 ingest 命令**上添加
-`--accept-visual-warnings` 后重复执行；Agent 不得自行确认。
+- **`task_package` 路径**：CLI 输出 `AgentActionRequired(task_package)` 时，表示 PaperBase 正在等待 Agent Host 接手视觉任务。读取 `references/visual_pdf_conversion.md`，按任务包交给 Agent Host 的视觉 worker 继续处理；不要寻找或虚构独立的视觉转换命令。
+- **`--accept-visual-warnings`**：Boundary Review 通过但存在低风险警告（如保真裁剪）时的用户确认门。先向用户完整展示 warnings，只有用户明确确认后，才在**同一原始 ingest 命令**上添加该旗标后重复执行；Agent 不得自行确认。
+- **`--re-review`（视觉返工重审）**：Agent 在两次 ingest 调用之间直接修改了 `.visual-runs/<run_id>/chunks/` 下的 chunk 结果文件后使用。仅当 run 处于 `ready_to_adopt` 时有效：保留各 chunk 的 `completed` 状态，作废已失效的 boundary-review 产物与 run 局部 fallback-assets，状态回 `running`，并由同一次 ingest 调用重新准备边界复核任务包、返回新的 `AgentActionRequired` 交接。可与 `--accept-visual-warnings` 组合；条件不满足时报 `visual_re_review_invalid`（映射 `NEEDS_REVIEW`），按错误信息去掉旗标重跑即可。它是旧手工流程“改 `run.json` state + 删 `boundary-review/` 目录”的官方替代，不要再手工编辑 run.json。
+- **`remove` 的审计缓存 stash**：`paperbase remove` 默认把 `paper_dir/.visual-auto-audit/` stash 到 `library/audits-stash/<storage_id>/` 并打印恢复方法；重摄入同一 PDF 前把它移回 `library/papers/<storage_id>/.visual-auto-audit` 即可复用，无需重新自动审计。
 
 **辅助脚本**：
 ```bash
@@ -89,13 +92,8 @@ Agent:
   3. 没有阻塞项时，只对 Canonical Markdown 调用 Graphify skill：`/graphify library/papers --update --no-viz`
   4. 调用 `paperbase graph adopt`，只接纳 graphify-out 并推进状态，不读取本地 LLM 配置
   完成：节点 +5，边 +12
-
-人类: "重建整个图谱"
-Agent:
-  警告：全量重建耗时较长
-  确认后运行 `paperbase graph preflight --force`，调用 `/graphify library/papers --no-viz`，再执行 `paperbase graph adopt --force`
-  完成：已处理 100 篇论文
 ```
+（全量重建走同一顺序，把 preflight、`/graphify`、adopt 换成对应 `--force` 形式，执行前先向用户确认耗时。）
 
 **关键命令**：
 ```bash
@@ -109,19 +107,16 @@ paperbase graph update --force        # 手动 headless 强制重建
 paperbase graph status                # 查看统计
 ```
 
+**与 AGENTS.md 的分工**：图谱输入范围（只扫描 `library/papers/p_*.md`，不在建图阶段读取 PDF、URL 或附件，PDF/网页须先经摄入或修复写回 Canonical）、semantic queue 准入、subagents 并行数、扫描根统一、`.graphifyignore` 处理、本地 LLM 隔离与私有语料本地边界等总则，统一维护在仓库根 `AGENTS.md`（Invariants 第 6、10 条），本 skill 不重复；以下只保留 skill 侧操作细节。
+
 **LLM 优先级约定**：
-- Agent 调用本 skill 时，语义 Agent 只负责编排、合并和验收，不得自行读取正文或直接完成语义抽取；不得把 `config/paperbase.yaml` 的本地 LLM 配置注入该流程。
-- semantic queue 有 2 篇及以上时，语义 Agent 必须在同一轮调用至少 2 个 subagents 并行抽取；只有 1 篇时也必须交给 subagent。每个 subagent 只读取分配到的 Canonical Markdown，返回结构化节点、边和超边。
-- 语义 Agent 必须等待全部 subagents，验证来源覆盖、schema、端点和置信度后再合并。宿主不支持 subagents 时应报告阻塞，不得静默切换到本地 LLM。
-- 默认 `paperbase ingest` 只交接 Agent 建图；只有人类明确添加 `--headless-graph` 或执行 `paperbase graph update` 时，才使用 PaperBase 的本地 OpenAI-compatible LLM 配置。
+- 每个 subagent 只读取分配到的 Canonical Markdown，返回结构化节点、边和超边；语义 Agent 必须等待全部 subagents，验证来源覆盖、schema、端点和置信度后再合并。
+- 宿主不支持 subagents 时应报告阻塞，不得静默切换到本地 LLM。
 - `paperbase graph adopt` 是无 LLM 的确定性状态投影步骤。
 
-**Canonical-only 图谱约束**：
-- Graphify 语义抽取的唯一输入是 `library/papers/*.md`；不得在建图阶段打开 `source/*.pdf`、访问 `original_url` 或直接从 URL/PDF 补抽取。
-- Graphify detect 后，活动 Canonical `.md` 必须进入 `document`/`paper` semantic queue，并由并行 subagents 产出语义节点和关系；只检测文件、只做 AST/结构抽取或由编排 Agent 串行代做都不算完成。
-- Agent 增量流程的 detect、semantic cache、`build_merge(root=...)` 与 `save_manifest(root=...)` 必须统一使用 `<base_dir>/library/papers`；相关 Graphify Python 步骤也必须在该目录执行。若旧图与本次根不一致，停止合并和 `adopt`，恢复备份后用正确根重跑。
+**Canonical-only 图谱约束（skill 侧操作细节）**：
+- Agent 增量流程若发现旧图与本次扫描根不一致，停止合并和 `adopt`，恢复备份后用正确根重跑。
 - 接纳前检查 `source_file` 不得同时出现 `p_xxx.md` 与 `library/papers/p_xxx.md` 两种形式。代码级硬校验尚未实现，权威工单为 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`（`TD-GRAPH-001`）。
-- PDF/网页只能先经过摄入或修复流程，转换结果写回 Canonical Markdown，并重算 manifest 哈希后才能建图。
 - Zotero 元数据优先于 PDF 元数据；PDF 只能补正文或缺失字段，不能覆盖 Zotero 的标题、作者、年份等权威字段。
 - Zotero item key 当前只存在于摄入运行时，尚未持久化到 Manifest/Registry；不要声称可稳定反查。权威工单为 `.scratch/zotero-item-key-provenance/issues/01-persist-zotero-item-key.md`（`TD-ZOTERO-001`，`Status: open`）。
 - `content_kind=metadata_only/abstract_only`、无有效全文标记或正文不足的论文保持 `NEEDS_REVIEW`，不推进 `READY`；正文级 `content_kind=fulltext` 且长度达标时，可覆盖历史遗留的外层 quality 标记。
@@ -136,8 +131,6 @@ paperbase graph preflight
 paperbase graph adopt
 paperbase doctor
 ```
-
-**本地私有语料边界**：真实 Canonical、manifest、源 PDF、Registry 与图谱产物只保留在本地并由 Git 忽略；仓库跟踪的 `library/papers/.graphifyignore` 用 `!p_*.md` 重新纳入本地 Canonical，因此不需要、也不得用 `git add -f` 让 Graphify 工作。
 
 预检发现 `NEEDS_REVIEW` 时，先修复对应 Canonical Markdown；PaperBase 会保留旧图谱且不调用 Graphify，再重复上述四步。不要在 Graphify 阶段绕过 Canonical 去读取 PDF。
 
@@ -164,47 +157,17 @@ paperbase doctor
 人类: "列出所有已就绪的论文"
 Agent: [查询 state:ready] → 返回 12 篇
 
-人类: "2024 年的论文"
-Agent: [查询 year:2024] → 返回 5 篇
+# 全文检索 + 过滤（FTS5；--year、--author 可单独或组合使用）
+人类: "搜索 transformer，只看 2020-2024 年作者包含 Li 的论文"
+Agent: [FTS5 检索 + 年份范围 + 作者过滤] → 返回 2 篇 + 匹配片段
 
 # 语义查询（Graphify）
 人类: "找出关于 SLAM 的论文"
 Agent: [语义查询] → 返回 15 篇 + 关联路径
 
-人类: "深度学习和计算机视觉的交叉研究"
-Agent: [图谱推理] → 返回概念交集论文
-
-# 全文检索（FTS5）
-人类: "搜索提到 transformer 的论文"
-Agent: [FTS5 检索] → 返回 7 篇 + 匹配片段
-
-# 在指定论文中搜索
-人类: "查询 RatSLAM 论文中 threshold 的相关内容"
-Agent: [单篇论文全文检索] → 返回 4 个匹配片段，显示上下文
-
-# 全文检索 + 过滤（NEW）
-人类: "搜索 transformer，限定 2024 年的论文"
-Agent: [FTS5 检索 + 年份过滤] → 返回 3 篇 + 匹配片段
-
-人类: "搜索 deep learning，只看 Zhang 作者的"
-Agent: [FTS5 检索 + 作者过滤] → 返回 2 篇 + 匹配片段
-
-人类: "搜索 SLAM，只看 2020-2024 年的作者包含 Li 的论文"
-Agent: [FTS5 检索 + 年份范围 + 作者过滤] → 返回 2 篇 + 匹配片段
-
-# 主题查询（NEW - 图谱标签匹配）
-人类: "查找 attention mechanism 相关的论文"
-Agent: [query topic] → 本地论文: 2 篇
-
-人类: "包含引用文献一起查"
-Agent: [query topic --include-refs] → 本地: 2 篇, 引用: 3 篇
-
 # 关联查询（图谱遍历）
 人类: "找出与 BERT 论文相关的研究"
 Agent: [query related --depth 2] → 相关论文: 5 篇（通过共享概念关联）
-
-人类: "只看直接引用的文献"
-Agent: [query related --depth 1] → 直接连接: 18 个节点（主要是引用和概念）
 ```
 
 **depth 参数说明**：
@@ -222,8 +185,8 @@ paperbase status --year <year>         # 按年份筛选
 paperbase status --state <state>       # 按状态筛选
 paperbase search "<query>"             # 全文检索（全局）
 paperbase search "<query>" --paper-id <id>  # 在指定论文中搜索
-paperbase search "<query>" --year <year>    # 按年份过滤搜索结果（NEW，支持 '2023' 或 '2020-2024'）
-paperbase search "<query>" --author <name>  # 按作者过滤搜索结果（NEW，模糊匹配）
+paperbase search "<query>" --year <year>    # 按年份过滤（支持 '2023' 或 '2020-2024'）
+paperbase search "<query>" --author <name>  # 按作者过滤（模糊匹配，"Zhang" 可匹配 "Zhang Li"）
 paperbase query related <id> --depth 2 # 相关论文（推荐 depth=2）
 paperbase query topic "<topic>"        # 主题查找（图谱标签）
 paperbase query topic "<topic>" --include-refs  # 包含引用文献
@@ -235,7 +198,7 @@ paperbase query topic "<topic>" --include-refs  # 包含引用文献
 - ✅ 引用扩展（`--include-refs` 显示外部文献）
 - ✅ 自动去重（多节点映射同一论文）
 
-**NEW - search 过滤增强**：
+**search 过滤增强**：
 - ✅ 年份过滤（`--year 2024` 或 `--year 2020-2024`，支持单一年份和范围）
 - ✅ 作者过滤（`--author Zhang`，模糊匹配，"Zhang" 可匹配 "Zhang Li" 或 "Li Zhang"）
 - ✅ 多条件组合（可同时使用年份和作者过滤器）
@@ -261,36 +224,13 @@ Agent:
   ✅ graphify 已安装
   ✅ 12 篇论文（使用 Registry 统计，优先级高于目录扫描）
   ℹ️  建议：2 篇论文待更新图谱
-
-人类: "显示 LLM 配置"
-Agent:
-  LLM 状态: 已启用
-  Model: gpt-4o-mini
-  API Key: sk-xxxxx...xxxx (已脱敏)
-
-人类: "删除论文 doi:10.1234/abc"
-Agent:
-  已删除：Canonical Markdown、source PDF、registry 记录
-  完成！（默认非交互模式）
-
-人类: "我想确认后再删除"
-Agent:
-  使用 --interactive 启用交互模式
-  paperbase remove "doi:10.1234/abc" --interactive
-
-人类: "清理孤立的 Registry 记录"
-Agent:
-  正在同步 Registry 与文件系统...
-  发现 3 条孤立记录（文件已删除但索引仍存在）
-  确认清理? (y/n)
 ```
 
 **关键命令**：
 ```bash
 paperbase doctor                      # 环境诊断（优先使用 Registry 统计）
 paperbase config show                 # 显示配置
-paperbase config show            # 验证 LLM
-paperbase remove <paper_id>           # 删除论文（默认非交互）
+paperbase remove <paper_id>           # 删除论文（默认非交互；自动 stash 视觉审计缓存）
 paperbase remove <id> --interactive   # 交互式删除（需确认）
 paperbase sync                        # 同步 Registry 与文件系统
 paperbase sync --dry-run              # 仅查看孤立记录
@@ -576,4 +516,4 @@ graph:
 
 ---
 
-**版本**: v1.4 | **架构**: Agent-first 并行语义建图 + 扫描根一致性护栏 | **更新**: 2026-07-16
+**版本**: v1.5 | **架构**: Agent-first 并行语义建图 + 扫描根一致性护栏 + 视觉返工重审入口 | **更新**: 2026-09-12

@@ -196,6 +196,12 @@ apt-get install tesseract-ocr  # Linux
 
 ---
 
+### Visual Conversion Failures（视觉转换故障）
+
+视觉转换相关错误（`visual_boundary_review_invalid`、`visual_re_review_invalid`、`visual_warning_adoption_failed`、`references_unparseable` 等）的定位与恢复统一见 `references/visual_pdf_conversion.md` 的"故障恢复"章节。
+
+---
+
 ### State Stuck in NORMALIZED
 
 **Symptom**:
