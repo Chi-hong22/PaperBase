@@ -443,3 +443,24 @@ def test_auto_rejects_junctioned_paper_root_without_writing_external_target(tmp_
         assert not (external_paper / ".visual-auto-audit").exists()
     finally:
         _remove_junction(paper_link)
+
+
+def test_auto_visual_required_forwards_re_review_to_visual_progress(tmp_path):
+    """auto 链把 re_review 透传给视觉推进：无 ready_to_adopt run 时返回重审指路错误。"""
+    paper_dir = tmp_path / "paper"
+    source_pdf = paper_dir / "source" / "source.pdf"
+    _write_pdf(source_pdf)
+    candidate_markdown = "# Candidate\n"
+
+    audit_handoff = pdf_auto_audit.prepareOrProgressPdfAutoAudit(
+        source_pdf, candidate_markdown, _auto_config().visual
+    )
+    assert isinstance(audit_handoff, AgentActionRequiredOutcome)
+    _write_result(audit_handoff.task_package, decision="visual_required")
+
+    outcome = pdf_auto_audit.prepareOrProgressPdfAutoAudit(
+        source_pdf, candidate_markdown, _auto_config().visual, re_review=True
+    )
+
+    assert isinstance(outcome, FailedConversionOutcome)
+    assert outcome.error.code == "visual_re_review_invalid"
