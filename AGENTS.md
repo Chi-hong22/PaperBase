@@ -34,7 +34,8 @@ paperbase/
 │   ├── sources/pdf/        # 内容寻址的 PDF 存储
 │   ├── papers/             # 规范化论文（Canonical）
 │   ├── collections/        # 用户论文集合
-│   └── notes/              # 用户笔记
+│   ├── notes/              # 用户笔记
+│   └── audits-stash/       # remove 时保留的视觉审计缓存（重摄入可复用）
 ├── registry/               # SQLite 索引
 ├── graph/                  # Graphify 输出
 ├── skills/                 # 项目级 skills

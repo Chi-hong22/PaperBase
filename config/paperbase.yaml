@@ -25,7 +25,8 @@ state_machine:
 conversion:
   pdf:
     visual:
-      mode: "off"  # 默认保持确定性转换路径
+      mode: "auto"  # 双列 PDF 走视觉转译（auto: 先文本审计，必要时转视觉）
+      model: "agent-host-native-vision"  # 视觉 worker 由 Agent Host 原生 subagent 承担
 
 # === LLM 配置（可选） ===
 # 仅用于传递给 graphify 工具的环境变量配置

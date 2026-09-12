@@ -41,6 +41,7 @@ from paperbase.core.visual_repair_run import (
     isPathReparsePoint,
     loadVisualRun,
     releaseRunLease,
+    reworkReadyRunForReReview,
     saveVisualRun,
     transitionChunkState,
     transitionRunState,
@@ -70,12 +71,15 @@ def prepareOrProgressVisualConversion(  # noqa: N802
     visual_config: VisualPdfConfig,
     *,
     accept_visual_warnings: bool = False,
+    re_review: bool = False,
 ) -> PdfConversionOutcome:
     """Prepare a compatible run, then advance only validated local state.
 
     Agent Hosts remain responsible for writing worker results.  This function
     only consumes those files under a short lease and returns the next unified
-    conversion outcome.
+    conversion outcome.  With ``re_review`` a ``ready_to_adopt`` run drops its
+    stale Boundary Review package and re-enters the normal progression without
+    resetting its completed chunk results.
     """
     from paperbase.core.pdf_conversion import (
         AgentActionRequiredOutcome,
@@ -92,10 +96,20 @@ def prepareOrProgressVisualConversion(  # noqa: N802
         )
 
     if run.state == "ready_to_adopt":
-        return _confirmWarningsIfRequested(
-            run_dir,
-            _readyRunOutcome(run_dir),
-            accept_visual_warnings,
+        if not re_review:
+            return _confirmWarningsIfRequested(
+                run_dir,
+                _readyRunOutcome(run_dir),
+                accept_visual_warnings,
+            )
+        reset_outcome = _resetReadyRunForReReview(run, run_dir)
+        if reset_outcome is not None:
+            return reset_outcome
+    elif re_review:
+        return _failedOutcome(
+            "visual_re_review_invalid",
+            "visual re-review requires a ready_to_adopt run; "
+            "remove --re-review and re-run ingest to progress the run normally",
         )
 
     try:
@@ -143,6 +157,47 @@ def prepareOrProgressVisualConversion(  # noqa: N802
             "could not release visual conversion progress lease before warning adoption",
         )
     return _confirmWarningsIfRequested(run_dir, outcome, accept_visual_warnings)
+
+
+def _resetReadyRunForReReview(
+    run: VisualRepairRun,
+    run_dir: Path,
+) -> PdfConversionOutcome | None:
+    """Roll a ready_to_adopt run back to running for a fresh Boundary Review.
+
+    Completed chunk results are intentionally kept untouched.  The rollback
+    goes through the single legal ``ready_to_adopt -> running`` transition in
+    the run state machine, under the orchestrator lease.
+    """
+    from paperbase.core.pdf_conversion import AgentActionRequiredOutcome
+
+    try:
+        lease = acquireRunLease(run_dir, ORCHESTRATOR_OWNER, ORCHESTRATOR_LEASE_SECONDS)
+    except LeaseConflictError:
+        return AgentActionRequiredOutcome(task_package=run_dir)
+    except Exception:
+        return _failedOutcome(
+            "visual_progress_failed",
+            "could not acquire visual conversion progress lease",
+        )
+    try:
+        reworkReadyRunForReReview(run)
+        _removeRunLocalDirectory(run_dir / BOUNDARY_DIRECTORY, "Boundary Review package")
+        _removeRunLocalDirectory(run_dir / "fallback-assets", "fallback assets")
+        saveVisualRun(run, run_dir, lease)
+    except _VisualProgressFailure as exc:
+        return _failedOutcome(exc.code, exc.message)
+    except Exception:
+        return _failedOutcome(
+            "visual_progress_failed",
+            "could not reset the ready_to_adopt visual run for re-review",
+        )
+    finally:
+        try:
+            releaseRunLease(run_dir, lease)
+        except Exception:
+            pass
+    return None
 
 
 def _advanceRun(
@@ -197,7 +252,7 @@ def _advanceRun(
     except VisualFallbackAssetsError as exc:
         raise _VisualProgressFailure(
             "visual_quality_blocked",
-            "visual fallback assets cannot satisfy the quality gate",
+            f"visual fallback assets cannot satisfy the quality gate: {exc}",
         ) from exc
     transitionRunState(run, "ready_to_adopt")
     saveVisualRun(run, run_dir, lease)
@@ -435,15 +490,15 @@ def _confirmWarningsIfRequested(
         return outcome
     try:
         adoption = adoptConfirmedVisualWarnings(run_dir)
-    except (VisualAdoptionError, OSError):
+    except (VisualAdoptionError, OSError) as exc:
         return _failedOutcome(
             "visual_warning_adoption_failed",
-            "could not adopt confirmed visual conversion warnings",
+            f"could not adopt confirmed visual conversion warnings: {exc}",
         )
-    except Exception:
+    except Exception as exc:
         return _failedOutcome(
             "visual_warning_adoption_failed",
-            "could not adopt confirmed visual conversion warnings",
+            f"could not adopt confirmed visual conversion warnings: {exc}",
         )
     return ReadyConversionOutcome(markdown=adoption.markdown, assets=adoption.assets)
 
@@ -467,6 +522,11 @@ def _readyRunOutcome(run_dir: Path) -> PdfConversionOutcome:
         return _passOutcome(run_dir, boundary)
     except _VisualProgressFailure as exc:
         return _failedOutcome(exc.code, exc.message)
+    except VisualFallbackAssetsError as exc:
+        return _failedOutcome(
+            "visual_quality_blocked",
+            f"visual fallback assets cannot satisfy the quality gate: {exc}",
+        )
     except (BoundaryReviewError, VisualChunkResultError, OSError):
         return _failedOutcome(
             "visual_boundary_review_invalid",

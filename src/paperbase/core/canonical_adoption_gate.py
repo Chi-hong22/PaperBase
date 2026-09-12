@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from paperbase.core.reference_extractor import extract_references
+from paperbase.core.reference_extractor import count_unnumbered_reference_lines, extract_references
 from paperbase.schemas.paper import PaperMetadata
 from paperbase.utils.markdown import (
     find_local_absolute_image_paths,
@@ -145,9 +145,20 @@ def validateCanonicalAdoption(  # noqa: N802
 
     references = tuple(extract_references(canonical, metadata.paper_id))
     if _referencesSectionHasContent(body) and not references:
+        unnumbered_lines = count_unnumbered_reference_lines(canonical)
+        detected = (
+            f"detected {unnumbered_lines} suspected unnumbered reference line(s) "
+            "(author-year/APA style entries are not parseable)"
+            if unnumbered_lines
+            else "no [n]-numbered entry lines were detected"
+        )
         raise CanonicalAdoptionGateError(
             "references_unparseable",
-            "References section has content but no structured references can be parsed",
+            "References section has content but no structured references can be parsed: "
+            "the local reference parser only supports entries numbered with consecutive "
+            f"[1]..[n] labels; {detected}. "
+            "Fix: renumber the References section with consecutive [1]..[n] labels "
+            "(one label per reference entry), then re-run ingestion.",
         )
 
     return CanonicalAdoptionCheck(metadata=metadata, references=references)
