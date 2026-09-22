@@ -43,7 +43,7 @@ paperbase ingest --file ~/Downloads/paper.pdf
 
 # 批量摄入（默认交接给 Agent）
 paperbase ingest --batch papers.txt
-# Agent 继续：preflight → /graphify library/papers --update --no-viz → adopt
+# Agent 继续：preflight → /graphify . --update --no-viz（在 library/papers 目录下运行）→ adopt
 
 # 只有需要本地 LLM 降级时才显式启用
 paperbase ingest --batch papers.txt --headless-graph
@@ -97,7 +97,7 @@ paperbase graph update --force
 
 **并行 subagents 约束**：语义 Agent 不直接读取正文。2 篇及以上必须在同一轮调用至少 2 个 subagents 并行处理，单篇也交给 subagent；等待全部结果并通过来源、schema、端点和置信度校验后才能合并。宿主不支持 subagents 时报告阻塞，不得自动使用本地 LLM。
 
-**扫描根约束**：Agent 增量建图的 detect、semantic cache、`build_merge(root=...)` 和 `save_manifest(root=...)` 必须统一使用 `<base_dir>/library/papers`，相关 Python 步骤在该目录执行。若发现 `p_xxx.md` 与 `library/papers/p_xxx.md` 两种来源形式并存，立即停止合并和 `adopt`；权威工单为 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`（`TD-GRAPH-001`）。
+**扫描根约束**：Agent 增量建图的 detect、semantic cache、`build_merge(root=...)` 和 `save_manifest(root=...)` 必须统一使用 `<base_dir>/library/papers`；调用 `/graphify` 前先把工作目录切到该目录，相关 Python 步骤也在该目录执行。若发现 `p_xxx.md` 与 `library/papers/p_xxx.md` 两种来源形式并存，立即停止合并和 `adopt`；权威工单为 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`（`TD-GRAPH-001`）。
 
 **Zotero item key 限制**：当前 item key 尚未持久化到 Manifest/Registry，摄入后不能保证反查 Zotero 条目。权威工单为 `.scratch/zotero-item-key-provenance/issues/01-persist-zotero-item-key.md`（`TD-ZOTERO-001`，`Status: open`）。
 

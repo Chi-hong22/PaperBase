@@ -217,7 +217,7 @@ State: normalized  # Stuck here
 ```bash
 # Recommended Agent path
 paperbase graph preflight
-# /graphify library/papers --update --no-viz
+# 在本机 library/papers 目录下运行：/graphify . --update --no-viz
 paperbase graph adopt
 ```
 
@@ -395,7 +395,7 @@ paperbase graph update
 
 3. Verify graph contents:
 ```bash
-graphify query "list all concepts" --graph graph/
+graphify query "list all concepts" --graph graph/graph.json
 ```
 
 ---

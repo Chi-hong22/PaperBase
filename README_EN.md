@@ -119,7 +119,7 @@ Location:    library/papers/p_a7f3b2c1d4e5.md
 Next steps:
   - View paper: cat library/papers/p_a7f3b2c1d4e5.md
   - Search: uv run paperbase search "attention mechanism"
-  - Build graph: run `paperbase graph preflight`, `/graphify library/papers --update --no-viz`, then `paperbase graph adopt`
+  - Build graph: run `paperbase graph preflight`, then `/graphify . --update --no-viz` from your library/papers directory, then `paperbase graph adopt`
 ```
 
 **Try More Operations:**
@@ -133,7 +133,7 @@ uv run paperbase search "attention mechanism"
 
 # Recommended agent workflow
 uv run paperbase graph preflight
-# In a Graphify-enabled agent: /graphify library/papers --update --no-viz
+# In a Graphify-enabled agent, from your library/papers directory: /graphify . --update --no-viz
 uv run paperbase graph adopt
 
 # Remove paper (hard delete, needs confirmation)
@@ -324,7 +324,7 @@ uv run paperbase search "transformer architecture" -n 20
 ```bash
 # Agent-first semantic processing of Canonical Markdown
 uv run paperbase graph preflight
-# In an Agent: /graphify library/papers --update --no-viz
+# In an Agent (from your library/papers directory): /graphify . --update --no-viz
 uv run paperbase graph adopt
 
 # Local-LLM headless fallback

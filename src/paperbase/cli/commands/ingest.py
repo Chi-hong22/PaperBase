@@ -56,7 +56,7 @@ def _print_agent_graph_handoff(console: Console) -> None:
     """输出 Agent-first 语义建图的后续步骤。"""
     console.print("[cyan]下一步（Agent 语义图谱流程）:[/cyan]")
     console.print("   paperbase graph preflight")
-    console.print("   /graphify library/papers --update --no-viz")
+    console.print("   在本机 library/papers 目录下运行：/graphify . --update --no-viz")
     console.print("   语义 Agent 必须调用 subagents 并行处理 Canonical Markdown")
     console.print("   paperbase graph adopt")
 

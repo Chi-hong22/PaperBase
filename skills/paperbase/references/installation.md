@@ -71,7 +71,7 @@ Expected output: `graphify 0.9.10+`
 
 ```bash
 paperbase graph preflight
-# Agent 中运行：/graphify library/papers --update --no-viz
+# 在本机 library/papers 目录下运行：/graphify . --update --no-viz
 paperbase graph adopt
 paperbase doctor
 ```
