@@ -4,7 +4,7 @@
 
 PaperBase 的知识图谱由 Graphify 生成。CLI 与 Agent 有两条明确分工的路径：
 
-1. **Agent 路径（推荐）**：`preflight → /graphify library/papers --update --no-viz → adopt`
+1. **Agent 路径（推荐）**：`preflight → /graphify . --update --no-viz → adopt`（/graphify 在仓库内 `library/papers` 目录下运行）
 2. **Headless CLI 路径**：`paperbase graph update`，读取 `config/paperbase.yaml` 的本地 LLM 配置
 3. **显式备用路径**：只有 `--headless-graph` 或直接执行 `paperbase graph update` 才使用本地 LLM
 
@@ -17,7 +17,7 @@ PaperBase 的知识图谱由 Graphify 生成。CLI 与 Agent 有两条明确分�
 ```text
 paperbase ingest paper.pdf
 -> paperbase graph preflight
--> /graphify library/papers --update --no-viz
+-> （在 library/papers 目录下）/graphify . --update --no-viz
 -> paperbase graph adopt
 ```
 
@@ -27,7 +27,7 @@ paperbase ingest paper.pdf
 
 宿主 Agent 接到交接后必须继续执行预检、Graphify semantic extraction 和 `adopt`，不能只停在文件检测。语义 Agent 只负责编排、合并和验收，不直接读取正文：semantic queue 有 2 篇及以上时，必须在同一轮调用至少 2 个 subagents 并行抽取；只有 1 篇时也必须交给 subagent。若宿主不支持 subagents，应报告阻塞，不得静默改用本地 LLM。
 
-所有 Agent 增量步骤必须把 `library/papers` 作为唯一扫描根。detect、semantic cache、`build_merge(root=...)` 与 `save_manifest(root=...)` 不得混用 PaperBase 仓库根；否则同一 Canonical 会产生两种 `source_file` 身份。代码级硬校验记录在 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`，实现前按 [Graphify 故障排查](troubleshooting/graphify-issues.md#问题-5增量合并出现路径根告警或节点碰撞) 的规避流程执行。
+所有 Agent 增量步骤必须把 `library/papers` 作为唯一扫描根：先切工作目录到本机 `library/papers`，再运行 `/graphify`；detect、semantic cache、`build_merge(root=...)` 与 `save_manifest(root=...)` 不得混用 PaperBase 仓库根；否则同一 Canonical 会产生两种 `source_file` 身份。代码级硬校验记录在 `.scratch/graphify-scan-root-consistency/issues/01-enforce-scan-root-consistency.md`，实现前按 [Graphify 故障排查](troubleshooting/graphify-issues.md#问题-5增量合并出现路径根告警或节点碰撞) 的规避流程执行。
 
 ### 跳过后续处理：--no-graph
 
@@ -141,8 +141,8 @@ paperbase ingest --batch papers.txt
 # 1. 先检查 Canonical Markdown 质量
 paperbase graph preflight
 
-# 2. Agent 优先：只从 Canonical Markdown 建图
-/graphify library/papers --update --no-viz
+# 2. Agent 优先：先切到本机 library/papers，只从 Canonical Markdown 建图
+/graphify . --update --no-viz
 paperbase graph adopt
 
 # 手动 headless 备用路径，才读取本地 LLM

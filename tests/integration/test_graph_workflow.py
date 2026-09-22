@@ -122,7 +122,7 @@ def test_local_pdf_ingest_hands_off_graph_to_agent_by_default(monkeypatch, tmp_p
     assert result.exit_code == 0, result.output
     assert graph_calls == []
     assert "paperbase graph preflight" in result.output
-    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "/graphify . --update --no-viz" in result.output
     assert "paperbase graph adopt" in result.output
 
 
@@ -296,6 +296,73 @@ def test_graph_preflight_skips_blocked_paper(tmp_path):
     assert "可建图: 0" in result.output
     assert "需审核: 0" in result.output
     assert paper["storage_id"] not in result.output
+
+
+def test_graph_preflight_warns_on_stray_repo_root_graphify_out(tmp_path):
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    runner = CliRunner()
+    ingest_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+    assert ingest_result.exit_code == 0, ingest_result.output
+
+    stray_dir = tmp_path / "graphify-out"
+    stray_dir.mkdir()
+    (stray_dir / "manifest.json").write_text("{}", encoding="utf-8")
+
+    result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "preflight"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "环境警告" in result.output
+    assert "仓库根存在游离" in result.output
+
+
+def test_graph_preflight_warns_on_foreign_scan_root_marker(tmp_path):
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    runner = CliRunner()
+    ingest_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+    assert ingest_result.exit_code == 0, ingest_result.output
+
+    marker_dir = tmp_path / "library" / "papers" / "graphify-out"
+    marker_dir.mkdir(parents=True)
+    (marker_dir / ".graphify_root").write_text(
+        str(Path("D:/OtherHost/PaperBase/library/papers")),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "preflight"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "环境警告" in result.output
+    assert ".graphify_root" in result.output
+
+
+def test_graph_preflight_hygiene_clean_has_no_warning(tmp_path):
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "sample_liu2025.pdf"
+    runner = CliRunner()
+    ingest_result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+    assert ingest_result.exit_code == 0, ingest_result.output
+
+    result = runner.invoke(
+        main,
+        ["--base-dir", str(tmp_path), "graph", "preflight"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "环境警告" not in result.output
 
 
 def test_graph_update_stops_before_graphify_for_blocked_canonical(monkeypatch, tmp_path):

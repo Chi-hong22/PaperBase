@@ -63,3 +63,7 @@ _Avoid_: OCR 结果、猜测性 LaTeX、普通插图
 **Page Coverage（页面覆盖）**:
 一次视觉校正运行对源 PDF 每一页的处理、排除或空白判定是否完整且无重复。
 _Avoid_: 文本长度、抽样页数、页级哈希集合
+
+**Scan Root（扫描根）**:
+Graphify 计算来源文件身份与语义缓存键的基准目录；同一论文库的所有 Agent 与 headless 调用统一以本机 `library/papers` 为扫描根，调用侧先切换工作目录，且不以绝对路径持久化。
+_Avoid_: 仓库根扫描、把 `library/papers` 当路径参数、绝对路径持久化

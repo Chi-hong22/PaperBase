@@ -123,7 +123,7 @@ paperbase status <paper_id>
 
 # Agent 推荐的图谱更新
 paperbase graph preflight
-# /graphify library/papers --update --no-viz
+# 在本机 library/papers 目录下运行：/graphify . --update --no-viz
 paperbase graph adopt
 
 # 手动 headless 备用路径

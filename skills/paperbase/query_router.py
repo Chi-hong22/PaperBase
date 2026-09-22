@@ -106,9 +106,9 @@ def query_graph(query: str, base_dir: Path) -> str:
         if query.strip().startswith('-'):
             return "查询内容不能以 - 开头（可能被误解析为命令参数）"
 
-        # 调用 graphify query
+        # 显式指向已接纳图谱（graph/graph.json），避免依赖 CWD 下的 graphify-out
         result = subprocess.run(
-            ['graphify', 'query', query],
+            ['graphify', 'query', query, '--graph', str(graph_dir / 'graph.json')],
             capture_output=True,
             text=True,
             timeout=30,

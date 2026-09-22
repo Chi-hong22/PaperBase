@@ -60,7 +60,7 @@ PaperBase 是论文知识库脚手架，核心理念：
 6. **更新知识图谱**
    ```bash
    paperbase graph preflight
-   # 调用 Graphify skill：/graphify library/papers --update --no-viz
+   # 先切到本机 library/papers 目录，再调用 Graphify skill：/graphify . --update --no-viz
    paperbase graph adopt
    ```
 

@@ -80,9 +80,9 @@ p_<blocked_storage_id>.md
 
 **验证修复**：
 ```bash
-# 测试 graphify 是否能识别文件
-graphify detect library/papers
-# 文件数应等于可建图 Canonical 数，不包含 BLOCKED
+# 在本机 library/papers 目录下运行，测试 graphify 是否能识别文件
+& (Get-Content graphify-out/.graphify_python) -c 'from pathlib import Path; from graphify.detect import detect; print(sum(map(len, detect(Path("."))["files"].values())))'
+# 输出应等于可建图 Canonical 数，不包含 BLOCKED
 ```
 
 不要用 `git add -f` 解决扫描问题；`.gitignore` 与 `.graphifyignore` 分别控制版本库和 Graphify corpus。
@@ -233,8 +233,8 @@ uv run paperbase config show
 ### 验证 graphify 集成
 
 ```bash
-# 1. 检查文件识别
-graphify library/papers 2>&1 | grep "found"
+# 1. 检查文件识别（在 library/papers 目录下运行）
+& (Get-Content graphify-out/.graphify_python) -c 'from pathlib import Path; from graphify.detect import detect; print(sum(map(len, detect(Path("."))["files"].values())))'
 
 # 2. 测试完整流程
 uv run paperbase graph update --force

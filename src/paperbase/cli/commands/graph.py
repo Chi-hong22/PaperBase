@@ -50,6 +50,37 @@ def preflight(ctx, force: bool):
     console.print(f"  需审核: {len(blocked)}")
     for paper, reason in blocked:
         console.print(f"  [yellow]- {paper['storage_id']}: {reason}[/yellow]")
+    for warning in _check_graph_root_hygiene(base_dir):
+        console.print(f"[yellow]环境警告: {warning}[/yellow]")
+
+
+def _check_graph_root_hygiene(base_dir: Path) -> list[str]:
+    """返回 Graphify 扫描根/输出目录的环境警告；仅提示，不阻断 preflight。"""
+    warnings: list[str] = []
+    stray_out = base_dir / "graphify-out"
+    if stray_out.is_dir():
+        warnings.append(
+            f"仓库根存在游离 graphify-out（{stray_out}）："
+            "正确输出位置是 library/papers/graphify-out/，建议删除该目录"
+        )
+
+    marker_path = base_dir / "library" / "papers" / "graphify-out" / ".graphify_root"
+    if marker_path.is_file():
+        try:
+            marker_text = marker_path.read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeDecodeError):
+            marker_text = ""
+        expected_root = (base_dir / "library" / "papers").resolve()
+        if (
+            marker_text
+            and Path(marker_text).is_absolute()
+            and Path(marker_text).resolve() != expected_root
+        ):
+            warnings.append(
+                f"扫描根标记 .graphify_root 指向其他主机路径（{marker_text}）："
+                f"本机应为 {expected_root}；下次 Graphify skill 运行会自动重写"
+            )
+    return warnings
 
 
 @graph.command()

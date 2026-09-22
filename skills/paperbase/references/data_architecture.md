@@ -97,7 +97,7 @@ rm registry/papers.db
 **Rebuild Command**:
 ```bash
 paperbase graph preflight --force
-# /graphify library/papers --no-viz
+# 在本机 library/papers 目录下运行：/graphify . --no-viz
 paperbase graph adopt --force
 ```
 
@@ -250,7 +250,7 @@ paperbase status  # Auto-rebuilds
 
 # Rebuild graph from Canonical files
 paperbase graph preflight --force
-# /graphify library/papers --no-viz
+# 在本机 library/papers 目录下运行：/graphify . --no-viz
 paperbase graph adopt --force
 ```
 
@@ -366,7 +366,7 @@ paperbase status  # Auto-rebuilds
 
 # 3. Rebuild graph (Agent path)
 paperbase graph preflight --force
-# /graphify library/papers --no-viz
+# 在本机 library/papers 目录下运行：/graphify . --no-viz
 paperbase graph adopt --force
 ```
 

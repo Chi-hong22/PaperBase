@@ -1,5 +1,14 @@
 # PaperBase Skill - 更新日志
 
+## [2026-09-22-v1.6] - Graphify 调用统一为本机扫描根约定（TD-GRAPH-002）
+
+- 所有 Graphify 调用示例统一为「先切工作目录到本机 `library/papers`，再运行 `/graphify . --update --no-viz`」，覆盖 SKILL.md、README 与全部 references，替换旧的 `/graphify library/papers …` 形式；各主机路径本地解析，不硬编码绝对路径。
+- 诊断命令修正：graphify 0.9.10 CLI 不存在的 `graphify detect` 全部替换为实测有效的 `graphify.detect` Python 探测命令（在 `library/papers` 目录下用 `graphify-out/.graphify_python` 运行）。
+- `query_router.py` 的 `graphify query` 显式传 `--graph` 指向已接纳图谱 `graph/graph.json`，去除对工作目录下 `graphify-out` 的隐式依赖，并新增回归测试 `tests/unit/test_query_router.py`。
+- 配套（仓库侧）：`paperbase graph preflight` 增加游离 `graphify-out/` 与异机 `.graphify_root` 的环境警告；本机路径类文件（`.graphify_root`、`.graphify_python`、`cache/stat-index.json`）从 Syncthing 同步中排除。
+
+---
+
 ## [2026-09-12-v1.5] - 视觉返工重审入口与故障恢复文档
 
 - **新增 `paperbase ingest --re-review`**：仅当 run 处于 `ready_to_adopt` 时有效；保留各 chunk 的 `completed` 状态，作废已失效的 boundary-review 产物与 run 局部 fallback-assets，状态回 `running`，并由同一次调用重新准备边界复核任务包、返回 `AgentActionRequired`。可与 `--accept-visual-warnings` 组合；条件不满足报 `visual_re_review_invalid`（映射 `NEEDS_REVIEW`）。取代手工"改 `run.json` state + 删 `boundary-review/` 目录"的旧恢复流程。

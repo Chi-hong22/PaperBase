@@ -366,7 +366,7 @@ ls graph/graph.json
 paperbase graph status
 
 # Test graphify directly
-graphify query "SLAM" --graph graph/
+graphify query "SLAM" --graph graph/graph.json
 ```
 
 ---

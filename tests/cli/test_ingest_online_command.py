@@ -96,7 +96,8 @@ def test_online_ingest_updates_fts_and_hands_off_graph_to_agent_by_default(
     assert result.exit_code == 0, result.output
     assert calls == ["fts"]
     assert "paperbase graph preflight" in result.output
-    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "/graphify . --update --no-viz" in result.output
+    assert "在本机 library/papers 目录下运行" in result.output
     assert "语义 Agent 必须调用 subagents 并行处理 Canonical Markdown" in result.output
     assert "paperbase graph adopt" in result.output
 
@@ -193,7 +194,7 @@ def test_batch_ingest_updates_fts_once_and_hands_off_graph_to_agent(
 
     assert result.exit_code == 0, result.output
     assert calls == ["fts"]
-    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "/graphify . --update --no-viz" in result.output
 
 
 def test_ingest_rejects_conflicting_graph_modes():

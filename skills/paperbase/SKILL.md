@@ -89,7 +89,7 @@ PDF/DOI → NORMALIZED → READY
 Agent:
   1. 运行 `paperbase graph preflight`，先报告正文不足或需要审核的论文
   2. 若预检有 `NEEDS_REVIEW`，先修复并重试；`BLOCKED` 论文保持排除，不进入增量候选或 Graphify corpus
-  3. 没有阻塞项时，只对 Canonical Markdown 调用 Graphify skill：`/graphify library/papers --update --no-viz`
+  3. 没有阻塞项时，先切工作目录到本机 `library/papers`，再只对 Canonical Markdown 调用 Graphify skill：`/graphify . --update --no-viz`
   4. 调用 `paperbase graph adopt`，只接纳 graphify-out 并推进状态，不读取本地 LLM 配置
   完成：节点 +5，边 +12
 ```
@@ -127,7 +127,7 @@ paperbase graph status                # 查看统计
 **推荐重跑顺序**：
 ```bash
 paperbase graph preflight
-# Agent 中运行：/graphify library/papers --update --no-viz
+# 在本机 library/papers 目录下运行：/graphify . --update --no-viz
 paperbase graph adopt
 paperbase doctor
 ```
@@ -309,7 +309,7 @@ Agent:
     问题 1: graphify 未安装
       解决: uv tool install graphify
     问题 2: 2 篇论文待处理
-      解决: paperbase graph preflight → /graphify library/papers --update --no-viz → paperbase graph adopt
+      解决: paperbase graph preflight →（在 library/papers 目录下运行）/graphify . --update --no-viz → paperbase graph adopt
   
   是否执行修复? (y/n)
 ```

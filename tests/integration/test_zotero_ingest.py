@@ -223,7 +223,7 @@ def test_zotero_metadata_ingest_hands_off_graph_to_agent_by_default(monkeypatch,
     assert result.exit_code == 0, result.output
     assert calls == ["fts"]
     assert "paperbase graph preflight" in result.output
-    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "/graphify . --update --no-viz" in result.output
     assert "paperbase graph adopt" in result.output
 
 
@@ -278,7 +278,7 @@ def test_zotero_pdf_ingest_keeps_metadata_and_hands_off_graph_to_agent(monkeypat
     assert result.exit_code == 0, result.output
     assert calls == ["fts"]
     assert "paperbase graph preflight" in result.output
-    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "/graphify . --update --no-viz" in result.output
     assert "paperbase graph adopt" in result.output
     canonical_path = next((tmp_path / "library" / "papers").glob("p_*.md"))
     frontmatter, _ = parse_frontmatter(canonical_path.read_text(encoding="utf-8"))
@@ -494,7 +494,7 @@ def test_zotero_recent_updates_fts_once_and_hands_off_graph_to_agent(monkeypatch
     assert result.exit_code == 0, result.output
     assert calls == ["fts"]
     assert "paperbase graph preflight" in result.output
-    assert "/graphify library/papers --update --no-viz" in result.output
+    assert "/graphify . --update --no-viz" in result.output
     assert "paperbase graph adopt" in result.output
 
 
