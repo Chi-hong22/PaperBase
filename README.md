@@ -20,7 +20,9 @@ PaperBase 是专为 AI 时代设计的**学术论文知识库脚手架**，解�
 **核心流程：**
 
 ```
-PDF → Markdown → 知识图谱 → 搜索/分析
+论文来源（首选 Zotero；也支持 DOI、arXiv 和本地 PDF）
+    ↓
+PaperBase 导入 → Canonical Markdown → 知识图谱 → 搜索/分析
 ```
 
 **与 Zotero 的区别：**
@@ -33,9 +35,10 @@ PDF → Markdown → 知识图谱 → 搜索/分析
 
 **5 秒决策：**
 
+- ✅ 如果你已经在使用 Zotero → **先在 Zotero 中整理论文、下载附件，再导入 PaperBase**
 - ✅ 如果你只需要"整理论文 + 生成参考文献" → **用 Zotero**
 - ✅ 如果你需要"从 100 篇论文中提取方法演进路径" → **用 PaperBase**
-- 💡 两者可以结合使用（PaperBase 支持从 Zotero 导入）
+- 💡 推荐组合：Zotero 负责收集、阅读和引用管理，PaperBase 负责结构化处理、检索和深度分析
 
 **核心概念速览：**
 
@@ -126,36 +129,35 @@ echo $env:PAPERBASE_LIBRARY
 # 安装全局工具
 uv tool install graphify  # 知识图谱构建工具（必需）
 
-# 可选工具
+# 推荐：优先从 Zotero 导入论文
+uv tool install zotero-mcp-server
+
+# 可选备选工具：通过 DOI/arXiv/URL 在线获取论文
 uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git  # 在线论文获取（可选）
-uv tool install zotero-mcp-server  # Zotero 集成（可选）
 
 # 验证安装
 uv run paperbase --help
 graphify --version  # 应显示: graphify, version x.x.x
 ```
 
-### 摄入第一篇论文
+### 首次导入论文（首选 Zotero）
 
 ```bash
-# 摄入论文（使用开放访问的 arXiv 论文作为示例）
+# 在 Zotero 中选中论文，复制 Item Key 后导入
+uv run paperbase ingest --zotero-key <ITEM_KEY>
+
+# 或批量导入 Zotero 中最近添加的论文
+uv run paperbase ingest --zotero-recent 10
+```
+
+开始前请确保 Zotero 正在运行，并已按 [Zotero 集成指南](docs/integrations/zotero.md) 完成本地模式配置。若条目有本机可访问的 PDF 附件，PaperBase 会继续处理完整全文；否则会先导入元数据或摘要。
+
+**不使用 Zotero 时的备选方式：**
+
+```bash
+# DOI、arXiv、URL 或本地 PDF 均可作为备选输入
 uv run paperbase ingest "arxiv:1706.03762"
-```
-
-**预期输出：**
-
-```
-✓ 论文已成功添加到知识库
-论文标识: arxiv:1706.03762
-
-更新全文检索索引...
-✓ 索引更新完成
-
-更新知识图谱...
-✓ 知识图谱更新完成
-
-✓ 摄入完成
-   论文已成功添加到知识库
+uv run paperbase ingest --file paper.pdf
 ```
 
 **摄入时间说明：**
@@ -166,14 +168,14 @@ uv run paperbase ingest "arxiv:1706.03762"
 **如果摄入超过 60 秒未响应**，按 `Ctrl+C` 中断并检查状态：
 
 ```bash
-uv run paperbase status arxiv:1706.03762
+uv run paperbase status "<PAPER_ID>"
 ```
 
 **继续尝试其他操作：**
 
 ```bash
-# 查看论文状态
-uv run paperbase status "arxiv:1706.03762"
+# 查看论文状态（将 <PAPER_ID> 替换为实际 paper_id）
+uv run paperbase status "<PAPER_ID>"
 
 # 搜索内容
 uv run paperbase search "attention mechanism"
@@ -182,10 +184,10 @@ uv run paperbase search "attention mechanism"
 uv run paperbase graph update
 
 # 删除论文（硬删除，默认直接删除）
-uv run paperbase remove "arxiv:1706.03762"
+uv run paperbase remove "<PAPER_ID>"
 
 # 删除论文（启用交互式确认）
-uv run paperbase remove "arxiv:1706.03762" --interactive
+uv run paperbase remove "<PAPER_ID>" --interactive
 ```
 
 论文存储为 `library/papers/p_<storage_id>.md`，带有结构化 frontmatter。
@@ -255,7 +257,31 @@ paperbase/
 
 PaperBase 支持集成外部工具以扩展功能：
 
-#### 1. paper-fetch-skill（在线论文获取, 可选）
+#### 1. Zotero 集成（首选导入方式）
+
+建议优先在 Zotero 中收集、整理并下载论文附件，再将条目导入 PaperBase。这样可以复用 Zotero 的文献管理和去重能力；PaperBase 负责后续的结构化转换、检索和知识图谱分析。
+
+**安装方式**：
+
+```bash
+uv tool install zotero-mcp-server
+```
+
+**使用方式**：
+
+```bash
+# 单篇导入
+uv run paperbase ingest --zotero-key <ITEM_KEY>
+
+# 批量导入最近 N 篇论文
+uv run paperbase ingest --zotero-recent 10
+```
+
+本地模式可读取本机可访问的 PDF 附件并处理全文；Web API 模式或没有可访问 PDF 附件时，会降级为元数据/摘要导入。完整配置和故障排查见 [Zotero 集成指南](docs/integrations/zotero.md)。
+
+---
+
+#### 2. paper-fetch-skill（在线论文获取, 可选）
 
 **定位**: 外部 CLI 工具，作为黑盒通过命令行调用
 **职责**: 从 DOI、arXiv ID、URL 获取论文元数据和全文
@@ -302,7 +328,7 @@ uv run paperbase ingest --file paper.pdf
 
 详见：[在线获取论文的局限性](docs/troubleshooting/online-fetch-limitations.md)
 
-#### 2. Graphify（知识图谱构建，必需）
+#### 3. Graphify（知识图谱构建，必需）
 
 **Graphify 是 PaperBase 知识图谱功能的必需组件**，用于构建和查询语义知识图谱、引用关系网络。
 
@@ -321,7 +347,7 @@ uv tool install graphify
 ```bash
 # Agent 推荐路径
 uv run paperbase graph preflight
-# 在支持 Graphify skill 的 Agent 中：/graphify library/papers --update --no-viz
+# 在支持 Graphify skill 的 Agent 中，于本机 library/papers 目录下运行：/graphify . --update --no-viz
 uv run paperbase graph adopt
 
 # 手动 headless 备用路径（读取 config/paperbase.yaml）
@@ -448,46 +474,19 @@ uv run paperbase graph update
 ```
 
 详细配置见 [`.env.example`](.env.example) 和 [docs/guides/graphify-integration-guide.md](docs/guides/graphify-integration-guide.md).
----
+### 摄入论文
 
-#### 3. Zotero 集成（已支持）
-
-用于从 Zotero 文献管理器导入论文元数据到 PaperBase。
-
-**安装方式**：
-
-```bash
-uv tool install zotero-mcp-server
-```
-
-**使用方式**：
+**首选方式：从 Zotero 导入**
 
 ```bash
 # 单篇导入
 uv run paperbase ingest --zotero-key <ITEM_KEY>
 
-# 批量导入最近 N 篇论文
+# 批量导入最近 N 篇
 uv run paperbase ingest --zotero-recent 10
 ```
 
-**配置模式**：
-- **本地模式**（推荐）：连接本地 Zotero 应用程序，无需 API Key
-- **Web API 模式**：通过 Zotero Web API 访问，需要 API Key 和 Library ID
-
-**功能特性**：
-- ✅ 单篇论文导入（通过 Item Key）
-- ✅ 批量导入最近论文
-- ✅ 自动查重（DOI 和标题）
-- ✅ 支持本地和 Web API 两种模式
-- ⚠️ 当前仅支持元数据导入（无 PDF 附件）
-
-**完整文档**：[docs/integrations/zotero.md](docs/integrations/zotero.md)
-
-**项目地址**：https://github.com/54yyyu/zotero-mcp
-
----
-
-### 摄入论文
+**其他输入方式（备选）：**
 
 ```bash
 # 通过 DOI
@@ -496,7 +495,7 @@ uv run paperbase ingest "doi:10.1038/nature12373"
 # 通过 arXiv
 uv run paperbase ingest "arxiv:2301.07041"
 
-# 本地 PDF
+# 本地 PDF（不使用 Zotero 时的备选）
 uv run paperbase ingest --file paper.pdf
 
 # 批量摄入（推荐用于多篇论文）
@@ -594,7 +593,7 @@ uv run paperbase graph status
 **图谱更新策略**：
 
 - CLI 默认：单篇摄入后尝试 headless 更新；未配置本地 LLM 时可用 `--no-graph` 跳过
-- Agent 推荐：统一执行 `preflight → /graphify library/papers --update --no-viz → adopt`
+- Agent 推荐：统一执行 `preflight → /graphify . --update --no-viz → adopt`（/graphify 在本机 library/papers 目录下运行）
 - 增量更新：只处理内容发生变化的可建图论文；`BLOCKED` 和未修复的质量问题不会进入正常更新
 
 详见 [docs/graph-update-strategy.md](docs/graph-update-strategy.md)。
@@ -769,10 +768,10 @@ uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
 
 ### 设计决策
 
-**为什么不直接用 Zotero？**
+**为什么建议先在 Zotero 中管理、再导入 PaperBase？**
 
-- Zotero 擅长文献管理，但不适合 AI Agent：难以图谱化、检索粒度粗、schema 不可控
-- PaperBase 与 Zotero 互补：可通过 MCP 从 Zotero 导入论文，但以结构化 Markdown 存储
+- Zotero 擅长文献收集、附件管理、阅读和引用；先在 Zotero 中整理可以保留这些成熟工作流
+- PaperBase 与 Zotero 互补：从 Zotero 导入后，以结构化 Markdown 作为内容真相源，并提供全文检索和知识图谱分析
 
 **为什么用 Markdown 而不是 JSON？**
 
@@ -804,7 +803,7 @@ uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
 **最佳实践**：两者结合使用
 
 - 在 Zotero 中管理论文和阅读
-- 通过 MCP 导入到 PaperBase 进行深度分析
+- **优先通过 MCP 导入到 PaperBase** 进行结构化处理和深度分析
 
 ### Q2: Graphify 是必需的吗？
 

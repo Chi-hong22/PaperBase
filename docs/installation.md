@@ -63,7 +63,26 @@ uv run paperbase doctor
 
 ---
 
-## 外部工具（可选）
+## 论文导入方式
+
+### 首选：从 Zotero 导入
+
+建议先在 Zotero 中收集、整理并下载论文附件，再将条目导入 PaperBase。Zotero 负责文献管理、阅读和引用，PaperBase 负责 Canonical Markdown、全文检索和知识图谱分析。
+
+```bash
+# 安装 Zotero 集成工具
+uv tool install zotero-mcp-server
+
+# 单篇导入：将 <ITEM_KEY> 替换为 Zotero 条目的 Item Key
+uv run paperbase ingest --zotero-key <ITEM_KEY>
+
+# 批量导入最近 N 篇
+uv run paperbase ingest --zotero-recent 10
+```
+
+本地模式下请启动 Zotero 并启用 HTTP 服务器；如果条目有本机可访问的 PDF 附件，PaperBase 会处理完整全文。Web API 模式或没有可访问 PDF 附件时，会降级为元数据/摘要导入。详细配置见 [Zotero 集成指南](integrations/zotero.md)。
+
+### 其他外部工具（可选）
 
 PaperBase 采用 **外部黑盒工具** 架构，将专门功能委托给独立工具。
 
@@ -110,22 +129,11 @@ graphify --version
 
 ```bash
 uv run paperbase graph preflight
-# 在支持 Graphify skill 的 Agent 中运行：/graphify library/papers --update --no-viz
+# 在支持 Graphify skill 的 Agent 中运行（先切到本机 library/papers 目录）：/graphify . --update --no-viz
 uv run paperbase graph adopt
 ```
 
 这条路径不读取 PaperBase 的本地 LLM 配置。只有显式运行 `uv run paperbase graph update` 时，才需要在 `config/paperbase.yaml` 中配置 OpenAI-compatible LLM；可用 `uv run paperbase config show` 查看生效配置，用 `uv run paperbase doctor` 检查 Graphify 是否可用。不要在文档或提交中记录真实密钥。
-
----
-
-### zotero-mcp（Zotero 集成）
-
-**作用：** 从 Zotero 文献管理器导入论文
-
-**安装：**
-```bash
-uv tool install zotero-mcp-server
-```
 
 ---
 
@@ -151,7 +159,28 @@ PaperBase 遵循 **Unix 哲学**：每个工具做好一件事。
 
 ## 工作流示例
 
-### 完整工作流（需要 paper-fetch + graphify）
+### 推荐工作流（Zotero + graphify）
+
+```bash
+# 1. 安装工具
+uv tool install zotero-mcp-server
+uv tool install graphify
+
+# 2. 在 Zotero 中整理论文并下载需要的 PDF 附件
+
+# 3. 从 Zotero 导入
+uv run paperbase ingest --zotero-key <ITEM_KEY>
+
+# 4. 更新图谱
+uv run paperbase graph preflight
+# 在支持 Graphify skill 的 Agent 中运行（先切到本机 library/papers 目录）：/graphify . --update --no-viz
+uv run paperbase graph adopt
+
+# 5. 查询论文
+uv run paperbase status
+```
+
+### 备选工作流（paper-fetch + graphify）
 
 ```bash
 # 1. 安装工具
@@ -171,7 +200,7 @@ uv run paperbase graph update
 uv run paperbase status
 ```
 
-### 最小工作流（仅本地 PDF）
+### 其他备选工作流（仅本地 PDF）
 
 ```bash
 # 1. 只安装 PaperBase
