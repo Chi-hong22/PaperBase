@@ -38,8 +38,9 @@ uv.lock
 *.swo
 *~
 
-# Testing
+# Testing / lint caches
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 .tox/
@@ -112,6 +113,10 @@ scripts/verify_*.py
 .agents
 .codex
 .claude
+# Agent 开发过程文档（本地协作用，不入库）
+AGENTS.md
+CLAUDE.md
+CONTEXT.md
 
 # project-log:begin
 # 用户裁决（2026-09-12）：.log/ 项目日志只保留本地，不接入 Git 跟踪。

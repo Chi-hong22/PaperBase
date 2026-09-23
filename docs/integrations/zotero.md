@@ -4,6 +4,8 @@
 
 PaperBase 通过 `zotero-mcp-server` 集成 Zotero 文献管理器。单篇或最近条目导入时，本地模式会优先读取 Zotero 元数据；若条目存在可访问的本地 PDF 附件，则继续走完整 PDF 摄入流程生成 Canonical 全文。
 
+> **首要推荐**：先在 Zotero 中收集、整理并下载论文附件，再从 Zotero 导入 PaperBase。DOI、arXiv、URL 和本地 PDF 仍可使用，但适合作为没有 Zotero 条目或 Zotero 导入不可用时的备选入口。
+
 **定位**: 互补工具，而非替代关系
 
 | 工具          | 核心优势                     | 适用场景                     |
@@ -372,11 +374,11 @@ uv run paperbase ingest --zotero-key ABC12DEF
 **A**: 本地模式只有在 Zotero 条目存在可访问的 PDF 附件时才会导入全文。Web API 模式、云端未下载附件或无 PDF 的条目只会生成元数据/摘要级 Canonical。
 
 **推荐做法**:
-1. 使用 PDF 导入获取完整内容：
+1. 先让 Zotero 下载该条目的本地 PDF 附件，再重新执行该条目的导入/修复流程
+2. 如果论文不在 Zotero 中，或确需绕过 Zotero，再使用 PDF 导入获取完整内容：
    ```bash
    uv run paperbase ingest --file paper.pdf
    ```
-2. 或先让 Zotero 下载附件，再重新执行该条目的导入/修复流程
 
 **对比**:
 
@@ -617,7 +619,6 @@ uv run paperbase sync
 
 ## 未来计划
 
-- [ ] PDF 附件导入支持
 - [ ] 集合（Collection）过滤
 - [ ] 标签（Tags）导入
 - [ ] 笔记（Notes）同步

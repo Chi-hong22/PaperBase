@@ -66,6 +66,21 @@ paperbase ingest <id> --re-review       # Agent 修改 chunk 结果后的重审�
 - **`--re-review`（视觉返工重审）**：Agent 在两次 ingest 调用之间直接修改了 `.visual-runs/<run_id>/chunks/` 下的 chunk 结果文件后使用。仅当 run 处于 `ready_to_adopt` 时有效：保留各 chunk 的 `completed` 状态，作废已失效的 boundary-review 产物与 run 局部 fallback-assets，状态回 `running`，并由同一次 ingest 调用重新准备边界复核任务包、返回新的 `AgentActionRequired` 交接。可与 `--accept-visual-warnings` 组合；条件不满足时报 `visual_re_review_invalid`（映射 `NEEDS_REVIEW`），按错误信息去掉旗标重跑即可。它是旧手工流程“改 `run.json` state + 删 `boundary-review/` 目录”的官方替代，不要再手工编辑 run.json。
 - **`remove` 的审计缓存 stash**：`paperbase remove` 默认把 `paper_dir/.visual-auto-audit/` stash 到 `library/audits-stash/<storage_id>/` 并打印恢复方法；重摄入同一 PDF 前把它移回 `library/papers/<storage_id>/.visual-auto-audit` 即可复用，无需重新自动审计。
 
+### 任务收尾清理
+
+导入/建图任务完成后，必须删除本次任务在工作区产生的临时文件，尤其是视觉流水线残留。
+
+**应删除（Agent 自建、可重建）**：
+- 仓库根或任务目录下的 `_hdr_tmp*/`、`tmp_vis/`、`_pdf_text/`、`_pages.pkl`、页图/裁剪草稿、一次性校验脚本
+- 图谱步骤产生的 `_run_*.py`、`_list_*.py` 等辅助脚本（Graphify 流水线中间件按 graphify skill Step 9 处理）
+
+**不得删除（系统状态与可复用缓存）**：
+- `library/papers/<sid>/.visual-runs/`、`.visual-auto-audit/` 与 `library/audits-stash/`
+- `library/papers/graphify-out/cache/`、`manifest.json`、正式 `graph.json` 与 `graph/`
+- `.scratch/` 工单与任何来源不明的非本任务文件
+
+不确定是否系统文件时保留，并在交付说明中列出。收尾检查：工作区不应残留本任务产生的 `_` / `tmp_` 前缀临时物。
+
 **辅助脚本**：
 ```bash
 python scripts/batch_ingest.py papers.txt  # 批量摄入助手

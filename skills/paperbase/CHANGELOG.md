@@ -1,5 +1,12 @@
 # PaperBase Skill - 更新日志
 
+## [2026-09-22-v1.7] - 任务收尾临时文件清理
+
+- SKILL.md 知识摄入新增「任务收尾清理」：导入/建图完成后必须删除本次任务的临时文件，尤其是视觉流水线残留（`_hdr_tmp*/`、`tmp_vis/`、`_pdf_text/`、`_pages.pkl`、页图/裁剪草稿、一次性脚本）。
+- 明确不得删除系统状态与可复用缓存：`.visual-runs/`、`.visual-auto-audit/`、`audits-stash/`、`graphify-out/cache/`、正式图谱与 `.scratch/` 工单。
+
+---
+
 ## [2026-09-22-v1.6] - Graphify 调用统一为本机扫描根约定（TD-GRAPH-002）
 
 - 所有 Graphify 调用示例统一为「先切工作目录到本机 `library/papers`，再运行 `/graphify . --update --no-viz`」，覆盖 SKILL.md、README 与全部 references，替换旧的 `/graphify library/papers …` 形式；各主机路径本地解析，不硬编码绝对路径。
