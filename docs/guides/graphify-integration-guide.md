@@ -29,8 +29,8 @@
 |---|---|---|
 | 本机版本 | `graphify --version` | 确认当前 Graphify 版本 |
 | CLI 帮助 | `graphify --help` | 确认可用命令、参数和输出路径语义 |
-| Codex skill | `C:\Users\user\.codex\skills\graphify\SKILL.md` | Agent 模式 `/graphify` 工作流 |
-| Agents skill | `C:\Users\user\.agents\skills\graphify\SKILL.md` | 其他 agent 环境中的同类工作流 |
+| Codex skill | `~/.codex/skills/graphify/SKILL.md` | Agent 模式 `/graphify` 工作流 |
+| Agents skill | `~/.agents/skills/graphify/SKILL.md` | 其他 agent 环境中的同类工作流 |
 
 当前本机已验证：
 

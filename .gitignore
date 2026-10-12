@@ -27,10 +27,6 @@ ENV/
 env/
 .env
 
-# uv
-.python-version
-uv.lock
-
 # IDE
 .vscode/
 .idea/
@@ -89,6 +85,11 @@ Thumbs.db
 # Development process artifacts (不对外开放)
 .scratch
 .stfolder
+.stversions
+# Syncthing 同步配置（本机环境）
+.stignore
+# skill 运行时库路径缓存（本机生成）
+skills/paperbase/workspaces.json
 PHASE*.md
 TASK*.md
 INGEST_VERIFICATION.md
@@ -101,8 +102,6 @@ docs/archive/
 docs/superpowers/
 # 内部迁移指南
 docs/MIGRATION-GUIDE.md
-# 内部路线图
-docs/ROADMAP.md
 
 # Manual test scripts (可能包含真实论文标识)
 test_*_manual.py

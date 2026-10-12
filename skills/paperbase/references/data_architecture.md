@@ -136,11 +136,11 @@ PaperBase/
 schema_version: '1.0'
 paper_id: doi:10.1234/example
 storage_id: p_a7f3b2c1d4e5
-title: "Example Paper Title..."
+title: "Example Paper Title"
 authors:
 - name: A. Author
 - name: B. Author
-year: 2021
+year: 2024
 language: en
 abstract: "..."
 keywords: []

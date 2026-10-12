@@ -158,7 +158,7 @@ LLM 启用: True
 
 | Paper ID | 状态 | Methods | Datasets | Domains | Platforms | Constraints |
 |----------|------|---------|----------|---------|-----------|-------------|
-| doi:10.1234/example | ✓ | 4 | 2 | 2 | 1 | 3 |
+| doi:10.1234/example-1 | ✓ | 4 | 2 | 2 | 1 | 3 |
 | doi:10.1234/example-2 | ✓ | 10 | 0 | 3 | 1 | 1 |
 | doi:10.1234/example-3 | ✓ | 0 | 0 | 5 | 0 | 0 |
 | doi:10.1234/example-4 | ✓ | 4 | 0 | 3 | 1 | 1 |

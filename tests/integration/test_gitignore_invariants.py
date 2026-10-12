@@ -30,12 +30,21 @@ def test_paperbase_derived_and_private_paths_are_ignored():
 
 
 def test_graphify_reincludes_local_canonical_markdown():
-    graphifyignore = (
-        REPO_ROOT / "library" / "papers" / ".graphifyignore"
-    ).read_text(encoding="utf-8").splitlines()
+    rules = [
+        line.strip()
+        for line in (
+            REPO_ROOT / "library" / "papers" / ".graphifyignore"
+        ).read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
 
-    assert "!p_*.md" in graphifyignore
-    assert "p_a7f3b2c1d4e5.md" in graphifyignore
-    assert graphifyignore.index("!p_*.md") < graphifyignore.index(
-        "p_a7f3b2c1d4e5.md"
-    )
+    # 本地 Canonical Markdown 必须被重新纳入 Graphify 扫描
+    assert "!p_*.md" in rules
+
+    # 任何针对具体论文的精确排除（BLOCKED 等）都必须排在重新纳入规则之后，
+    # 否则会被 !p_*.md 覆盖而失效。
+    reinclude_index = rules.index("!p_*.md")
+    specific_rules = [
+        rule for rule in rules if rule.startswith("p_") and rule.endswith(".md")
+    ]
+    assert all(rules.index(rule) > reinclude_index for rule in specific_rules)
