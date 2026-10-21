@@ -199,10 +199,10 @@ def testUserSiteInstallationIsDetectedAndExecutable(tmp_path, monkeypatch):
     monkeypatch.delenv("PYTHONPATH", raising=False)
     base_python = getattr(sys, "_base_executable", sys.executable)
     site_result = subprocess.run(
-        [base_python, "-c", "import site; print(site.getusersitepackages())"],
+        [base_python, "-c", "import json,site; print(json.dumps(site.getusersitepackages()))"],
         capture_output=True, text=True, check=True,
     )
-    user_site = Path(site_result.stdout.strip())
+    user_site = Path(json.loads(site_result.stdout))
     package = user_site / "graphify"
     package.mkdir(parents=True)
     for name, content in {
