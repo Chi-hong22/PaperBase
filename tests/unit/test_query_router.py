@@ -44,7 +44,7 @@ def test_query_graph_passes_adopted_graph_path_explicitly(monkeypatch, tmp_path)
 
     assert result == "ok"
     cmd = captured["cmd"]
-    assert cmd[:5] == ["selected-python", "-I", "-m", "graphify", "query"]
+    assert cmd[:4] == ["selected-python", "-m", "graphify", "query"]
     assert "--graph" in cmd
     graph_arg = cmd[cmd.index("--graph") + 1]
     assert Path(graph_arg) == graph_dir / "graph.json"

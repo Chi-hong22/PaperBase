@@ -24,7 +24,7 @@ class GraphifyRuntime:
 
     @property
     def command(self) -> list[str]:
-        return [str(self.python), "-I", "-m", "graphify"]
+        return [str(self.python), "-m", "graphify"]
 
 
 def probePython(python_path: str | Path) -> GraphifyRuntime:
@@ -38,7 +38,7 @@ def probePython(python_path: str | Path) -> GraphifyRuntime:
     )
     try:
         result = subprocess.run(
-            [str(python_path), "-I", "-c", probe],
+            [str(python_path), "-c", probe],
             capture_output=True, text=True, encoding="utf-8", timeout=10,
         )
         if result.returncode:
