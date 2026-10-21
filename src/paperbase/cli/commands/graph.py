@@ -7,10 +7,10 @@ from rich.console import Console
 
 from paperbase.adapters.graphify_adapter import (
     adopt_graphify_output,
-    check_graphify_installed,
     get_graph_stats,
     run_graphify,
 )
+from paperbase.adapters.graphify_runtime import GraphifyUnavailable, resolveGraphifyRuntime
 from paperbase.core.canonical_adoption_gate import inspectCanonicalTextForGraph
 from paperbase.core.graph_updater import detect_changed_papers
 from paperbase.core.manifest import load_manifest, save_manifest
@@ -24,6 +24,28 @@ from paperbase.utils.timestamp import now_iso8601
 def graph():
     """知识库索引管理"""
     pass
+
+
+@graph.command(name="runtime")
+@click.pass_context
+def showRuntime(ctx):
+    """检查 Graphify 安装情况，显示最终选中的来源、版本与 Python。"""
+    console = Console()
+    options = ctx.obj.get("graphify_options", {})
+    for source in ("local", "uv"):
+        try:
+            local_options = {
+                key: options.get(key) for key in ("python", "command")
+            } if source == "local" else {}
+            found = resolveGraphifyRuntime(source, **local_options)
+            console.print(f"{source}: {found.version} · {found.python}")
+        except GraphifyUnavailable as exc:
+            console.print(f"{source}: 不可用（{exc}）")
+    try:
+        selected = resolveGraphifyRuntime(**options)
+    except GraphifyUnavailable as exc:
+        raise click.ClickException(str(exc)) from exc
+    console.print(f"选中: {selected.source} · {selected.version} · {selected.python}")
 
 
 @graph.command()
@@ -108,10 +130,11 @@ def update(ctx, force: bool, incremental: bool):
         raise click.Abort()
 
     # Step 1: 检查依赖
-    if not check_graphify_installed():
-        console.print("[red]缺少必要组件 graphify[/red]")
-        console.print("   安装方法: [cyan]uv tool install graphify[/cyan]")
-        raise click.Abort()
+    try:
+        runtime = resolveGraphifyRuntime(**ctx.obj.get("graphify_options", {}))
+    except GraphifyUnavailable as exc:
+        raise click.ClickException(str(exc)) from exc
+    console.print(f"Graphify: {runtime.source} · {runtime.version} · {runtime.python}")
 
     # Step 1.5: 手动 CLI 模式才读取 PaperBase 的本地 LLM 配置。
     llm_config, process_timeout, api_timeout = _load_headless_graphify_config(base_dir)
@@ -161,6 +184,7 @@ def update(ctx, force: bool, incremental: bool):
         llm_config=llm_config,
         process_timeout=process_timeout,
         api_timeout=api_timeout,
+        runtime=runtime,
     )
 
     if not result["success"]:

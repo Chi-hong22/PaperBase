@@ -10,6 +10,12 @@ import tempfile
 from pathlib import Path
 import shutil
 
+from paperbase.adapters.graphify_runtime import (
+    GraphifyRuntime,
+    GraphifyUnavailable,
+    resolveGraphifyRuntime,
+)
+
 
 def check_graphify_installed() -> bool:
     """
@@ -18,7 +24,11 @@ def check_graphify_installed() -> bool:
     Returns:
         bool: True 如果已安装
     """
-    return shutil.which("graphify") is not None
+    try:
+        resolveGraphifyRuntime()
+        return True
+    except GraphifyUnavailable:
+        return False
 
 
 def run_graphify(
@@ -28,6 +38,7 @@ def run_graphify(
     llm_config: dict | None = None,
     process_timeout: float | None = None,
     api_timeout: float | None = None,
+    runtime: GraphifyRuntime | None = None,
 ) -> dict:
     """
     运行 graphify 构建知识图谱
@@ -53,11 +64,13 @@ def run_graphify(
         }
     """
     # 检查 graphify 是否安装
-    if not check_graphify_installed():
+    try:
+        runtime = runtime or resolveGraphifyRuntime()
+    except GraphifyUnavailable as exc:
         return {
             "success": False,
             "output": "",
-            "error": "graphify 未安装。请运行: uv tool install graphify"
+            "error": str(exc)
         }
 
     # 检查 library 目录是否存在
@@ -82,8 +95,7 @@ def run_graphify(
 
     # 平面结构：graphify 可以直接扫描 papers/ 目录下的所有 .md 文件
     # 格式：graphify extract <path> --backend <name> --model <name>
-    cmd = [
-        "graphify",
+    cmd = runtime.command + [
         "extract",  # 使用 extract 子命令
         ".",  # cwd 已位于 papers 目录，避免 Windows 绝对路径被重复拼接
         "--backend", "openai",  # 明确指定 backend

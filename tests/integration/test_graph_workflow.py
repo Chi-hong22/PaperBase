@@ -1,7 +1,6 @@
 """图谱工作流集成测试"""
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -10,6 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from paperbase.adapters.graphify_adapter import check_graphify_installed
+from paperbase.adapters.graphify_runtime import resolveGraphifyRuntime
 from paperbase.cli.commands import ingest as ingest_command
 from paperbase.cli.main import main
 from paperbase.core.graph_updater import detect_changed_papers
@@ -65,8 +65,7 @@ def test_canonical_markdown_enters_semantic_queue_and_blocked_is_excluded(
         encoding="utf-8",
     )
 
-    graphify_executable = Path(shutil.which("graphify"))
-    graphify_python = graphify_executable.parent.parent / "python.exe"
+    graphify_python = resolveGraphifyRuntime().python
     probe = subprocess.run(
         [
             str(graphify_python),
@@ -138,6 +137,7 @@ def test_graph_workflow_end_to_end(monkeypatch, tmp_path):
         llm_config,
         process_timeout,
         api_timeout,
+        runtime,
     ):
         graphify_calls.append(library_dir)
         assert library_dir == tmp_path / "library"

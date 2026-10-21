@@ -2,6 +2,7 @@
 
 import importlib.util
 from pathlib import Path
+from paperbase.adapters.graphify_runtime import GraphifyRuntime
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 QUERY_ROUTER_PATH = PROJECT_ROOT / "skills" / "paperbase" / "query_router.py"
@@ -33,12 +34,17 @@ def test_query_graph_passes_adopted_graph_path_explicitly(monkeypatch, tmp_path)
         return FakeCompleted()
 
     router = _loadQueryRouter()
+    monkeypatch.setattr(
+        router, "resolveGraphifyRuntime",
+        lambda: GraphifyRuntime("local", Path("selected-python"), "test"),
+    )
     monkeypatch.setattr(router.subprocess, "run", fake_run)
 
     result = router.query_graph("test query", tmp_path)
 
     assert result == "ok"
     cmd = captured["cmd"]
+    assert cmd[:5] == ["selected-python", "-I", "-m", "graphify", "query"]
     assert "--graph" in cmd
     graph_arg = cmd[cmd.index("--graph") + 1]
     assert Path(graph_arg) == graph_dir / "graph.json"

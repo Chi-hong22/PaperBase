@@ -5,6 +5,7 @@
 import re
 import subprocess
 from pathlib import Path
+from paperbase.adapters.graphify_runtime import GraphifyUnavailable, resolveGraphifyRuntime
 from paperbase.core.registry import PaperRegistry
 from paperbase.schemas.manifest import PaperState
 
@@ -107,8 +108,9 @@ def query_graph(query: str, base_dir: Path) -> str:
             return "查询内容不能以 - 开头（可能被误解析为命令参数）"
 
         # 显式指向已接纳图谱（graph/graph.json），避免依赖 CWD 下的 graphify-out
+        runtime = resolveGraphifyRuntime()
         result = subprocess.run(
-            ['graphify', 'query', query, '--graph', str(graph_dir / 'graph.json')],
+            runtime.command + ['query', query, '--graph', str(graph_dir / 'graph.json')],
             capture_output=True,
             text=True,
             timeout=30,
@@ -122,8 +124,8 @@ def query_graph(query: str, base_dir: Path) -> str:
 
     except subprocess.TimeoutExpired:
         return "查询超时（>30秒）"
-    except FileNotFoundError:
-        return "graphify 未安装，请运行: uv tool install graphify"
+    except (FileNotFoundError, GraphifyUnavailable) as exc:
+        return f"Graphify 不可用: {exc}"
     except Exception as e:
         return f"查询出错: {str(e)}"
 

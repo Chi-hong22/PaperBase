@@ -5,11 +5,20 @@ from pathlib import Path
 from subprocess import CompletedProcess, TimeoutExpired
 
 import paperbase.adapters.graphify_adapter as graphify_adapter
+from paperbase.adapters.graphify_runtime import GraphifyRuntime
 from paperbase.adapters.graphify_adapter import (
     adopt_graphify_output,
     check_graphify_installed,
     run_graphify,
 )
+
+
+@pytest.fixture(autouse=True)
+def selectedRuntime(monkeypatch):
+    monkeypatch.setattr(
+        graphify_adapter, "resolveGraphifyRuntime",
+        lambda: GraphifyRuntime("local", Path("selected-python"), "test"),
+    )
 
 
 def test_check_graphify_installed():
@@ -84,7 +93,8 @@ def test_successful_rebuild_replaces_existing_graph(tmp_path, monkeypatch):
     (graph_dir / "sentinel.json").write_text('{"version": "old"}', encoding="utf-8")
 
     def successful_run(cmd, **kwargs):
-        assert cmd[2] == "."
+        assert cmd[:5] == ["selected-python", "-I", "-m", "graphify", "extract"]
+        assert cmd[5] == "."
         assert Path(kwargs["cwd"]) == papers_dir
         output_dir = Path(kwargs["cwd"]) / "graphify-out"
         output_dir.mkdir()

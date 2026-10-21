@@ -15,6 +15,7 @@ from typing import List, Tuple
 import click
 
 from paperbase.utils.markdown import find_local_absolute_image_paths
+from paperbase.adapters.graphify_runtime import GraphifyUnavailable, resolveGraphifyRuntime
 
 
 def check_python_version() -> Tuple[bool, str]:
@@ -40,20 +41,13 @@ def check_uv() -> Tuple[bool, str]:
     return False, "uv not found"
 
 
-def check_graphify() -> Tuple[bool, str]:
+def check_graphify(graphify_options: dict | None = None) -> Tuple[bool, str]:
     """Check if graphify is available"""
-    if shutil.which("graphify"):
-        try:
-            result = subprocess.run(
-                ["graphify", "--version"], capture_output=True, text=True, timeout=5
-            )
-            if result.returncode != 0:
-                return False, f"graphify command failed: {result.stderr.strip()}"
-            version = result.stdout.strip()
-            return True, f"graphify {version}"
-        except Exception:
-            return True, "graphify (version unknown)"
-    return False, "graphify not found (optional)"
+    try:
+        runtime = resolveGraphifyRuntime(**(graphify_options or {}))
+        return True, f"graphify {runtime.version} ({runtime.source}; {runtime.python})"
+    except GraphifyUnavailable as exc:
+        return False, str(exc)
 
 
 def check_sqlite_version() -> Tuple[bool, str]:
@@ -323,7 +317,7 @@ def checkVisualRuns(base_dir: Path) -> Tuple[bool, str]:  # noqa: N802
     return True, f"Visual PDF runs: {summary}"
 
 
-def main(base_dir: Path | None = None):
+def main(base_dir: Path | None = None, graphify_options: dict | None = None):
     base_dir = base_dir or Path.cwd()
     print("🔍 PaperBase Doctor - Environment Diagnostics\n")
     print("=" * 60)
@@ -331,7 +325,7 @@ def main(base_dir: Path | None = None):
     checks: List[Tuple[str, Tuple[bool, str]]] = [
         ("Python Version", check_python_version()),
         ("uv Package Manager", check_uv()),
-        ("graphify (optional)", check_graphify()),
+        ("graphify (optional)", check_graphify(graphify_options)),
         ("paper-fetch (optional)", check_paper_fetch()),
         ("SQLite Version", check_sqlite_version()),
         ("LLM Configuration", check_llm_config(base_dir)),
@@ -383,7 +377,7 @@ def main(base_dir: Path | None = None):
 @click.pass_context
 def doctor(ctx):
     """Run environment diagnostics"""
-    main(ctx.obj["base_dir"])
+    main(ctx.obj["base_dir"], ctx.obj.get("graphify_options"))
 
 
 if __name__ == "__main__":

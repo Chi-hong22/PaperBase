@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+from paperbase.cli.commands.doctor import check_graphify
+
 
 def check_python_version() -> Tuple[bool, str]:
     """Check if Python version >= 3.11"""
@@ -175,10 +177,11 @@ def main():
     print(f"📁 Base Directory: {base_dir}\n")
 
     # Run checks
+    graphify_ok, graphify_message = check_graphify()
     checks = [
         ("Python 版本", check_python_version()),
         ("uv 包管理器", check_command("uv", "uv", required=True)),
-        ("graphify", check_command("graphify", "graphify", required=False)),
+        ("graphify", (True, f"{'✅' if graphify_ok else '⚠️'} {graphify_message}")),
         ("库结构", check_library_structure(base_dir)),
         ("Registry 数据库", check_registry(base_dir)),
         ("知识图谱", check_graph(base_dir)),
