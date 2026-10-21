@@ -3,14 +3,52 @@
 ## 推荐诊断顺序
 
 ```powershell
+uv run paperbase graph runtime
 uv run paperbase graph preflight
 # 在 library/papers 目录下运行；输出应等于可建图 p_*.md 数量
-& (Get-Content graphify-out/.graphify_python) -c 'from pathlib import Path; from graphify.detect import detect; print(sum(map(len, detect(Path("."))["files"].values())))'
+& (uv run python -c 'from paperbase.adapters.graphify_runtime import resolveGraphifyRuntime; print(resolveGraphifyRuntime().python)') -c 'from pathlib import Path; from graphify.detect import detect; print(sum(map(len, detect(Path("."))["files"].values())))'
 uv run paperbase graph status
 uv run paperbase doctor
 ```
 
 PaperBase 的 Graphify 输入只应来自 `library/papers/p_*.md`。不要在图谱阶段直接读取 PDF、URL 或 Zotero 附件，也不要因为 Git 忽略了论文文件就强制暂存它们。
+
+## 选择 Graphify 安装来源
+
+`graph runtime` 显示本地、uv 安装的可用情况，以及最终选中的来源、版本和 Python。全局选项放在 `graph`、`doctor` 或 `ingest` 前面：
+
+```powershell
+# 自动选择：优先可用的本地安装，其次是已有 uv 工具
+uv run paperbase --graphify-source auto graph runtime
+
+# 明确使用已安装的 uv 工具
+uv run paperbase --graphify-source uv graph update --incremental
+
+# 明确使用独立本地 Python；替换为该电脑的真实路径
+uv run paperbase --graphify-source local --graphify-python 'C:\path\to\python.exe' graph runtime
+
+# 也可指定本地 Graphify 命令，与 --graphify-python 二选一
+uv run paperbase --graphify-source local --graphify-command 'C:\path\to\graphify.exe' graph runtime
+```
+
+本地安装指非 uv tool 管理的 Python 安装，包括 pip、用户级 pip、pipx 和独立虚拟环境；不要求把 Graphify 加为 PaperBase 项目依赖。uv 工具暴露到 PATH 的 `graphify` 仍属于 uv，不能据此认定另有本地安装。
+
+自动发现检查当前解释器、PATH 中的 Python / Graphify 入口，以及 `uv tool dir` 下声明 `graphify` 入口的已安装工具记录。不会遍历整块磁盘；未出现在这些位置的独立环境请显式指定 Python。脚本 shebang、常见 Windows Python launcher 和 POSIX 符号链接用于定位解释器，不再根据入口父目录猜路径；无法识别的包装命令也请改用 `--graphify-python`。
+
+显式来源不可用、指定命令或 Python 无效时直接报错，不自动安装、不下载临时 uv 环境，也不换用另一来源。探测会验证模块与 CLI 入口；普通 Python 用户级包目录保持有效。
+
+脚本及测试可使用同名环境变量，命令行优先：
+
+```powershell
+$env:PAPERBASE_GRAPHIFY_SOURCE = 'uv'  # auto / local / uv
+uv run paperbase graph runtime
+```
+
+本地目标另用 `PAPERBASE_GRAPHIFY_PYTHON` 或 `PAPERBASE_GRAPHIFY_COMMAND`，二选一。切换到 uv 时清除本地目标变量，避免相互冲突。变量只属于本机环境，不写入共享论文配置。
+
+这些设置用于 PaperBase 的 headless 执行、诊断、项目技能查询及相关测试。外部宿主直接运行 `/graphify` 时，宿主也必须采用此处解析到的解释器，不能假定全局 Graphify 技能会自动读取 PaperBase 的 CLI 选项。
+
+如果旧测试报告“推导的解释器路径不存在”，先运行 `graph runtime`；有效的 uv 安装无需重装。命令入口和 Python 位于不同目录是正常情况。
 
 ## 问题 1：Graphify 未发现 Canonical Markdown
 
@@ -22,8 +60,8 @@ PaperBase 的 Graphify 输入只应来自 `library/papers/p_*.md`。不要在图
 Get-ChildItem library/papers -Filter 'p_*.md' -File
 Get-Content library/papers/.graphifyignore
 
-# 先切到 library/papers 目录再运行（用 graphify skill 记录的本机解释器统计识别数）：
-& (Get-Content graphify-out/.graphify_python) -c 'from pathlib import Path; from graphify.detect import detect; print(sum(map(len, detect(Path("."))["files"].values())))'
+# 先切到 library/papers 目录再运行（本机动态解析解释器）：
+& (uv run python -c 'from paperbase.adapters.graphify_runtime import resolveGraphifyRuntime; print(resolveGraphifyRuntime().python)') -c 'from pathlib import Path; from graphify.detect import detect; print(sum(map(len, detect(Path("."))["files"].values())))'
 ```
 
 `.gitignore` 与 `.graphifyignore` 职责不同：前者阻止真实论文进入 Git，后者决定 Graphify 是否扫描本地文件。PaperBase 的 `.graphifyignore` 必须包含 `!p_*.md`；需要阻塞的 Canonical 再用更靠后的精确规则排除。

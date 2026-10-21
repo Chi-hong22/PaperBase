@@ -47,6 +47,7 @@ Agent:
 
 **关键命令**：
 ```bash
+paperbase graph runtime               # 检测安装来源、版本及最终选中 Python
 paperbase ingest <identifier>        # 单篇摄入
 paperbase ingest --file <path>       # 本地 PDF
 paperbase ingest --batch <file>      # 批量摄入
@@ -121,6 +122,8 @@ paperbase graph update --incremental  # 手动 headless 增量更新
 paperbase graph update --force        # 手动 headless 强制重建
 paperbase graph status                # 查看统计
 ```
+
+**Graphify 环境选择**：PaperBase 的 Graphify 调用与测试共享 `resolveGraphifyRuntime()`；`PAPERBASE_GRAPHIFY_SOURCE=auto|local|uv` 控制来源（auto 本地优先再 uv），本地目标可用 `PAPERBASE_GRAPHIFY_PYTHON` 或 `PAPERBASE_GRAPHIFY_COMMAND` 二选一指定。CLI 对应全局选项必须放在子命令前。Agent 使用 Graphify Python API 前，也通过 `from paperbase.adapters.graphify_runtime import resolveGraphifyRuntime` 取得 `.python`，勿由命令父目录推导解释器，勿复用异机 `.graphify_python`。直接调用外部 `/graphify` 时需让宿主采用该解释器；不能假定外部技能自动读取 PaperBase CLI 选项。来源不可用时停止，不安装或换源。详见 `docs/troubleshooting/graphify-issues.md`。
 
 **与 AGENTS.md 的分工**：图谱输入范围（只扫描 `library/papers/p_*.md`，不在建图阶段读取 PDF、URL 或附件，PDF/网页须先经摄入或修复写回 Canonical）、semantic queue 准入、subagents 并行数、扫描根统一、`.graphifyignore` 处理、本地 LLM 隔离与私有语料本地边界等总则，统一维护在仓库根 `AGENTS.md`（Invariants 第 6、10 条），本 skill 不重复；以下只保留 skill 侧操作细节。
 

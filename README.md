@@ -140,6 +140,8 @@ uv run paperbase --help
 graphify --version  # 应显示: graphify, version x.x.x
 ```
 
+用 `uv run paperbase graph runtime` 检查已安装的 Graphify 与选中解释器。默认先选本地安装，再选已有 uv 工具；可通过 `--graphify-source local|uv` 明确选择，独立本地环境可再指定 `--graphify-python`。[安装来源选择与故障排查](docs/troubleshooting/graphify-issues.md#选择-graphify-安装来源)提供完整用法。
+
 ### 首次导入论文（首选 Zotero）
 
 ```bash
