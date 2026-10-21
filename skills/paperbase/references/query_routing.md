@@ -151,9 +151,11 @@ def query_graph(query: str, base_dir: Path) -> str:
     if not (graph_dir / "graph.json").exists():
         return "Graph not found, run 'paperbase graph update'"
     
-    # Call graphify subprocess
+    # Use the selected installation and the adopted graph explicitly
+    from paperbase.adapters.graphify_runtime import resolveGraphifyRuntime
+    runtime = resolveGraphifyRuntime()
     result = subprocess.run(
-        ['graphify', 'query', query],
+        runtime.command + ['query', query, '--graph', str(graph_dir / 'graph.json')],
         capture_output=True,
         text=True,
         timeout=30,
@@ -221,9 +223,9 @@ query = "quantum computing"  # no papers on this topic
 ### Fallback Behavior
 
 ```python
-# Graphify not installed
+# Selected installation unavailable; no installation or source switch
 query = "SLAM 相关论文"
-→ "graphify 未安装，请运行: uv tool install graphify"
+→ "Graphify 不可用: 未找到可用的 Graphify（来源: local）…"
 
 # Graph not built
 query = "深度学习"

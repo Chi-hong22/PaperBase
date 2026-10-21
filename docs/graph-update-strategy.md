@@ -189,6 +189,16 @@ paperbase graph update
 
 ## 内部机制
 
+### 运行环境解析
+
+PaperBase 在启动 Graphify 前调用 `resolveGraphifyRuntime()`，得到来源、实际 Python 和版本，随后以该 Python 执行 `-m graphify`。CLI 更新、doctor、项目技能查询和集成测试共享解析器；环境解析失败发生在建图和清理输出之前。
+
+`auto` 先验证当前解释器与 PATH 中的非 uv 本地环境，再选择已有 uv 工具。命令入口通过 shebang 定位 Python，uv 工具还可通过 `uv tool dir` 与安装记录发现；解释器返回自身身份，并验证 detect、cache 和 CLI 入口。不会用命令父目录拼接 Python，也不会运行可能临时下载的 `uv tool run`。
+
+显式 `local` 或 `uv` 不跨来源回退；指定本地 Python 或命令后也不再改用其他目标。Python 保留标准用户包搜索行为，支持 pip 用户级安装。选择不修改扫描根、论文数据或模型配置；外部宿主直接调用 `/graphify` 时仍需采用所选解释器。
+
+选择步骤、三个环境变量及全局参数位置见 [安装与运行环境选择](installation.md#先检查已有安装再选择来源)。
+
 ### 变化检测
 
 每次图谱更新时，PaperBase 会在 `manifest.json` 中记录：

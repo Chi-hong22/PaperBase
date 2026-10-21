@@ -224,7 +224,7 @@ uv run paperbase doctor
 paper-fetch --version
 
 # 检查 graphify
-graphify --version
+uv run paperbase graph runtime
 
 # 检查 LLM 配置
 uv run paperbase config show

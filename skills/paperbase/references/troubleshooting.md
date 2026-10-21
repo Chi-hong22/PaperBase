@@ -48,6 +48,8 @@ uv --version
 
 ### graphify Not Found
 
+先运行 `paperbase graph runtime` 检查所选来源，不要只凭 PATH 命令存在与否判断。可用本地或 uv 安装无需重装；用全局 `--graphify-source local|uv` 明确选择，未在 PATH 中的本地环境再指定 `--graphify-python`。显式选择缺失不会自动改用其他来源。完整选择步骤见项目 `docs/installation.md`。
+
 **Symptom**:
 ```
 ⚠️  graphify 未找到（可选）
@@ -58,7 +60,7 @@ uv --version
 **Solution**:
 ```bash
 # Install graphify
-uv tool install graphify
+uv tool install graphifyy
 
 # Verify installation
 graphify --version
@@ -723,7 +725,7 @@ df -h .
 
 4. **Keep software updated**:
 ```bash
-uv tool update graphify
+uv tool upgrade graphifyy
 ```
 
 5. **Test commands on one paper first**:

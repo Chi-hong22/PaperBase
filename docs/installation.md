@@ -114,15 +114,65 @@ uv run paperbase ingest --file /path/to/paper.pdf
 **职责**: 构建论文之间的语义关联网络
 **要求**: Agent 模式由宿主 Agent/Graphify skill 完成语义抽取；只有 headless CLI 模式需要 PaperBase 本地 LLM 配置
 
+#### 先检查已有安装，再选择来源
+
+```powershell
+uv run paperbase graph runtime
+```
+
+输出分别报告本地安装、uv 安装是否可用，以及最终选中的来源、版本和 Python。这里的 `uv run` 只是在项目环境中运行 PaperBase，不代表选用了 uv 安装的 Graphify。
+
+| 选择 | 行为 | 用法 |
+|---|---|---|
+| `auto`（默认） | 优先发现可用的本地安装，其次选择已有 uv 工具 | `uv run paperbase --graphify-source auto graph runtime` |
+| `local` | 只用非 uv tool 管理的安装，包括 pip 用户安装、pipx、独立虚拟环境 | `uv run paperbase --graphify-source local graph runtime` |
+| `uv` | 只用已经安装的 uv 工具 | `uv run paperbase --graphify-source uv graph runtime` |
+
+确认选中环境后，把示例末尾的 `graph runtime` 换成实际命令，例如：
+
+```powershell
+uv run paperbase --graphify-source uv graph update --incremental
+
+# 未在 PATH 中的本地环境：替换为真实路径
+uv run paperbase --graphify-source local --graphify-python 'C:\path\to\python.exe' graph runtime
+# 或指定本地 Graphify 命令，与 --graphify-python 二选一
+uv run paperbase --graphify-source local --graphify-command 'C:\path\to\graphify.exe' graph runtime
+```
+
+三个选项都是全局选项，必须位于 `graph`、`doctor` 或 `ingest` 等子命令之前。显式来源或目标不可用时直接报错，不安装、不下载临时环境、不静默换源。自动发现不会遍历磁盘中所有虚拟环境，未被发现的安装请显式指定 Python。
+
+#### 本机默认选择与环境变量
+
+| 环境变量 | 含义 |
+|---|---|
+| `PAPERBASE_GRAPHIFY_SOURCE` | `auto`、`local` 或 `uv`，未设置时为 `auto` |
+| `PAPERBASE_GRAPHIFY_PYTHON` | 独立本地 Python 的路径或命令 |
+| `PAPERBASE_GRAPHIFY_COMMAND` | 独立本地 Graphify 命令或路径，与上一项二选一 |
+
+```powershell
+# 当前 PowerShell 会话默认使用 uv
+$env:PAPERBASE_GRAPHIFY_SOURCE = 'uv'
+uv run paperbase graph runtime
+
+# 如需后续新终端也使用 uv，由使用者执行；不影响已经打开的其他终端
+[Environment]::SetEnvironmentVariable('PAPERBASE_GRAPHIFY_SOURCE', 'uv', 'User')
+```
+
+命令行参数优先于环境变量；切换为 uv 时应清除本地 Python/命令变量。上述选择控制 PaperBase 执行、诊断、项目技能查询和相关测试，不写入共享的 `config/paperbase.yaml`。宿主直接运行外部 `/graphify` 时，仍需采用 PaperBase 解析出的 Python，不能假定外部技能自动读取 PaperBase 的 CLI 选项。详细边界见 [运行环境故障排查](troubleshooting/graphify-issues.md#选择-graphify-安装来源)。
+
+#### 尚未安装时
+
+已有可用安装无需重装。以下 `graphifyy` 是本项目已验证环境的发行包名，安装后提供的命令仍叫 `graphify`。
+
 **安装：**
 ```bash
-uv tool install graphify
+uv tool install graphifyy
 ```
 
 **验证：**
 ```bash
 graphify --version
-# 应显示: graphify 0.9.10+
+uv run paperbase graph runtime
 ```
 
 **推荐的 Agent 路径：**
@@ -164,7 +214,7 @@ PaperBase 遵循 **Unix 哲学**：每个工具做好一件事。
 ```bash
 # 1. 安装工具
 uv tool install zotero-mcp-server
-uv tool install graphify
+uv tool install graphifyy
 
 # 2. 在 Zotero 中整理论文并下载需要的 PDF 附件
 
@@ -185,7 +235,7 @@ uv run paperbase status
 ```bash
 # 1. 安装工具
 uv tool install git+https://github.com/Dictation354/paper-fetch-skill.git
-uv tool install graphify
+uv tool install graphifyy
 
 # 2. 配置 LLM（graphify 需要）
 export PAPERBASE_LLM_API_KEY="sk-..."
@@ -239,6 +289,8 @@ paper-fetch --version
 
 ### graphify 找不到
 
+先用 `uv run paperbase graph runtime` 查看所选来源是否可用；若只缺本地安装而 uv 可用，可由使用者明确选择 `--graphify-source uv`。仅在确认未安装且决定安装后执行以下命令。
+
 **症状：**
 ```
 ⚠️ graphify (optional) not found
@@ -246,7 +298,7 @@ paper-fetch --version
 
 **解决：**
 ```bash
-uv tool install graphify
+uv tool install graphifyy
 graphify --version
 ```
 

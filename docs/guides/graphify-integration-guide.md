@@ -1,6 +1,6 @@
 # Graphify 技术参考
 
-最后更新：2026-07-08
+最后更新：2026-10-21（独立工具命令的历史核查日期在对应段落保留）
 
 本文档只介绍 Graphify。它存放在当前项目中，是为了后续做接口对接、工具调用和工作流设计时，有一份本地可读的技术依据，不再临时猜测或依赖上网搜索。
 
@@ -21,6 +21,8 @@
 - 当前项目的 adapter、状态机、registry、schema 或命令实现。
 - 任何外部论文下载、PDF 转换、Zotero 或业务侧实体提取流程。
 
+**PaperBase 使用者入口**：选择本地/uv Graphify 请看 [安装指南](../installation.md#先检查已有安装再选择来源)，先运行 `uv run paperbase graph runtime`；解析流程见 [图谱更新机制](../graph-update-strategy.md#运行环境解析)。下文裸 `graphify` 示例用于外部工具技术参考，不等同于 PaperBase 已选择的运行环境。
+
 ## 2. 本地依据
 
 优先使用以下本地资料，不要先上网搜索：
@@ -32,7 +34,7 @@
 | Codex skill | `~/.codex/skills/graphify/SKILL.md` | Agent 模式 `/graphify` 工作流 |
 | Agents skill | `~/.agents/skills/graphify/SKILL.md` | 其他 agent 环境中的同类工作流 |
 
-当前本机已验证：
+以下为 2026-07-08 核查记录，不作为当前选中版本的断言；2026-10-21 本机运行环境检查确认 uv Graphify 0.9.42 可用：
 
 ```powershell
 graphify --version
@@ -556,7 +558,7 @@ Agent 模式支持跳过 HTML 可视化：
 
 含义是跳过 visualization，只保留报告和 JSON 等非 HTML 图谱数据。Graphify skill 明确说明默认会生成 HTML，除非传入 `--no-viz`。
 
-本机 Graphify 0.9.10 CLI 中，`cluster-only` 也暴露了 `--no-viz`：
+2026-07-08 核查的 Graphify 0.9.10 CLI 中，`cluster-only` 也暴露了 `--no-viz`：
 
 ```powershell
 graphify cluster-only <path> --no-viz

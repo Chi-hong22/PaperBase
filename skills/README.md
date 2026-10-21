@@ -17,11 +17,11 @@ PaperBase 使用**外部黑盒工具**架构，核心功能通过 CLI 调用独�
 
 ### graphify
 - **定位**: 外部 CLI 工具
-- **安装位置**: 全局（`~/.local/bin/graphify`）
+- **安装来源**: 独立本地 Python 或已有 uv 工具，通过 `paperbase graph runtime` 发现，不假定入口目录
 - **调用方式**: Agent 优先在本机 `library/papers` 目录下使用 `/graphify . --update --no-viz`；手动 headless 备用路径使用 `paperbase graph update`
 - **职责**: 知识图谱构建、语义分析
-- **安装**: `uv tool install graphify`
-- **验证**: `graphify --version`（应显示 0.9.10+）
+- **安装**: `uv tool install graphifyy`
+- **验证与选择**: `paperbase graph runtime`；全局 `--graphify-source auto|local|uv` 放在子命令前，完整用法见 `docs/installation.md`
 - **要求**: Agent 路径不读取 PaperBase 本地 LLM 配置；headless 路径读取 `config/paperbase.yaml`
 
 ### zotero-mcp

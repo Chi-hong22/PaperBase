@@ -127,7 +127,7 @@ echo $PAPERBASE_LIBRARY
 echo $env:PAPERBASE_LIBRARY
 
 # 安装全局工具
-uv tool install graphify  # 知识图谱构建工具（必需）
+uv tool install graphifyy  # 知识图谱构建工具（必需）
 
 # 推荐：优先从 Zotero 导入论文
 uv tool install zotero-mcp-server
@@ -140,7 +140,7 @@ uv run paperbase --help
 graphify --version  # 应显示: graphify, version x.x.x
 ```
 
-用 `uv run paperbase graph runtime` 检查已安装的 Graphify 与选中解释器。默认先选本地安装，再选已有 uv 工具；可通过 `--graphify-source local|uv` 明确选择，独立本地环境可再指定 `--graphify-python`。[安装来源选择与故障排查](docs/troubleshooting/graphify-issues.md#选择-graphify-安装来源)提供完整用法。
+用 `uv run paperbase graph runtime` 检查已安装的 Graphify 与选中解释器。默认先选本地安装，再选已有 uv 工具；全局 `--graphify-source auto|local|uv` 必须放在子命令前，独立本地环境可再指定 `--graphify-python`。例如 `uv run paperbase --graphify-source uv graph runtime`。[安装指南](docs/installation.md#先检查已有安装再选择来源)说明一次性选择、环境变量和本机默认值；[故障排查](docs/troubleshooting/graphify-issues.md#选择-graphify-安装来源)说明缺失行为与调用边界。
 
 ### 首次导入论文（首选 Zotero）
 
@@ -338,7 +338,7 @@ uv run paperbase ingest --file paper.pdf
 
 ```bash
 # 方式 1：通过 uv 全局安装（推荐）
-uv tool install graphify
+uv tool install graphifyy
 
 # 方式 2：访问项目仓库按照说明安装
 # https://github.com/Graphify-Labs/graphify
@@ -829,7 +829,7 @@ uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
 **安装命令**：
 
 ```bash
-uv tool install graphify
+uv tool install graphifyy
 ```
 
 **如果不想使用知识图谱功能**：

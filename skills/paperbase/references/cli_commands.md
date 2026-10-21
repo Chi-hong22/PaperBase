@@ -2,6 +2,18 @@
 
 Complete reference for all PaperBase CLI commands.
 
+## Graphify Global Options
+
+```powershell
+paperbase graph runtime
+paperbase --graphify-source uv graph update --incremental
+paperbase --graphify-source local --graphify-python 'C:\path\to\python.exe' graph runtime
+```
+
+全局选项必须放在子命令前：`--graphify-source auto|local|uv` 选择来源，`--graphify-python` 或 `--graphify-command` 二选一指定本地目标。auto 本地优先再 uv，显式缺失时停止且不安装、不换源。
+
+对应环境变量是 `PAPERBASE_GRAPHIFY_SOURCE`、`PAPERBASE_GRAPHIFY_PYTHON`、`PAPERBASE_GRAPHIFY_COMMAND`；命令行优先。不设置时自动选择；`graph runtime` 只检查，不持久化选择。需跨命令沿用时设置环境变量。外部 `/graphify` 的宿主仍需采用选中的 Python。完整用户步骤见项目 `docs/installation.md`。
+
 ## Core Commands
 
 ### ingest - 摄入论文

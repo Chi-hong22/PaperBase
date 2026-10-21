@@ -55,8 +55,12 @@ graphify 是外部 CLI 工具，用于构建论文语义关联网络。
 
 ### 安装命令
 
+先执行 `paperbase graph runtime` 检查已有安装；本地环境或 uv 工具已可用时无需重装。`uv run` 运行 PaperBase 与 Graphify 来源是两回事，使用全局 `--graphify-source auto|local|uv` 明确来源。本地环境可再用 `--graphify-python` 或 `--graphify-command` 二选一指定。显式缺失不安装、不换源。
+
+发行包名为 `graphifyy`，安装后命令名是 `graphify`。本机默认可用 `PAPERBASE_GRAPHIFY_SOURCE`；本地目标另用 `PAPERBASE_GRAPHIFY_PYTHON` 或 `PAPERBASE_GRAPHIFY_COMMAND`。CLI 优先，所有选项放在子命令前；外部 `/graphify` 仍需宿主采用选中 Python。完整步骤见项目 `docs/installation.md`。
+
 ```bash
-uv tool install graphify
+uv tool install graphifyy
 ```
 
 ### 验证安装
@@ -65,7 +69,7 @@ uv tool install graphify
 graphify --version
 ```
 
-Expected output: `graphify 0.9.10+`
+再运行 `paperbase graph runtime`，确认来源、版本和实际 Python，而不只检查 PATH 中的命令。
 
 ### 推荐的 Agent 工作流
 

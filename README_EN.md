@@ -87,13 +87,25 @@ cd PaperBase
 uv sync
 
 # Install global tools
-uv tool install graphify           # Knowledge graph builder (required)
+uv tool install graphifyy           # Knowledge graph builder (required)
 uv tool install zotero-mcp-server  # Zotero integration (optional)
 
 # Verify installation
 graphify --version
 uv run paperbase --help
 ```
+
+### Select the Graphify installation
+
+Run `uv run paperbase graph runtime` to inspect available installations and the selected source, version and Python. `uv run` starts PaperBase; it does not itself select uv Graphify.
+
+```powershell
+uv run paperbase --graphify-source auto graph runtime
+uv run paperbase --graphify-source uv graph update --incremental
+uv run paperbase --graphify-source local --graphify-python 'C:\path\to\python.exe' graph runtime
+```
+
+Global options go before the subcommand. `auto` prefers a verified local installation, then an existing uv tool. Explicit selection fails without installing or switching sources. Use `PAPERBASE_GRAPHIFY_SOURCE` for the session default, and optionally `PAPERBASE_GRAPHIFY_PYTHON` or `PAPERBASE_GRAPHIFY_COMMAND` for a local target; command-line options take precedence. The latter two are mutually exclusive. Direct external `/graphify` calls require the host to adopt the selected Python. See the [installation guide](docs/installation.md#先检查已有安装再选择来源).
 
 ### Ingest Your First Paper
 
@@ -247,7 +259,7 @@ uv run paperbase ingest --file paper.pdf
 **Installation**:
 ```bash
 # Method 1: Global install via uv (recommended)
-uv tool install graphify
+uv tool install graphifyy
 
 # Method 2: Visit project repository for instructions
 # https://github.com/Graphify-Labs/graphify
@@ -511,7 +523,7 @@ uv run paperbase query related "doi:10.48550/arXiv.1706.03762" --depth 2
 
 **Installation**:
 ```bash
-uv tool install graphify
+uv tool install graphifyy
 ```
 
 **If you don't want to use knowledge graph features**:

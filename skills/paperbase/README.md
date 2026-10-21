@@ -7,6 +7,12 @@ PaperBase 统一交互接口，提供命令包装和查询路由功能。
 1. **命令包装器** - 自动检测库路径，执行 CLI 命令
 2. **查询路由** - 智能路由结构化查询（Registry）和语义查询（Graphify）
 
+## Graphify 安装来源
+
+先运行 `paperbase graph runtime` 查看安装与选中环境。单次选择用 `paperbase --graphify-source auto|local|uv graph runtime`，全局选项放在子命令前；本地独立环境另用 `--graphify-python` 或 `--graphify-command` 二选一指定。auto 本地优先再 uv，显式缺失就停止。
+
+环境变量 `PAPERBASE_GRAPHIFY_SOURCE` 支持跨命令选择；本地目标用 `PAPERBASE_GRAPHIFY_PYTHON` 或 `PAPERBASE_GRAPHIFY_COMMAND`。项目查询路由读取这些变量，外部 `/graphify` 技能仍需宿主采用解析到的 Python。详见 [CLI 参考](references/cli_commands.md#graphify-global-options) 和项目 `docs/installation.md`。
+
 ## 安装
 
 ### 自动安装（推荐）

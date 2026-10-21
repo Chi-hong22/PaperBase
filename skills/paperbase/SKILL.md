@@ -325,7 +325,7 @@ Agent:
   
   步骤 3: 修复建议
     问题 1: graphify 未安装
-      解决: uv tool install graphify
+      解决: uv tool install graphifyy
     问题 2: 2 篇论文待处理
       解决: paperbase graph preflight →（在 library/papers 目录下运行）/graphify . --update --no-viz → paperbase graph adopt
   

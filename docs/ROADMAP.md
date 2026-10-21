@@ -1,6 +1,6 @@
 # PaperBase 开发路线图
 
-> 当前状态更新于 2026-09-12。已实现能力以代码、CLI `--help` 和主题文档为准；下方工作量估算保留为规划参考。
+> 当前状态更新于 2026-10-21。已实现能力以代码、CLI `--help` 和主题文档为准；下方工作量估算保留为规划参考。
 
 ## 🎯 当前版本功能
 
@@ -9,6 +9,7 @@
 - ✅ Canonical Markdown 转换
 - ✅ 全文检索（SQLite FTS5）
 - ✅ 知识图谱构建（基于 graphify）
+- ✅ Graphify auto / local / uv 来源选择与已安装环境诊断；用户步骤见 `docs/installation.md`
 - ✅ 主题查询（query topic）
 - ✅ 自动索引（chunks + FTS5）
 - ✅ 批量摄入模式
