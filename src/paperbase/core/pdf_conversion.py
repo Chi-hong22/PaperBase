@@ -193,38 +193,35 @@ def _progressRemoteConversion(  # noqa: N802
         provider_names.add(name)
 
     remote_candidate: ReadyConversionOutcome | None = None
-    cache_identity: str | None = None
-    if conversion_config.visual.mode != "off":
-        cache_identity = remoteCandidateIdentity(source_pdf, conversion_config)
-        cached = loadRemoteCandidate(source_pdf, cache_identity)
-        if cached is not None and cached["converter"] in {
-            f"oxr:{provider.name.strip()}" for provider in providers
-        }:
-            remote_candidate = ReadyConversionOutcome(**cached)
+    cache_identity = remoteCandidateIdentity(source_pdf, conversion_config)
+    cached = loadRemoteCandidate(source_pdf, cache_identity)
+    if cached is not None and cached["converter"] in {
+        f"oxr:{provider.name.strip()}" for provider in providers
+    }:
+        remote_candidate = ReadyConversionOutcome(**cached)
 
     if remote_candidate is None:
         remote_outcome = _parseRemoteProviders(source_pdf, providers)
         if not isinstance(remote_outcome, ReadyConversionOutcome):
             return remote_outcome
         remote_candidate = remote_outcome
-        if cache_identity is not None:
-            try:
-                saveRemoteCandidate(
-                    source_pdf,
-                    cache_identity,
-                    markdown=remote_candidate.markdown,
-                    assets=remote_candidate.assets,
-                    converter=remote_candidate.converter or "",
-                    converter_version=remote_candidate.converter_version or "unknown",
-                    page_data=remote_candidate.page_data,
+        try:
+            saveRemoteCandidate(
+                source_pdf,
+                cache_identity,
+                markdown=remote_candidate.markdown,
+                assets=remote_candidate.assets,
+                converter=remote_candidate.converter or "",
+                converter_version=remote_candidate.converter_version or "unknown",
+                page_data=remote_candidate.page_data,
+            )
+        except OSError:
+            return FailedConversionOutcome(
+                error=PdfConversionError(
+                    code="remote_candidate_cache_failed",
+                    message="could not save remote candidate for visual review resumption",
                 )
-            except OSError:
-                return FailedConversionOutcome(
-                    error=PdfConversionError(
-                        code="remote_candidate_cache_failed",
-                        message="could not save remote candidate for visual review resumption",
-                    )
-                )
+            )
 
     if conversion_config.visual.mode == "off":
         return remote_candidate

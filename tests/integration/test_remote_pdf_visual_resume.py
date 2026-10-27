@@ -461,3 +461,82 @@ def test_remote_visual_warning_rereview_adopts_without_reupload_and_cleans_cache
         assert not list((paper_paths.paper_dir / ".visual-runs").glob("*/run.json"))
     finally:
         service.close()
+
+
+def test_remote_visual_off_resumes_candidate_after_canonical_gate_review(monkeypatch, tmp_path):
+    service = _OxrService()
+    try:
+        base_dir = tmp_path / "library"
+        config_dir = base_dir / "config"
+        config_dir.mkdir(parents=True)
+        config_path = config_dir / "paperbase.yaml"
+        config_path.write_text(
+            f"""graph:
+  advanced:
+    minimum_canonical_body_chars: 1000
+conversion:
+  pdf:
+    parser: remote
+    visual:
+      mode: "off"
+    remote:
+      providers:
+        - name: primary
+          provider: oxr
+          base_url: {service.base_url}
+          api_key: test-secret
+          timeout: 5
+""",
+            encoding="utf-8",
+        )
+        service.response = {
+            "code": 0,
+            "data": {
+                "result": {
+                    "outputs": {
+                        "markdown": "# Short remote candidate\n\nToo short.",
+                        "json": {"pages": [{"page_num": 1, "blocks": []}]},
+                    }
+                }
+            },
+        }
+        input_pdf = tmp_path / "short-paper.pdf"
+        _write_pdf(input_pdf)
+        monkeypatch.setattr(
+            ingest_command,
+            "extract_pdf_metadata",
+            lambda _path: {
+                "title": "Short remote candidate",
+                "authors": ["Ada Lovelace"],
+                "year": 2026,
+                "doi": "10.1234/short-remote-candidate",
+                "abstract": "Synthetic metadata for the Canonical gate test.",
+            },
+        )
+        paper_paths = PaperPaths(
+            storage_id=generate_storage_id(normalize_paper_id("10.1234/short-remote-candidate")),
+            base_dir=base_dir,
+        )
+
+        def invoke():
+            return CliRunner().invoke(
+                main,
+                ["--base-dir", str(base_dir), "ingest", "--file", str(input_pdf), "--no-graph"],
+            )
+
+        first = invoke()
+        assert first.exit_code == 0, first.output
+        assert "Canonical 采用前门禁失败" in first.output
+        assert len(service.requests) == 1
+        assert (paper_paths.paper_dir / ".remote-candidate.json").is_file()
+        assert load_manifest(paper_paths.manifest_json).state == PaperState.NEEDS_REVIEW
+
+        repeated = invoke()
+
+        assert repeated.exit_code == 0, repeated.output
+        assert "Canonical 采用前门禁失败" in repeated.output
+        assert len(service.requests) == 1
+        assert not paper_paths.paper_md.exists()
+        assert load_manifest(paper_paths.manifest_json).state == PaperState.NEEDS_REVIEW
+    finally:
+        service.close()
