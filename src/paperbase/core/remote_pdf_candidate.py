@@ -37,7 +37,7 @@ def remoteCandidateIdentity(  # noqa: N802
 
 
 def loadRemoteCandidate(source_pdf: Path, identity: str) -> dict[str, object] | None:  # noqa: N802
-    cache_path = _cache_path(source_pdf)
+    cache_path = _cachePath(source_pdf)
     if cache_path is None or isPathReparsePoint(cache_path) or not cache_path.is_file():
         return None
     try:
@@ -59,7 +59,7 @@ def loadRemoteCandidate(source_pdf: Path, identity: str) -> dict[str, object] | 
         or not isinstance(converter, str)
         or not isinstance(converter_version, str)
         or (page_data is not None and not isinstance(page_data, dict))
-        or not _assets_exist(source_pdf, assets)
+        or not _assetsExist(source_pdf, assets)
     ):
         return None
     return {
@@ -81,7 +81,7 @@ def saveRemoteCandidate(  # noqa: N802
     converter_version: str,
     page_data: dict[str, object] | None,
 ) -> None:
-    cache_path = _cache_path(source_pdf)
+    cache_path = _cachePath(source_pdf)
     if cache_path is None:
         return
     payload = {
@@ -119,14 +119,14 @@ def clearRemoteCandidate(paper_dir: Path) -> None:  # noqa: N802
     cache_path.unlink(missing_ok=True)
 
 
-def _cache_path(source_pdf: Path) -> Path | None:
+def _cachePath(source_pdf: Path) -> Path | None:  # noqa: N802
     source_pdf = Path(source_pdf)
     if source_pdf.name != "source.pdf" or source_pdf.parent.name != "source":
         return None
     return source_pdf.parent.parent / CACHE_FILENAME
 
 
-def _assets_exist(source_pdf: Path, assets: list[str]) -> bool:
+def _assetsExist(source_pdf: Path, assets: list[str]) -> bool:  # noqa: N802
     assets_root = source_pdf.parent.parent / "assets"
     if not assets:
         return True

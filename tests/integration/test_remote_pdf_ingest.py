@@ -14,6 +14,7 @@ from paperbase.config.loader import load_config
 from paperbase.core.identity import generate_storage_id, normalize_paper_id
 from paperbase.core.manifest import load_manifest
 from paperbase.core.paths import PaperPaths
+from paperbase.utils.markdown import parse_frontmatter
 
 PNG_BYTES = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
@@ -120,8 +121,13 @@ def test_local_ingest_uses_remote_config_and_preserves_local_and_online_routes(m
         )
         remote_manifest = load_manifest(remote_paths.manifest_json)
         canonical = remote_paths.paper_md.read_text(encoding="utf-8")
+        frontmatter, _ = parse_frontmatter(canonical)
         assert "Title from remote-paper" in canonical
         assert "doi:10.1234/remote-paper" in canonical
+        assert frontmatter["provenance"]["converter"] == {
+            "name": "oxr:primary",
+            "version": "unknown",
+        }
         assert remote_manifest.pipeline.converter == "oxr:primary"
         assert remote_manifest.pipeline.converter_version == "unknown"
         asset_path = next((remote_paths.paper_dir / "assets").glob("oxr-*.png"))

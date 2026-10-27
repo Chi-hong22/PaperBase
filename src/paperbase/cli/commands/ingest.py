@@ -695,6 +695,9 @@ def _ingest_local_pdf(
             storage_id=storage_id,
             source_provider=getattr(conversion_outcome, "converter", None) or "markitdown"
         )
+        converter_version = getattr(conversion_outcome, "converter_version", None)
+        if converter_version is not None:
+            paper_metadata.provenance.converter["version"] = converter_version
 
         # Step 7: 生成标准格式文档
         console.print("[yellow]7. 生成标准格式文档...[/yellow]")
@@ -1004,6 +1007,9 @@ def _ingest_from_zotero(
                     storage_id=storage_id,
                     source_provider=f"zotero+{getattr(conversion_outcome, 'converter', None) or 'markitdown'}"
                 )
+                converter_version = getattr(conversion_outcome, "converter_version", None)
+                if converter_version is not None:
+                    paper_metadata.provenance.converter["version"] = converter_version
                 if merged_metadata.get("abstract"):
                     paper_metadata.abstract = merged_metadata["abstract"]
                 if merged_metadata.get("doi") or merged_metadata.get("arxiv"):
