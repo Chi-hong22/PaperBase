@@ -91,7 +91,7 @@ def test_local_ingest_uses_remote_config_and_preserves_local_and_online_routes(m
             },
         }
 
-        def metadata_for_pdf(path: Path):
+        def metadataForPdf(path: Path):  # noqa: N802
             return {
                 "title": f"Title from {path.stem}",
                 "authors": ["Ada Lovelace"],
@@ -100,7 +100,7 @@ def test_local_ingest_uses_remote_config_and_preserves_local_and_online_routes(m
                 "abstract": "Source metadata remains authoritative.",
             }
 
-        monkeypatch.setattr(ingest_command, "extract_pdf_metadata", metadata_for_pdf)
+        monkeypatch.setattr(ingest_command, "extract_pdf_metadata", metadataForPdf)
         remote_pdf = tmp_path / "remote-paper.pdf"
         remote_pdf.write_bytes(b"%PDF-1.4 synthetic remote source")
 
@@ -137,12 +137,12 @@ def test_local_ingest_uses_remote_config_and_preserves_local_and_online_routes(m
         local_calls = []
         local_markdown = "# Local conversion\n\n" + ("Local body content. " * 60)
 
-        def local_converter(source_pdf):
+        def localConverter(source_pdf):  # noqa: N802
             local_calls.append(source_pdf)
             return local_markdown
 
         monkeypatch.setattr(
-            "paperbase.core.pdf_conversion.convert_pdf_to_markdown", local_converter
+            "paperbase.core.pdf_conversion.convert_pdf_to_markdown", localConverter
         )
         local_pdf = tmp_path / "local-override.pdf"
         local_pdf.write_bytes(b"%PDF-1.4 synthetic local source")

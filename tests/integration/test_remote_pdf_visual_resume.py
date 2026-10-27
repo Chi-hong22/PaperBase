@@ -28,7 +28,7 @@ PNG_BYTES = bytes.fromhex(
 PAPER_DOI = "10.1234/remote-visual-resume"
 
 
-def _write_pdf(path: Path, text: str = "Synthetic source page") -> None:
+def _writePdf(path: Path, text: str = "Synthetic source page") -> None:  # noqa: N802
     path.parent.mkdir(parents=True, exist_ok=True)
     document = pymupdf.open()
     try:
@@ -115,13 +115,13 @@ class _OxrService:
         self.thread.join()
 
 
-def _read_json(path: Path) -> dict[str, object]:
+def _readJson(path: Path) -> dict[str, object]:  # noqa: N802
     value = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(value, dict)
     return value
 
 
-def _write_worker_result(
+def _writeWorkerResult(  # noqa: N802
     task_dir: Path,
     *,
     warnings: list[str] | None = None,
@@ -129,7 +129,7 @@ def _write_worker_result(
     blocked: bool = False,
     candidate_images: str = "",
 ) -> None:
-    task = _read_json(task_dir / "task.json")
+    task = _readJson(task_dir / "task.json")
     run = task["run"]
     chunk = task["chunk"]
     assert isinstance(run, dict)
@@ -162,7 +162,7 @@ def _write_worker_result(
     (task_dir / "result.md").write_text(markdown, encoding="utf-8")
 
 
-def _write_all_worker_results(
+def _writeAllWorkerResults(  # noqa: N802
     run_dir: Path,
     *,
     warning: bool = False,
@@ -177,9 +177,9 @@ def _write_all_worker_results(
     )
     for index, task_dir in enumerate(task_dirs):
         if blocked:
-            _write_worker_result(task_dir, blocked=True)
+            _writeWorkerResult(task_dir, blocked=True)
         elif warning and index == 0:
-            _write_worker_result(
+            _writeWorkerResult(
                 task_dir,
                 warnings=["Formula requires explicit confirmation."],
                 crop_requests=[
@@ -188,11 +188,11 @@ def _write_all_worker_results(
                 candidate_images=candidate_images,
             )
         else:
-            _write_worker_result(task_dir, candidate_images=candidate_images)
+            _writeWorkerResult(task_dir, candidate_images=candidate_images)
 
 
-def _write_boundary_result(task_package: Path) -> None:
-    task = _read_json(task_package / "task.json")
+def _writeBoundaryResult(task_package: Path) -> None:  # noqa: N802
+    task = _readJson(task_package / "task.json")
     run = task["run"]
     items = task["items"]
     assert isinstance(run, dict)
@@ -214,14 +214,14 @@ def test_remote_auto_resume_uses_rotated_key_and_keeps_oxr_result(tmp_path):
     service = _OxrService()
     try:
         source_pdf = tmp_path / "paper" / "source" / "source.pdf"
-        _write_pdf(source_pdf)
+        _writePdf(source_pdf)
         config = _config(service.base_url, "auto")
 
         handoff = progressPdfConversion(source_pdf, config)
         assert isinstance(handoff, AgentActionRequiredOutcome)
         assert handoff.task_package.parent.name == ".visual-auto-audit"
         candidate_markdown = (handoff.task_package / "candidate.md").read_text(encoding="utf-8")
-        task = _read_json(handoff.task_package / "task.json")
+        task = _readJson(handoff.task_package / "task.json")
         schema = task["worker_output"]["schema"]
         (handoff.task_package / "result.json").write_text(
             json.dumps(
@@ -266,7 +266,7 @@ def test_remote_profile_identity_invalidates_cache_without_deleting_old_assets(t
     service = _OxrService()
     try:
         source_pdf = tmp_path / "paper" / "source" / "source.pdf"
-        _write_pdf(source_pdf)
+        _writePdf(source_pdf)
         primary = _provider(service.base_url, "primary")
         config = _config(service.base_url, "always", [primary])
 
@@ -315,11 +315,11 @@ def test_remote_profile_identity_invalidates_cache_without_deleting_old_assets(t
         ordered_candidate = progressPdfConversion(source_pdf, reordered)
         assert isinstance(ordered_candidate, AgentActionRequiredOutcome)
         assert len(service.requests) == 4
-        stored_candidate = _read_json(source_pdf.parent.parent / ".remote-candidate.json")
+        stored_candidate = _readJson(source_pdf.parent.parent / ".remote-candidate.json")
         assert stored_candidate["converter"] == "oxr:secondary"
         assert first_assets[0].is_file()
 
-        _write_pdf(source_pdf, text="Changed source bytes")
+        _writePdf(source_pdf, text="Changed source bytes")
         changed_source = progressPdfConversion(source_pdf, reordered)
         assert isinstance(changed_source, AgentActionRequiredOutcome)
         assert len(service.requests) == 5
@@ -332,7 +332,7 @@ def test_remote_visual_quality_failure_does_not_call_next_profile(tmp_path):
     service = _OxrService()
     try:
         source_pdf = tmp_path / "paper" / "source" / "source.pdf"
-        _write_pdf(source_pdf)
+        _writePdf(source_pdf)
         config = _config(
             service.base_url,
             "always",
@@ -344,14 +344,14 @@ def test_remote_visual_quality_failure_does_not_call_next_profile(tmp_path):
 
         handoff = progressPdfConversion(source_pdf, config)
         assert isinstance(handoff, AgentActionRequiredOutcome)
-        _write_all_worker_results(handoff.task_package, blocked=True)
+        _writeAllWorkerResults(handoff.task_package, blocked=True)
 
         failed = progressPdfConversion(source_pdf, config)
 
         assert isinstance(failed, FailedConversionOutcome)
         assert failed.error.code == "visual_quality_blocked"
         assert len(service.requests) == 1
-        cached = _read_json(source_pdf.parent.parent / ".remote-candidate.json")
+        cached = _readJson(source_pdf.parent.parent / ".remote-candidate.json")
         assert cached["converter"] == "oxr:primary"
     finally:
         service.close()
@@ -386,7 +386,7 @@ def test_remote_visual_warning_rereview_adopts_without_reupload_and_cleans_cache
             encoding="utf-8",
         )
         input_pdf = tmp_path / "input.pdf"
-        _write_pdf(input_pdf)
+        _writePdf(input_pdf)
         monkeypatch.setattr(
             ingest_command,
             "extract_pdf_metadata",
@@ -419,7 +419,7 @@ def test_remote_visual_warning_rereview_adopts_without_reupload_and_cleans_cache
             for path in (paper_paths.paper_dir / ".visual-runs").iterdir()
             if (path / "run.json").is_file()
         )
-        _write_all_worker_results(
+        _writeAllWorkerResults(
             run_dir,
             warning=True,
         )
@@ -429,7 +429,7 @@ def test_remote_visual_warning_rereview_adopts_without_reupload_and_cleans_cache
         assert len(service.requests) == 1
         boundary_dir = run_dir / "boundary-review"
         assert boundary_dir.is_dir()
-        _write_boundary_result(boundary_dir)
+        _writeBoundaryResult(boundary_dir)
 
         warning_result = invoke("--no-graph")
         assert warning_result.exit_code == 0, warning_result.output
@@ -442,7 +442,7 @@ def test_remote_visual_warning_rereview_adopts_without_reupload_and_cleans_cache
         assert "boundary-review" in rereview.output
         assert cache_path.is_file()
         assert len(service.requests) == 1
-        _write_boundary_result(boundary_dir)
+        _writeBoundaryResult(boundary_dir)
 
         adopted = invoke("--accept-visual-warnings", "--no-graph")
 
@@ -501,7 +501,7 @@ conversion:
             },
         }
         input_pdf = tmp_path / "short-paper.pdf"
-        _write_pdf(input_pdf)
+        _writePdf(input_pdf)
         monkeypatch.setattr(
             ingest_command,
             "extract_pdf_metadata",
