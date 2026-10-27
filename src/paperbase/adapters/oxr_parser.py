@@ -69,7 +69,7 @@ def parseWithOxr(source_pdf: Path, provider: RemotePdfProviderConfig) -> OxrCand
     try:
         payload = json.loads(raw_body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise OxrCandidateError("OXR 响应不是有效 JSON", transient=True) from exc
+        raise OxrCandidateError("OXR 响应不是有效 JSON") from exc
     if not isinstance(payload, dict):
         raise OxrCandidateError("OXR 响应结构无效")
     if type(payload.get("code")) is not int or payload["code"] != 0:

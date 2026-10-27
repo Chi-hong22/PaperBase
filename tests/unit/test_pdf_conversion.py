@@ -29,6 +29,7 @@ def oxr_service():
         "requests": [],
         "image_requests": [],
         "responses": [],
+        "raw_responses": [],
         "statuses": [],
         "response": {},
         "status": 200,
@@ -44,9 +45,10 @@ def oxr_service():
                     "body": self.rfile.read(length),
                 }
             )
+            raw_payload = state["raw_responses"].pop(0) if state["raw_responses"] else None
             payload_data = state["responses"].pop(0) if state["responses"] else state["response"]
             status = state["statuses"].pop(0) if state["statuses"] else state["status"]
-            payload = json.dumps(payload_data).encode("utf-8")
+            payload = raw_payload or json.dumps(payload_data).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
@@ -409,6 +411,21 @@ class TestPdfConversionRemote:
         assert "private-code" not in outcome.error.message
         assert "private response" not in outcome.error.message
         assert len(oxr_service["requests"]) == 2
+
+    def test_remote_mode_reports_invalid_json_as_permanent(self, tmp_path, oxr_service):
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        oxr_service["raw_responses"] = [b"not-json"]
+        conversion_config = remoteConversionConfig(
+            oxr_service, [remoteProvider(oxr_service, "invalid-json")]
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, FailedConversionOutcome)
+        assert outcome.error.code == "remote_all_profiles_failed"
+        assert "invalid-json" in outcome.error.message
+        assert "响应不是有效 JSON" in outcome.error.message
 
     def test_remote_mode_cleans_failed_profile_assets_before_next_profile(
         self, tmp_path, oxr_service
