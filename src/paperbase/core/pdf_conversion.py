@@ -5,14 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypeAlias
+from urllib.parse import urlparse
 
+from paperbase.adapters.oxr_parser import OxrCandidateError, parseWithOxr
 from paperbase.adapters.pdf_converter import convert_pdf_to_markdown
 from paperbase.config.models import PdfConversionConfig
 from paperbase.core.pdf_auto_audit import prepareOrProgressPdfAutoAudit
 from paperbase.core.visual_progress import prepareOrProgressVisualConversion
 
 if TYPE_CHECKING:
-    from paperbase.config.models import VisualPdfConfig
+    from paperbase.config.models import RemotePdfProviderConfig, VisualPdfConfig
 
 
 def _validate_asset_path(asset_path: str) -> None:
@@ -41,6 +43,9 @@ class ReadyConversionOutcome:
 
     markdown: str
     assets: tuple[str, ...] = ()
+    converter: str | None = None
+    converter_version: str | None = None
+    page_data: dict[str, object] | None = None
     kind: Literal["ready"] = field(default="ready", init=False)
 
     def __post_init__(self) -> None:
@@ -99,6 +104,9 @@ def progressPdfConversion(  # noqa: N802
     re_review: bool = False,
 ) -> PdfConversionOutcome:
     """推进一次 PDF 转换，而不绑定具体 Agent Host。"""
+    if conversion_config.parser == "remote":
+        return _progressRemoteConversion(source_pdf, conversion_config)
+
     visual_config = conversion_config.visual
 
     if visual_config.mode != "off":
@@ -170,6 +178,78 @@ def progressPdfConversion(  # noqa: N802
         )
 
     return ReadyConversionOutcome(markdown=markdown)
+
+
+def _progressRemoteConversion(  # noqa: N802
+    source_pdf: Path,
+    conversion_config: PdfConversionConfig,
+) -> PdfConversionOutcome:
+    """在 visual 关闭时用单条 OXR 配置取得远程解析候选。"""
+    if conversion_config.visual.mode != "off":
+        return FailedConversionOutcome(
+            error=PdfConversionError(
+                code="remote_visual_unsupported",
+                message="remote PDF parsing does not support visual review yet",
+            )
+        )
+
+    providers = conversion_config.remote.providers
+    if not providers:
+        return FailedConversionOutcome(
+            error=PdfConversionError(
+                code="remote_config_invalid",
+                message="remote PDF parsing requires conversion.pdf.remote.providers",
+            )
+        )
+    if len(providers) > 1:
+        return FailedConversionOutcome(
+            error=PdfConversionError(
+                code="remote_multiple_providers_unsupported",
+                message="remote PDF parsing supports a single provider configuration",
+            )
+        )
+
+    provider = providers[0]
+    problem = _remoteProviderProblem(provider)
+    if problem is not None:
+        return FailedConversionOutcome(
+            error=PdfConversionError(code="remote_config_invalid", message=problem)
+        )
+
+    try:
+        candidate = parseWithOxr(source_pdf, provider)
+    except OxrCandidateError as exc:
+        return FailedConversionOutcome(
+            error=PdfConversionError(
+                code="remote_transient_failure" if exc.transient else "remote_parsing_failed",
+                message=str(exc),
+            )
+        )
+
+    return ReadyConversionOutcome(
+        markdown=candidate.markdown,
+        assets=candidate.assets,
+        converter=f"oxr:{provider.name}",
+        converter_version="unknown",
+        page_data=candidate.page_data,
+    )
+
+
+def _remoteProviderProblem(provider: RemotePdfProviderConfig) -> str | None:  # noqa: N802
+    """返回远程配置问题；消息只含配置名与字段，不含密钥。"""
+    name = provider.name.strip()
+    if not name:
+        return "remote provider requires a name"
+    if provider.provider != "oxr":
+        return f"remote provider {name} is not supported"
+    parsed_url = urlparse(provider.base_url)
+    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+        return f"remote provider {name} requires an http(s) base_url"
+    if provider.timeout is None or provider.timeout <= 0:
+        return f"remote provider {name} requires a positive timeout"
+    if not provider.api_key or provider.api_key.startswith("$"):
+        return f"remote provider {name} requires an api_key environment reference"
+    return None
 
 
 def _progressVisualConversion(  # noqa: N802

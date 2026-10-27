@@ -1,6 +1,9 @@
 """PDF 转换统一结果与本地回退路径测试。"""
 
+import base64
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pymupdf
@@ -16,6 +19,292 @@ from paperbase.core.pdf_conversion import (
     ReadyConversionOutcome,
     progressPdfConversion,
 )
+
+
+@pytest.fixture
+def oxr_service():
+    """Capture OXR POST requests and reply with a controllable JSON body."""
+    state: dict = {"requests": [], "image_requests": [], "response": {}, "status": 200}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", "0"))
+            state["requests"].append(
+                {
+                    "path": self.path,
+                    "content_type": self.headers.get("Content-Type", ""),
+                    "body": self.rfile.read(length),
+                }
+            )
+            payload = json.dumps(state["response"]).encode("utf-8")
+            self.send_response(state["status"])
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def do_GET(self):
+            state["image_requests"].append(self.path)
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(state["image_bytes"])))
+            self.end_headers()
+            self.wfile.write(state["image_bytes"])
+
+        def log_message(self, format, *args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    state["base_url"] = f"http://127.0.0.1:{server.server_address[1]}/v1"
+    state["image_url"] = f"http://127.0.0.1:{server.server_address[1]}/figure.png"
+    state["image_bytes"] = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000b49444154789c636000020000050001a5f645400000000049454e44ae426082"
+    )
+    try:
+        yield state
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+class TestPdfConversionRemote:
+    """远程解析入口的最小合同测试。"""
+
+    def test_remote_mode_returns_oxr_markdown(self, tmp_path, oxr_service):
+        """显式 remote+visual.off 时通过真实适配器请求 OXR 并返回其正文。"""
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        remote_markdown = "# Remote candidate\n\nParsed body."
+        oxr_service["response"] = {
+            "code": 0,
+            "message": "任务成功",
+            "warnings": [],
+            "data": {
+                "task_id": "00000000-0000-0000-0000-000000000000",
+                "error": None,
+                "result": {
+                    "file_name": "paper.pdf",
+                    "outputs": {
+                        "markdown": remote_markdown,
+                        "json": {"pages": []},
+                    },
+                },
+                "metadata": {
+                    "page_num": 1,
+                    "file_type": ".pdf",
+                    "processing_time_ms": 5,
+                },
+            },
+        }
+        conversion_config = PdfConversionConfig.model_validate(
+            {
+                "parser": "remote",
+                "visual": {"mode": "off"},
+                "remote": {
+                    "providers": [
+                        {
+                            "name": "test-oxr",
+                            "provider": "oxr",
+                            "base_url": oxr_service["base_url"],
+                            "api_key": "dummy-test-key",
+                            "timeout": 5,
+                        }
+                    ]
+                },
+            }
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, ReadyConversionOutcome)
+        assert outcome.markdown == remote_markdown
+        assert outcome.assets == ()
+        assert outcome.converter == "oxr:test-oxr"
+        assert outcome.converter_version == "unknown"
+        assert outcome.page_data == {"pages": []}
+        assert len(oxr_service["requests"]) == 1
+        request = oxr_service["requests"][0]
+        assert request["path"] == "/v1/parse/sync"
+        assert request["content_type"].startswith("multipart/form-data")
+        body = request["body"]
+        assert b'name="file"' in body
+        assert b'filename="document.pdf"' in body
+        assert body.count(b'name="output_formats"') == 2
+        assert b"\r\nmarkdown\r\n" in body
+        assert b"\r\njson\r\n" in body
+        assert b'name="api_key"' in body
+        assert b"dummy-test-key" in body
+
+    @pytest.mark.parametrize("image_kind", ["base64", "url", "url_title", "html_url"])
+    def test_remote_mode_localizes_oxr_images(self, tmp_path, oxr_service, image_kind):
+        """OXR 图片正文引用必须在 Ready 结果中指向可读的本地资产。"""
+        source_dir = tmp_path / "paper" / "source"
+        source_dir.mkdir(parents=True)
+        source_pdf = source_dir / "source.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        image_ref = (
+            f"data:image/png;base64,{base64.b64encode(oxr_service['image_bytes']).decode()}"
+            if image_kind == "base64"
+            else oxr_service["image_url"]
+        )
+        if image_kind == "html_url":
+            remote_markdown = f'<table><img src="{image_ref}"></table>'
+        elif image_kind == "url_title":
+            remote_markdown = f'# Remote candidate\n\n![figure]({image_ref} "figure title")'
+        else:
+            remote_markdown = f"# Remote candidate\n\n![figure]({image_ref})"
+        oxr_service["response"] = {
+            "code": 0,
+            "data": {
+                "result": {
+                    "outputs": {
+                        "markdown": remote_markdown,
+                        "json": {
+                            "pages": [
+                                {
+                                    "page_num": 0,
+                                    "page_size": [100, 200],
+                                    "blocks": [
+                                        {"type": "Picture", "content": f"![figure]({image_ref})"}
+                                    ],
+                                }
+                            ]
+                        },
+                    }
+                }
+            },
+        }
+        conversion_config = PdfConversionConfig.model_validate(
+            {
+                "parser": "remote",
+                "visual": {"mode": "off"},
+                "remote": {
+                    "providers": [
+                        {
+                            "name": "test-oxr",
+                            "provider": "oxr",
+                            "base_url": oxr_service["base_url"],
+                            "api_key": "dummy-test-key",
+                            "timeout": 5,
+                        }
+                    ]
+                },
+            }
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, ReadyConversionOutcome)
+        assert len(outcome.assets) == 1
+        expected_markdown = (
+            f'<table><img src="{outcome.assets[0]}"></table>'
+            if image_kind == "html_url"
+            else (
+                f'# Remote candidate\n\n![figure]({outcome.assets[0]} "figure title")'
+                if image_kind == "url_title"
+                else f"# Remote candidate\n\n![figure]({outcome.assets[0]})"
+            )
+        )
+        assert outcome.markdown == expected_markdown
+        asset_path = source_dir.parent / "assets" / outcome.assets[0].removeprefix("./assets/")
+        assert asset_path.is_file()
+        assert asset_path.read_bytes() == oxr_service["image_bytes"]
+        assert oxr_service["image_requests"] == ([] if image_kind == "base64" else ["/figure.png"])
+        assert outcome.page_data["pages"][0]["page_num"] == 0
+        assert outcome.page_data["pages"][0]["page_size"] == [100, 200]
+        assert (
+            outcome.page_data["pages"][0]["blocks"][0]["content"]
+            == f"![figure]({outcome.assets[0]})"
+        )
+
+    def test_remote_mode_hides_service_error_payload(self, tmp_path, oxr_service):
+        """远端错误只返回安全分类，不把任意服务响应写入错误消息。"""
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        oxr_service["status"] = 200
+        oxr_service["response"] = {"code": "secret-key-from-server", "message": "private"}
+        conversion_config = PdfConversionConfig.model_validate(
+            {
+                "parser": "remote",
+                "visual": {"mode": "off"},
+                "remote": {
+                    "providers": [
+                        {
+                            "name": "test-oxr",
+                            "provider": "oxr",
+                            "base_url": oxr_service["base_url"],
+                            "api_key": "dummy-test-key",
+                            "timeout": 5,
+                        }
+                    ]
+                },
+            }
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, FailedConversionOutcome)
+        assert "secret-key-from-server" not in outcome.error.message
+        assert "private" not in outcome.error.message
+        assert "dummy-test-key" not in outcome.error.message
+
+    @pytest.mark.parametrize("image_kind", ["base64", "corrupt_png", "local_path"])
+    def test_remote_mode_rejects_unmaterializable_image(
+        self, tmp_path, oxr_service, image_kind
+    ):
+        """无法解码的图片和服务端本机路径不能作为候选稿采用。"""
+        source_dir = tmp_path / "paper" / "source"
+        source_dir.mkdir(parents=True)
+        source_pdf = source_dir / "source.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        if image_kind == "base64":
+            image_ref = "data:image/png;base64,not-base64!"
+        elif image_kind == "corrupt_png":
+            oxr_service["image_bytes"] = b"not a PNG"
+            image_ref = oxr_service["image_url"]
+        else:
+            local_image = tmp_path / "private figure.png"
+            local_image.write_bytes(oxr_service["image_bytes"])
+            image_ref = f"<{local_image.as_posix()}>"
+        oxr_service["response"] = {
+            "code": 0,
+            "data": {
+                "result": {
+                    "outputs": {
+                        "markdown": f"![figure]({image_ref})",
+                        "json": {"pages": []},
+                    }
+                }
+            },
+        }
+        conversion_config = PdfConversionConfig.model_validate(
+            {
+                "parser": "remote",
+                "visual": {"mode": "off"},
+                "remote": {
+                    "providers": [
+                        {
+                            "name": "test-oxr",
+                            "provider": "oxr",
+                            "base_url": oxr_service["base_url"],
+                            "api_key": "dummy-test-key",
+                            "timeout": 5,
+                        }
+                    ]
+                },
+            }
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, FailedConversionOutcome)
+        assert outcome.error.code == "remote_parsing_failed"
+        assert not (source_dir.parent / "assets").exists()
+        assert oxr_service["image_requests"] == ([] if image_kind != "corrupt_png" else ["/figure.png"])
 
 
 class TestPdfConversionOutcomes:

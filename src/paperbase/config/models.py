@@ -231,12 +231,34 @@ class VisualPdfConfig(BaseModel):
     retry: int = Field(default=1, ge=0, le=1)
 
 
+class RemotePdfProviderConfig(BaseModel):
+    """远程 PDF 解析服务配置项。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = ""
+    provider: str = ""
+    base_url: str = ""
+    api_key: str = Field(default="", repr=False)
+    timeout: float | None = None
+
+
+class RemotePdfConfig(BaseModel):
+    """远程 PDF 解析配置。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    providers: list[RemotePdfProviderConfig] = Field(default_factory=list)
+
+
 class PdfConversionConfig(BaseModel):
     """PDF 转换配置。"""
 
     model_config = ConfigDict(extra="forbid")
 
+    parser: Literal["local", "remote"] = "local"
     visual: VisualPdfConfig = Field(default_factory=VisualPdfConfig)
+    remote: RemotePdfConfig = Field(default_factory=RemotePdfConfig)
 
 
 class ConversionConfig(BaseModel):
