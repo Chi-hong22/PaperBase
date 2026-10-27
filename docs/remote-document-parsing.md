@@ -1,44 +1,28 @@
 # 远程文档解析
 
-状态：设计访谈草案，尚未实现。文中已确认的范围不代表已有运行能力。
+状态：OXR 远程 PDF 转换及候选续作已实现。端到端配置与行为按下文合同工作；真实调用和论文质量证据分开记录，全文准确性尚未验收。架构选择见 [ADR-0004](adr/0004-remote-document-parsing-providers.md)。
 
-## 范围与术语
+## 选择解析方式
 
-本功能把整篇 PDF 交给远程识别服务，生成正文、公式、表格、图片及可获得的页级信息，再由 PaperBase 校验和采用。这些输出称为“转换候选稿”，通过现有质量门后才能成为 Canonical Markdown。设计取舍见 [ADR-0004](adr/0004-remote-document-parsing-providers.md)。
+PaperBase 默认在本地转换 PDF。仅在配置中把 `conversion.pdf.parser` 设为 `remote`，或在一次摄入中显式加 `--pdf-parser remote`，才会将 PDF 上传给远程服务。服务配置列表本身不会启用上传。命令行覆盖只影响当前调用，不修改配置文件。
 
-第一版只实现 OXR，覆盖本地 PDF 和 Zotero 附件 PDF。在线抓取已返回的 Markdown 沿用现有流程，不重复上传 PDF。现有本地转换和 Agent 视觉校正不纳入远程服务接口。
+```bash
+# 使用本地转换，即使配置默认方式为 remote
+uv run paperbase ingest --file paper.pdf --pdf-parser local
 
-## 统一接口合同
+# 显式上传 PDF 给配置中的 OXR 链
+uv run paperbase ingest --file paper.pdf --pdf-parser remote
+```
 
-远程服务适配器接收源 PDF、当前条目的连接与解析配置，以及本次转换的临时工作位置。调用方不应了解 OXR 等服务各自的请求参数或响应结构。
+选择远程时，PaperBase 会把整份源 PDF 依次发送给所配置的服务端点，直到得到技术上可用的候选稿。鉴权、网络、服务和结果错误会按规则顺延；如果前项失败，后项也会收到同一份 PDF。远程解析不需要在运行 PaperBase 的电脑上部署 OXR GPU，但需要连接所选服务。自建 OXR 的硬件要求由其部署方式决定，见 [OXR 官方仓库](https://github.com/SoMarkAI/OXR)。
 
-成功结果包含：
+本地 PDF 和 Zotero PDF 附件进入相同转换入口；Zotero 代码已接入该选择，但本次未执行 Zotero 端到端测试。在线抓取已经返回 Markdown 时沿用原流程，不会因 `--pdf-parser remote` 而上传另一个 PDF。
 
-- 待校验的 Markdown 正文。
-- 已在本地物化的关联图片及正文中的相对引用。
-- 服务能够提供的页级信息；缺失的信息不能伪造。
-- 实际采用的解析服务、配置名称及可获得的版本标识，用于现有转换溯源字段；同一 OXR 的不同配置项必须可区分，密钥不属于溯源内容。
+## 配置
 
-失败结果包含可用于分类的错误，以及不含密钥、文档正文或服务原始响应的简要原因。HTTP 成功但正文为空、结果无法解释或引用图片无法物化，仍视为当前条目失败。“可用候选稿”仅表示响应可解释、正文非空且引用资源能够物化，不表示语义准确度已经验收。
+配置文件为 PaperBase 库目录中的 `config/paperbase.yaml`。下面是一个完整可加载的示例，含两个自建 OXR profile。它保留 `parser: local`，所以仅复制配置不会上传文件；如果改用远程，链按 profile 列表顺序执行。
 
-服务适配器不写 Canonical、不改论文状态、不覆盖 Zotero 等来源的权威元数据。它也不能生成声称通过了 Agent 视觉审查的结果。
-
-## 配置链与顺延
-
-用户显式选择远程解析后，依配置顺序逐项尝试。
-
-1. 发请求前校验整条配置链；结构、必填项、字段格式或显式引用的密钥环境变量缺失等本地配置错误，直接指出，不用其他条目掩盖。
-2. 超时、网络错误、鉴权或额度错误、服务报错，以及空结果、缺失图片等不可用结果，均顺延至下一条配置。
-3. 首次得到可用候选稿后停止顺延，进入原摄入流程。
-4. 后续质量复核不通过时进入待审，不继续尝试后项。
-5. 全部配置失败时报告失败，不自动切回本地解析。
-
-已通过本地校验、但服务端返回 401、403、429 等响应，属于当前条目调用失败，可以顺延。配置展示、校验错误和运行错误均须隐藏真实密钥。
-
-## 配置与选择方式
-
-以下是拟议配置合同，尚未进入可运行版本。`conversion.pdf.parser` 选择默认解析方式，初始值为 `local`；填入远程配置列表本身不启用上传。`ingest --pdf-parser local|remote` 只覆盖当前调用的解析选择，不改写配置文件。
-
+<!-- remote-config-example:start -->
 ```yaml
 conversion:
   pdf:
@@ -47,68 +31,73 @@ conversion:
       providers:
         - name: oxr-primary
           provider: oxr
-          base_url: https://free-oxr.somark.cn/api/v1
-          api_key: dummy
+          base_url: http://localhost:8000/v1
+          api_key: ${OXR_API_KEY}
           timeout: 300
         - name: oxr-secondary
           provider: oxr
-          base_url: https://free-oxr.somark.ai/api/v1
-          api_key: dummy
+          base_url: http://localhost:8001/v1
+          api_key: ${OXR_FALLBACK_API_KEY}
           timeout: 300
     visual:
       mode: auto
       model: your-existing-visual-model
 ```
+<!-- remote-config-example:end -->
 
-此处两个免费地址仅为用户手动填写的示例，程序不自动追加地址。也可把 `base_url` 改为接口兼容的自建 OXR，每项独立填写名称、地址、密钥和超时。真实密钥沿用 `${OXR_API_KEY}` 环境变量引用约定；免费服务按官方示例使用 `dummy`。
+每项 profile 需要唯一 `name`、当前支持的 `provider: oxr`、OXR 兼容 `base_url`、`api_key` 和正数 `timeout`（秒）。多个 profile 可以指向同一服务但使用不同名称或凭据。密钥可使用 `${VARIABLE}` 或 `$VARIABLE` 引用环境变量；不要把真实密钥写入共享配置。配置加载后 `paperbase config show` 会遮蔽 profile 的密钥。
 
-配置链按列表顺序执行，允许同一服务出现多条不同地址或密钥配置。第一版只接受已经实现的 `provider: oxr`；未来服务新增对应适配器后沿用相同合同，不把任意 URL 当作兼容服务。程序不自动连接付费服务。
+在启动 PaperBase 的同一终端设置示例变量，例如 PowerShell `$env:OXR_API_KEY = '...'` 和 `$env:OXR_FALLBACK_API_KEY = '...'`。如果远程方式已选而引用变量缺失，整条配置链会在请求前报错。
 
-OXR 的端点和鉴权用法以其 [官方 README](https://github.com/SoMarkAI/OXR/blob/main/README_CN.md#quick-start) 为依据。免费服务不承诺稳定性，调用会把源 PDF 传至所选服务；正式商业 API 的能力及额度不能直接视为免费 OXR 服务的能力及额度。
+官方免费服务作为手动示例，不自动添加到 profile 链：
 
-## 项目 skill 的选择引导
+| 服务 | `base_url` | `api_key` |
+|---|---|---|
+| OXR 免费 API（中国镜像） | `https://free-oxr.somark.cn/api/v1` | `dummy` |
+| OXR 免费 API（全球） | `https://free-oxr.somark.ai/api/v1` | `dummy` |
 
-实现必须同步更新项目内 `skills/paperbase/SKILL.md` 及其必要参考材料，使它能够：
+这两个地址是 SoMark 官方列出的 OXR Free API；`.cn` 是 `.ai` 的镜像。使用免费服务前，请把选定地址和 `dummy` 明确写入 profile，并再次确认上传范围。不要把两个镜像当作自动默认或稳定性保证。
 
-1. 解释本地解析、远程文档解析与后续视觉审查的职责、硬件和文档上传差异。
-2. 根据明确的自然语言选择，为当前调用选择本地或远程解析；用户未指定时读取并说明有效配置，沿用该默认方式。
-3. 用户询问“怎么选”或需求仍有歧义时，给出适合其硬件、论文结构和外传意愿的建议，先解决解析方式选择，再执行摄入。
-4. 选择远程方式时，说明会上传 PDF、实际配置链顺序及全部失败时的行为；保存的显式配置可复用，不为每篇论文重复询问相同选择。
-5. 分开说明解析方式和 `visual.mode`，让用户理解远程解析后仍可能需要 Agent 审查；失败时依据实际错误解释顺延或停止原因。
+## 请求与顺延
 
-命令和配置字段在实现并验证后才加入可执行 skill；本设计草案不提前赋予现有版本这些能力。全局 skill 部署继续遵循 ADR-0001 的项目验证与用户确认流程。
+OXR 适配器使用同步 `POST {base_url}/parse/sync`，通过 multipart 上传 `file`、`api_key`，并请求 `markdown` 与 `json` 两种输出。OXR 返回的 Markdown 正文作为转换候选稿；可获得的页级 JSON 会保留在转换结果中。服务结果中的图片 URL 或 Base64 会物化到本地 `assets/`，正文改为 `./assets/...` 相对引用。服务返回本机绝对图片路径时，图片无法物化，该 profile 视为不可用。
 
-## 与视觉校正和摄入的关系
+选择远程后，PaperBase 在发出首个请求前校验整个配置链。空链、名称重复、未知 provider、非法地址、无效超时及缺失密钥环境变量均报告 `remote_config_invalid`，不会上传，也不会让有效前项掩盖无效后项。未选择远程时不校验远程凭据、不探测端点。
 
-远程候选稿继续遵循现有 `visual.mode`：`off` 不调用 Agent 视觉审查，`auto` 先审计并按结果决定是否校正，`always` 按既有协议进行视觉转换。无论选择哪种模式，远程调用成功都不等于论文语义内容已经验证正确。
+通过本地校验后，各 profile 依次尝试。HTTP 408、429、5xx、网络错误和超时属于可顺延的暂时服务故障；鉴权或额度拒绝、解析错误、空正文、坏响应及图片物化失败也会顺延。PaperBase 不在同一 profile 上叠加自动重试。HTTP 2xx 本身不代表结果可用。首个非空且图片可本地物化的候选稿会停止顺延；随后视觉审查或 Canonical 门禁不通过时保留待审，不继续调用后项。全链失败不会自动切回本地。当前主要错误分类为 `remote_config_invalid`、`remote_transient_failure` 和 `remote_all_profiles_failed`；本机无法保存视觉续作候选时返回 `remote_candidate_cache_failed`，不会切换服务。错误原因会提到 profile 名称，但不会输出密钥、正文或原始响应。
 
-图片最终采用 `./assets/...` 引用并满足现有本地资产校验。服务临时链接或 Base64 数据不能直接作为最终资产。每条配置的临时产物相互隔离，仅选中候选稿的资产可进入采用流程；失败配置的结果不得混入后项或覆盖已有 Canonical 资产。
+## 视觉审查、续作与采用
 
-现有视觉流程需要重复执行同一摄入命令来续作。实现时必须让同一候选稿的审查续作复用已成功的远程结果，不能每推进一次审查都重新上传解析。复用身份关联源 PDF、解析选择、有序配置链的非密钥身份、选中配置及候选稿；源 PDF、配置顺序、地址或解析参数变化时使用新的候选稿。同名配置只轮换密钥时，可继续使用已取得的候选稿，避免重复上传；最终采用后沿用项目的临时产物清理约定。
+`visual.mode` 控制候选稿产生后的视觉流程，与 `parser` 和 `visual.model` 分属不同设置：
 
-## 后续服务接入要求
+| 模式 | 处理 |
+|---|---|
+| `off` | 不启动 Agent 视觉审查；仍执行 Canonical 采用门禁 |
+| `auto` | 先准备自动审计；审计结果要求时再进入现有视觉转换 |
+| `always` | 进入现有视觉转换及 Boundary Review |
 
-后续服务只新增适配器及其必要配置映射，复用上述结果、错误、配置链和采用规则。服务专有字段留在适配器内；不得让本地 PDF、Zotero 摄入和下游质量检查分别适配不同服务的响应。
+只要 `visual.mode` 不是 `off`，就必须配置有效的 `visual.model`。PaperBase 会在上传 PDF 前报告缺失项。远程解析成功不代表全文质量通过，也不跳过页覆盖、视觉 Warning 确认或其他 Canonical 采用门禁。
 
-新增服务必须通过同一组合同测试，并补充其真实响应的离线样例。密钥沿用环境变量引用约定，不写入文档、日志或提交记录。
+本地 `parser` 只说明不向 OXR 上传。若用户要求所有数据留在本机，`visual.mode: auto` 或 `always` 仍会让所选 Agent Host 读取源 PDF 页面图像和转换候选稿；先核实该宿主的数据处理范围，再决定是否启用视觉流程。
 
-## 最小实现边界
+候选稿在视觉任务、Warning 确认、重审和 Canonical 门禁待审期间暂存，以便重复执行原摄入命令时复用而不再次上传，包括 `visual.mode: off` 的后续采用门禁重试。身份由源 PDF 内容、解析方式及按顺序排列的非密钥 profile 字段决定，并保存实际选中的 profile；仅轮换同名 profile 的密钥不会触发重新解析，改变源文件、profile 顺序、地址或超时则会使用新候选稿。缓存只保留续作所需的 Markdown、页数据、相对图片路径、服务版本和 profile 来源，不含密钥或完整 HTTP 响应。成功采用后移除缓存元数据；正文引用的图片继续留在论文 `assets/` 中。视觉页块与 Boundary Review 仍由现有 Visual Repair Run、Run Lease 和 `--re-review` 规则推进。
 
-以现有可用功能为基线，复用配置加载、转换结果、资产校验和视觉运行能力。只增加远程解析实际需要的调用、顺延、图片物化、候选复用及入口校验，内部不重复防御，不预加重试、兜底或未来服务机制。既有小 bug 若不阻断本功能或造成此次回归，只记录，不顺手修复。测试覆盖关键行为与代表性失败，不铺开所有组合。
+Canonical 与 Registry 仍只由摄入流程写入。成功采用后的 `manifest.pipeline.converter` 记录 `oxr:<profile-name>`，版本未知时写为 `unknown`。未通过采用门禁时，不能把 Manifest 中保留的旧转换器字段当成当前 OXR 运行的来源记录。
 
-## 验收边界
+## OXR 免费服务限制
 
-实现需验证本地及 Zotero PDF 的远程选择、配置顺延、失败停止条件、图片物化、转换溯源和视觉审查续作。接口可达或返回 HTTP 成功，不能替代真实解析及论文质量验证。实际识别质量需用代表性论文对照原 PDF 单独评估。
+截至 2026-10-27，[SoMark 官方 OXR Free API 文档](https://docs.somark.ai/api-reference/oxr/index#free-api)说明免费服务单文件最大 10 MB、单次最多 20 页；它不要求注册或申请真实 API key，示例使用 `dummy`。官方也说明请求会排队、不保证服务稳定，并不建议用于生产。这里的限制只适用于其 Free API；本文不把商业 SoMark API 的额度套用到免费服务，也不承诺 OXR 识别准确率、速度或可用性。
 
-## 功能完成后的文档核对
+## 验证证据
 
-功能完成后，必须以实际配置模型、CLI 帮助、错误行为及验证结果为依据，核对并补齐本页、安装指南、受影响的 README 和项目内 PaperBase skill。配置与接口规则集中维护在本页，其他文档提供入口与必要操作说明。
+当前有三层证据，不能相互替代：
 
-至少核对以下内容：
+1. 离线合同测试使用可控 HTTP 调用真实 OXR 适配器，覆盖配置、顺延、图片物化、视觉续作、缓存失效及 Canonical 门禁；这些测试不证明公网服务可用。
+2. 2026-10-27 的两次 OXR Free API 调用分别使用合成 PDF 和一份公开 CC BY 论文。合成样例进入 `NORMALIZED`；公开论文返回 63,894 字符候选稿及 13 个可解码图片资产，但停在 `references_unparseable` 并进入 `NEEDS_REVIEW`。
+3. 公开论文候选正文未被 PaperBase 持久化；本次没有逐页验证它的阅读顺序、公式、表格或参考文献完整性。因此没有全文准确率、阅读顺序或质量通过结论。离线续作验证也不等于再次端到端核对该公开论文。
 
-- 默认解析方式、配置位置、字段名称、命令行覆盖优先级，以及仅填写服务列表不会启用远程解析的行为。
-- 多条配置的顺序、同一服务多配置、环境变量密钥、超时、自建地址、全部失败及停止顺延的条件。
-- PDF 上传范围、免费服务稳定性、图片本地化、转换溯源、续作复用与现有 `visual.mode` 的关系。
-- 项目 skill 能解释各解析方式、帮助用户选择，并使用真实存在的命令和配置，不将示例地址当作默认启用项。
+真实调用记录留在执行者本机被 Git 忽略的 `.scratch/remote-document-parsing/evidence/api-smoke/real-api-smoke.md`，克隆仓库不会包含该文件。本仓库跟踪的摘要与边界见[远程解析验证记录](validation/remote-document-parsing.md)。
 
-文档中的完整配置示例须经配置加载器检查，命令示例须与实际帮助一致，错误说明须对应已有测试或实测证据。仅在实现和相关验证完成后，把草案状态与 ADR 状态更新为相应实际状态；尚未验证的解析质量、服务能力或使用限制须继续注明。配置方式或注意事项存在遗漏、矛盾或过时内容时，该功能不算完成文档验收。
+## 文档合同与扩展边界
+
+本页集中维护配置、上传、顺延、结果和缓存合同。安装指南与中英文 README 只提供选择提示并链接回本页；命令以当前 `paperbase ingest --help` 为准。第一版只支持 OXR 及兼容其协议的自建地址，不实现自动发现、付费地址默认启用、本机 OXR 部署管理或通用插件平台。新增服务时复用同一候选稿、错误、profile 链和摄入采用规则。

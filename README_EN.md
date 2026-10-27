@@ -252,6 +252,8 @@ Local PDFs don't need this tool:
 uv run paperbase ingest --file paper.pdf
 ```
 
+PDF parsing remains local by default. Adding OXR profiles does not upload a file; choose remote parsing in the config or for one call with `--pdf-parser remote`. Remote parsing uploads the full PDF to the configured service chain and does not need a local GPU. See the [remote document parsing guide](docs/remote-document-parsing.md) for setup, failover, and free API limits.
+
 #### 2. Graphify (Knowledge Graph Construction, Required)
 
 **Graphify is a required component** for PaperBase's knowledge graph functionality, used to build and query semantic knowledge graphs and citation networks.

@@ -106,6 +106,17 @@ paper-fetch --version
 uv run paperbase ingest --file /path/to/paper.pdf
 ```
 
+### 可选：远程 OXR 文档解析
+
+PDF 解析默认保留本地方式。配置 `conversion.pdf.remote.providers` 后仍不会自动上传；只有将 `conversion.pdf.parser` 设为 `remote`，或当前命令加 `--pdf-parser remote`，才会把整份 PDF 发给所配置的 OXR 链。单次覆盖不修改配置；远程解析不需要在运行 PaperBase 的电脑上部署 GPU 模型。
+
+```bash
+# 只对此次摄入选择远程解析
+uv run paperbase ingest --file /path/to/paper.pdf --pdf-parser remote
+```
+
+远程服务配置、顺延和图片处理示例见[远程文档解析说明](remote-document-parsing.md)。选择远程前请确认文档允许发送到链中每个已配置的服务；官方免费 API 有文件大小和页数限制，且不保证稳定性。
+
 ---
 
 ### graphify（知识图谱）

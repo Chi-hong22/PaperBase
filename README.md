@@ -322,6 +322,8 @@ uv run paperbase ingest "arxiv:2301.07041"
 uv run paperbase ingest --file paper.pdf
 ```
 
+PDF 解析默认仍在本地进行。配置 OXR profile 不会自动上传；需要远程解析时，显式设置配置默认方式或在本次命令加 `--pdf-parser remote`。远程方式会发送整份 PDF 到配置的服务链，无需本机 GPU。配置、顺延和免费 API 限制见[远程文档解析说明](docs/remote-document-parsing.md)。
+
 **优势**：
 - ✅ 完整全文内容
 - ✅ 保留图表和公式

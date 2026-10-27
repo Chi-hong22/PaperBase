@@ -64,6 +64,7 @@ paperbase ingest <id> --re-review       # Agent 修改 chunk 结果后的重审�
 - **本地解析**沿用 PaperBase 当前的 MarkItDown 转换器，不会把 PDF 发给远程解析服务；本地 OXR GPU 不是这条路径的前置条件。
 - **远程解析**把整篇 PDF 上传到配置链中的 OXR 服务，不需要在本机部署 OXR 模型。返回内容仍是转换候选稿，解析成功不代表内容已通过质量检查。
 - **视觉审查**由独立的 `conversion.pdf.visual.mode` 控制，在解析之后执行；更换解析器不会关闭或绕过自动审计、视觉校正、Boundary Review 或警告确认。
+- 用户要求全部数据留在本机时，说明本地解析只避免上传到 OXR；`visual.mode: auto` 或 `always` 仍会让所选 Agent Host 读取源 PDF 页面图像和转换候选稿，先核实该宿主的数据处理范围再选择视觉模式。
 
 按以下顺序选择解析器：
 

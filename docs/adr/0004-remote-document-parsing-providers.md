@@ -1,6 +1,7 @@
 # ADR-0004：通过统一接口接入可顺延的远程文档解析服务
 
-Status: proposed
+Status: accepted
+Date: 2026-10-27
 
 PaperBase 增加显式选择的远程文档解析路径，第一版接入 OXR，覆盖本地 PDF 和 Zotero 附件 PDF。远程服务共享输入、候选稿、资产、错误及配置约定；服务差异由各自适配器处理，不扩展为统一本地转换和 Agent 编排的插件体系。
 
@@ -10,4 +11,4 @@ PaperBase 增加显式选择的远程文档解析路径，第一版接入 OXR，
 
 解析默认方式由配置文件选择，并允许命令行单次覆盖。同一配置链可包含多组 OXR 地址与密钥配置，兼容官方免费服务和自建 OXR；示例地址不自动启用。项目内 PaperBase skill 必须解释各解析方式并帮助用户选择，实际 skill 与命令实现同步交付。
 
-这一选择保留了 [ADR-0001](0001-agent-host-neutral-visual-pdf-conversion.md) 的 Agent Host 中立协议：统一的是远程文档解析服务，视觉校正仍由原协议管理。配置方式与接口合同集中维护在 [远程文档解析](../remote-document-parsing.md)，后续服务沿用该文档，不各自建立另一套摄入规则。
+这一选择保留了 [ADR-0001](0001-agent-host-neutral-visual-pdf-conversion.md) 的 Agent Host 中立协议：统一的是远程文档解析服务，视觉校正仍由原协议管理。该设计已落实为 OXR 适配器、配置链、视觉续作与摄入 CLI。配置方式与接口合同集中维护在 [远程文档解析](../remote-document-parsing.md)，后续服务沿用该文档，不各自建立另一套摄入规则。接受架构决策不代表公共服务稳定性或识别质量已经验收。
