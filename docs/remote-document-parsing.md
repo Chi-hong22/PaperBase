@@ -76,11 +76,13 @@ OXR 适配器使用同步 `POST {base_url}/parse/sync`，通过 multipart 上传
 | `auto` | 先准备自动审计；审计结果要求时再进入现有视觉转换 |
 | `always` | 进入现有视觉转换及 Boundary Review |
 
+在 YAML 中关闭视觉审查请写 `mode: 'off'`；当前加载器会把未加引号的 `off` 解析为布尔值。
+
 只要 `visual.mode` 不是 `off`，就必须配置有效的 `visual.model`。PaperBase 会在上传 PDF 前报告缺失项。远程解析成功不代表全文质量通过，也不跳过页覆盖、视觉 Warning 确认或其他 Canonical 采用门禁。
 
 本地 `parser` 只说明不向 OXR 上传。若用户要求所有数据留在本机，`visual.mode: auto` 或 `always` 仍会让所选 Agent Host 读取源 PDF 页面图像和转换候选稿；先核实该宿主的数据处理范围，再决定是否启用视觉流程。
 
-候选稿在视觉任务、Warning 确认、重审和 Canonical 门禁待审期间暂存，以便重复执行原摄入命令时复用而不再次上传，包括 `visual.mode: off` 的后续采用门禁重试。身份由源 PDF 内容、解析方式及按顺序排列的非密钥 profile 字段决定，并保存实际选中的 profile；仅轮换同名 profile 的密钥不会触发重新解析，改变源文件、profile 顺序、地址或超时则会使用新候选稿。缓存只保留续作所需的 Markdown、页数据、相对图片路径、服务版本和 profile 来源，不含密钥或完整 HTTP 响应。成功采用后移除缓存元数据；正文引用的图片继续留在论文 `assets/` 中。视觉页块与 Boundary Review 仍由现有 Visual Repair Run、Run Lease 和 `--re-review` 规则推进。
+候选稿在视觉任务、Warning 确认、重审和 Canonical 门禁待审期间暂存，以便重复执行原摄入命令时复用而不再次上传，包括 `visual.mode: 'off'` 的后续采用门禁重试。身份由源 PDF 内容、解析方式及按顺序排列的非密钥 profile 字段决定，并保存实际选中的 profile；仅轮换同名 profile 的密钥不会触发重新解析，改变源文件、profile 顺序、地址或超时则会使用新候选稿。缓存只保留续作所需的 Markdown、页数据、相对图片路径、服务版本和 profile 来源，不含密钥或完整 HTTP 响应。成功采用后移除缓存元数据；正文引用的图片继续留在论文 `assets/` 中。视觉页块与 Boundary Review 仍由现有 Visual Repair Run、Run Lease 和 `--re-review` 规则推进。
 
 Canonical 与 Registry 仍只由摄入流程写入。成功采用后的 `manifest.pipeline.converter` 记录 `oxr:<profile-name>`，版本未知时写为 `unknown`。未通过采用门禁时，不能把 Manifest 中保留的旧转换器字段当成当前 OXR 运行的来源记录。
 
