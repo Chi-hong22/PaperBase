@@ -57,6 +57,33 @@ paperbase ingest --file paper.pdf --accept-visual-warnings  # 仅在用户确认
 paperbase ingest <id> --re-review       # Agent 修改 chunk 结果后的重审入口（仅 ready_to_adopt 有效）
 ```
 
+### PDF 解析方式选择
+
+本节适用于本地 PDF 与含 PDF 的 Zotero 附件。在线抓取已返回 Markdown 时沿用现有摄入流程，不重复上传源 PDF。
+
+- **本地解析**沿用 PaperBase 当前的 MarkItDown 转换器，不会把 PDF 发给远程解析服务；本地 OXR GPU 不是这条路径的前置条件。
+- **远程解析**把整篇 PDF 上传到配置链中的 OXR 服务，不需要在本机部署 OXR 模型。返回内容仍是转换候选稿，解析成功不代表内容已通过质量检查。
+- **视觉审查**由独立的 `conversion.pdf.visual.mode` 控制，在解析之后执行；更换解析器不会关闭或绕过自动审计、视觉校正、Boundary Review 或警告确认。
+
+按以下顺序选择解析器：
+
+1. 用户明确要求本次远程或本地解析时，分别在对应 PDF 命令中加入 `--pdf-parser remote` 或 `--pdf-parser local`。这个选择只覆盖当前调用，不修改保存配置。
+2. 用户没有指定本次方式时，读取当前 PaperBase 库 `config/paperbase.yaml` 的 `conversion.pdf.parser`；配置文件缺失、PDF 配置段缺失或字段省略时有效值为 `local`。配置中存在远程 profile 列表本身不会触发上传。配置文件存在且含 PDF 配置段时，可用 `paperbase config show` 核实解析方式和实际配置链（profile 名称及顺序）；该命令隐藏密钥，远程密钥环境变量可用性会在上传前校验。
+3. 用户询问如何选择时，结合 PDF 是否有复杂双栏顺序、公式、表格或图，以及用户的外传意愿给建议。远程路径不要求本机 GPU，但会发送整份 PDF；它只是可尝试的解析路径，不保证比本地结果更准确。若用户没有表达允许外传，先说明这一点并确定选择，不要静默远程上传。不要因一次请求把配置文件改成永久远程，也不要为已保存的选择逐篇重复询问。
+
+选择远程时，先说明本次将采用的 profile 顺序，再执行对应的 PDF 摄入命令，例如：
+
+```bash
+paperbase ingest --file paper.pdf --pdf-parser remote
+paperbase ingest --zotero-key <item-key> --pdf-parser remote
+```
+
+PaperBase 会在上传前检查整条配置链。配置有误时先修正配置，不会用后续 profile 掩盖问题，也不会发送 PDF。服务请求失败或结果不可用时才尝试下一项；第一个可用候选稿会停止顺延。所有 profile 都失败时，按 CLI 错误和 manifest 状态说明可重试的临时失败或永久配置/内容失败，不改用本地解析。
+
+候选稿后续进入待审或受阻状态时不继续尝试下一服务；视觉阶段需要续作时重复原摄入命令并保留原有 `--pdf-parser` 选择，不替换端点或改变 `visual.mode`。低风险 warning 仍需向用户展示并得到明确确认后，才可按下文视觉协议使用 `--accept-visual-warnings`。
+
+详细的配置字段、上传范围与 OXR 注意事项见 [远程文档解析说明](../../docs/remote-document-parsing.md)；执行时以当前配置和 `paperbase ingest --help` 中实际提供的参数为准。
+
 ### 视觉阶段协议（按需加载）
 
 视觉论文在普通 `ingest`（推荐配合 `--no-graph`）下按阶段推进，**每次调用只推进一个阶段**：

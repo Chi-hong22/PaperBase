@@ -18,6 +18,29 @@ def _readSkillArtifacts() -> tuple[str, str]:
     )
 
 
+def testSkillExplainsPdfParserChoiceAndRemoteBoundaries():
+    """PDF 解析选择引用真实配置/CLI，并与视觉审查及外传选择分开。"""
+    skill, _ = _readSkillArtifacts()
+
+    assert "PDF 解析方式选择" in skill
+    for token in (
+        "conversion.pdf.parser",
+        "paperbase config show",
+        "--pdf-parser local",
+        "--pdf-parser remote",
+        "PDF 配置段缺失或字段省略时有效值为",
+        "配置中存在远程 profile 列表本身不会触发上传",
+        "整篇 PDF",
+        "实际配置链",
+        "第一个可用候选稿",
+        "不改用本地解析",
+        "visual.mode",
+        "重复原摄入命令并保留原有",
+        "docs/remote-document-parsing.md",
+    ):
+        assert token in skill
+
+
 def testSkillRoutesVisualActionToReferenceWithoutNewCommand():
     """普通 ingest 的 AgentActionRequired 才按需加载视觉说明。"""
     skill, reference = _readSkillArtifacts()
