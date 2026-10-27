@@ -2,6 +2,10 @@ from click.testing import CliRunner
 
 import paperbase.cli.commands.ingest as ingest_command
 from paperbase.cli.main import main
+from paperbase.core.identity import generate_storage_id, normalize_paper_id
+from paperbase.core.manifest import load_manifest
+from paperbase.core.paths import PaperPaths
+from paperbase.core.pdf_conversion import ReadyConversionOutcome
 
 
 def test_pdf_parser_option_is_forwarded_to_local_pdf_ingest(monkeypatch, tmp_path):
@@ -63,3 +67,41 @@ def test_config_show_never_displays_remote_api_key(tmp_path):
     assert result.exit_code == 0, result.output
     assert secret not in result.output
     assert "primary" in result.output
+
+
+def test_local_ingest_keeps_existing_pipeline_when_converter_is_none(monkeypatch, tmp_path):
+    class ReadyWithMissingConverter(ReadyConversionOutcome):
+        converter = None
+        converter_version = None
+
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"synthetic PDF")
+    paper_id = normalize_paper_id("10.1234/missing-converter")
+    storage_id = generate_storage_id(paper_id)
+    metadata = {
+        "title": "Local parser fallback",
+        "authors": ["Ada Lovelace"],
+        "year": 2026,
+        "doi": "10.1234/missing-converter",
+        "abstract": "Synthetic metadata for the local parser fallback test.",
+    }
+    monkeypatch.setattr(ingest_command, "extract_pdf_metadata", lambda _: metadata)
+    monkeypatch.setattr(
+        ingest_command,
+        "progressPdfConversion",
+        lambda *_args, **_kwargs: ReadyWithMissingConverter(
+            markdown="# Local parser fallback\n\n" + ("Body evidence. " * 100)
+        ),
+    )
+    monkeypatch.setattr(ingest_command, "ReadyConversionOutcome", ReadyWithMissingConverter)
+
+    result = CliRunner().invoke(
+        main,
+        ["--base-dir", str(tmp_path), "ingest", "--file", str(pdf_path), "--no-graph"],
+    )
+
+    assert result.exit_code == 0, result.output
+    paths = PaperPaths(storage_id=storage_id, base_dir=tmp_path)
+    manifest = load_manifest(paths.manifest_json)
+    assert manifest.pipeline.converter == "markitdown"
+    assert manifest.pipeline.converter_version == "0.0.1"

@@ -683,7 +683,7 @@ def _ingest_local_pdf(
             metadata=metadata,
             paper_id=paper_id,
             storage_id=storage_id,
-            source_provider=getattr(conversion_outcome, "converter", "markitdown")
+            source_provider=getattr(conversion_outcome, "converter", None) or "markitdown"
         )
 
         # Step 7: 生成标准格式文档
@@ -726,8 +726,8 @@ def _ingest_local_pdf(
             schema_version="1.0"
         )
         manifest.pipeline = PipelineInfo(
-            converter=getattr(conversion_outcome, "converter", "markitdown"),
-            converter_version=getattr(conversion_outcome, "converter_version", "0.0.1"),
+            converter=getattr(conversion_outcome, "converter", None) or "markitdown",
+            converter_version=getattr(conversion_outcome, "converter_version", None) or "0.0.1",
             normalizer_version="1.0.0"
         )
         save_manifest(manifest, paths.manifest_json)
@@ -992,7 +992,7 @@ def _ingest_from_zotero(
                     metadata=merged_metadata,
                     paper_id=paper_id,
                     storage_id=storage_id,
-                    source_provider=f"zotero+{getattr(conversion_outcome, 'converter', 'markitdown')}"
+                    source_provider=f"zotero+{getattr(conversion_outcome, 'converter', None) or 'markitdown'}"
                 )
                 if merged_metadata.get("abstract"):
                     paper_metadata.abstract = merged_metadata["abstract"]
@@ -1038,12 +1038,13 @@ def _ingest_from_zotero(
                     schema_version="1.0"
                 )
                 manifest.pipeline = PipelineInfo(
-                    converter=f"zotero+{getattr(conversion_outcome, 'converter', 'markitdown')}",
+                    converter=f"zotero+{getattr(conversion_outcome, 'converter', None) or 'markitdown'}",
                     converter_version=getattr(
                         conversion_outcome,
                         "converter_version",
-                        "0.6.0+markitdown-0.0.1",
-                    ),
+                        None,
+                    )
+                    or "0.6.0+markitdown-0.0.1",
                     normalizer_version="1.0.0"
                 )
                 save_manifest(manifest, paths.manifest_json)
