@@ -36,6 +36,19 @@ def show(ctx):
     console.print(f"[cyan]配置文件:[/cyan] {config_path}")
     console.print()
 
+    pdf_config = config_display.get("conversion", {}).get("pdf", {})
+    if pdf_config:
+        console.print("[bold]PDF 解析配置:[/bold]")
+        console.print(f"  parser: {pdf_config.get('parser', 'local')}")
+        providers = pdf_config.get("remote", {}).get("providers", [])
+        for provider in providers:
+            console.print(f"  - name: {provider.get('name', '')}")
+            console.print(f"    provider: {provider.get('provider', '')}")
+            console.print(f"    base_url: {provider.get('base_url', '')}")
+            console.print(f"    api_key: {provider.get('api_key', '(未设置必填项)')}")
+            console.print(f"    timeout: {provider.get('timeout', '')}")
+        console.print()
+
     # 显示 LLM 配置
     if "llm" in config_display:
         console.print("[bold]LLM 配置:[/bold]")
@@ -114,6 +127,10 @@ def _expand_env_vars_for_display(config: dict) -> dict:
                 elif value.startswith("$"):
                     env_var = value[1:]
                     llm[key] = os.getenv(env_var, f"(环境变量 {env_var} 未设置)")
+
+    providers = config.get("conversion", {}).get("pdf", {}).get("remote", {}).get("providers", [])
+    for provider in providers:
+        provider["api_key"] = "(已设置)" if provider.get("api_key") else "(未设置)"
 
     return config
 

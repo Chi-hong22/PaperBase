@@ -561,6 +561,7 @@ def _ingest_local_pdf(
     *,
     accept_visual_warnings: bool = False,
     re_review: bool = False,
+    pdf_parser: str | None = None,
 ):
     """摄入本地 PDF 文件"""
     console = Console()
@@ -640,6 +641,8 @@ def _ingest_local_pdf(
                 base_dir / "config" / "paperbase.yaml"
             )
             conversion_config = paperbase_config.conversion.pdf
+            if pdf_parser is not None:
+                conversion_config = conversion_config.model_copy(update={"parser": pdf_parser})
             minimum_body_chars = (
                 paperbase_config.graph.get_minimum_canonical_body_chars()
             )
@@ -680,7 +683,7 @@ def _ingest_local_pdf(
             metadata=metadata,
             paper_id=paper_id,
             storage_id=storage_id,
-            source_provider="markitdown"
+            source_provider=getattr(conversion_outcome, "converter", "markitdown")
         )
 
         # Step 7: 生成标准格式文档
@@ -723,8 +726,8 @@ def _ingest_local_pdf(
             schema_version="1.0"
         )
         manifest.pipeline = PipelineInfo(
-            converter="markitdown",
-            converter_version="0.0.1",
+            converter=getattr(conversion_outcome, "converter", "markitdown"),
+            converter_version=getattr(conversion_outcome, "converter_version", "0.0.1"),
             normalizer_version="1.0.0"
         )
         save_manifest(manifest, paths.manifest_json)
@@ -802,6 +805,7 @@ def _ingest_from_zotero(
     *,
     accept_visual_warnings: bool = False,
     re_review: bool = False,
+    pdf_parser: str | None = None,
 ):
     """从 Zotero 导入单篇论文
 
@@ -947,6 +951,8 @@ def _ingest_from_zotero(
                         base_dir / "config" / "paperbase.yaml"
                     )
                     conversion_config = paperbase_config.conversion.pdf
+                    if pdf_parser is not None:
+                        conversion_config = conversion_config.model_copy(update={"parser": pdf_parser})
                     minimum_body_chars = (
                         paperbase_config.graph.get_minimum_canonical_body_chars()
                     )
@@ -986,7 +992,7 @@ def _ingest_from_zotero(
                     metadata=merged_metadata,
                     paper_id=paper_id,
                     storage_id=storage_id,
-                    source_provider="zotero+markitdown"
+                    source_provider=f"zotero+{getattr(conversion_outcome, 'converter', 'markitdown')}"
                 )
                 if merged_metadata.get("abstract"):
                     paper_metadata.abstract = merged_metadata["abstract"]
@@ -1032,8 +1038,12 @@ def _ingest_from_zotero(
                     schema_version="1.0"
                 )
                 manifest.pipeline = PipelineInfo(
-                    converter="zotero+markitdown",
-                    converter_version="0.6.0+markitdown-0.0.1",
+                    converter=f"zotero+{getattr(conversion_outcome, 'converter', 'markitdown')}",
+                    converter_version=getattr(
+                        conversion_outcome,
+                        "converter_version",
+                        "0.6.0+markitdown-0.0.1",
+                    ),
                     normalizer_version="1.0.0"
                 )
                 save_manifest(manifest, paths.manifest_json)
@@ -1148,6 +1158,7 @@ def _ingest_zotero_recent(
     *,
     accept_visual_warnings: bool = False,
     re_review: bool = False,
+    pdf_parser: str | None = None,
 ):
     """从 Zotero 批量导入最近论文
 
@@ -1192,6 +1203,7 @@ def _ingest_zotero_recent(
                     no_graph=True,
                     headless_graph=False,
                     accept_visual_warnings=accept_visual_warnings,
+                    pdf_parser=pdf_parser,
                     **_reReviewKwargs(re_review),
                 )
                 if result == "success":
@@ -1249,6 +1261,7 @@ def _ingest_zotero_recent(
 @click.command()
 @click.argument("target", required=False)
 @click.option("--file", "file_path", type=click.Path(exists=True, path_type=Path), help="本地 PDF 文件路径")
+@click.option("--pdf-parser", type=click.Choice(["local", "remote"]), default=None, help="本次 PDF 解析方式（覆盖配置默认值）")
 @click.option(
     "--accept-visual-warnings",
     is_flag=True,
@@ -1273,6 +1286,7 @@ def ingest(
     ctx,
     target: str | None,
     file_path: Path | None,
+    pdf_parser: str | None,
     accept_visual_warnings: bool,
     re_review: bool,
     no_graph: bool,
@@ -1304,6 +1318,7 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            pdf_parser=pdf_parser,
             **_reReviewKwargs(re_review),
         )
         return
@@ -1316,6 +1331,7 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            pdf_parser=pdf_parser,
             **_reReviewKwargs(re_review),
         )
         return
@@ -1328,6 +1344,7 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            pdf_parser=pdf_parser,
             **_reReviewKwargs(re_review),
         )
         return
@@ -1340,6 +1357,7 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            pdf_parser=pdf_parser,
             **_reReviewKwargs(re_review),
         )
         return
@@ -1351,6 +1369,7 @@ def ingest(
             no_graph,
             headless_graph,
             accept_visual_warnings=accept_visual_warnings,
+            pdf_parser=pdf_parser,
             **_reReviewKwargs(re_review),
         )
         return
@@ -1376,6 +1395,7 @@ def _ingest_batch(
     *,
     accept_visual_warnings: bool = False,
     re_review: bool = False,
+    pdf_parser: str | None = None,
 ):
     """批量摄入论文"""
     console = Console()
@@ -1411,6 +1431,7 @@ def _ingest_batch(
                 ctx.invoke(
                     ingest,
                     target=target,
+                    pdf_parser=pdf_parser,
                     accept_visual_warnings=accept_visual_warnings,
                     re_review=re_review,
                     no_graph=True,
