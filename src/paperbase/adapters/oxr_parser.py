@@ -7,6 +7,7 @@ import binascii
 import json
 import re
 from dataclasses import dataclass
+from http.client import HTTPException
 from pathlib import Path
 from typing import cast
 from urllib.error import HTTPError
@@ -63,7 +64,7 @@ def parseWithOxr(source_pdf: Path, provider: RemotePdfProviderConfig) -> OxrCand
     except HTTPError as exc:
         transient = exc.code in {408, 429} or exc.code >= 500
         raise OxrCandidateError(f"OXR 服务返回 HTTP {exc.code}", transient=transient) from exc
-    except OSError as exc:
+    except (OSError, HTTPException) as exc:
         raise OxrCandidateError("OXR 服务请求失败", transient=True) from exc
 
     try:
@@ -98,7 +99,7 @@ def parseWithOxr(source_pdf: Path, provider: RemotePdfProviderConfig) -> OxrCand
             page_data = _rewritePageData(
                 page_data, paper_dir, provider, source_paths, saved_paths, assets
             )
-    except (binascii.Error, OSError, ValueError) as exc:
+    except (binascii.Error, OSError, ValueError, HTTPException) as exc:
         for saved_path in saved_paths:
             saved_path.unlink(missing_ok=True)
         raise OxrCandidateError("OXR 图片无法保存为本地资产") from exc

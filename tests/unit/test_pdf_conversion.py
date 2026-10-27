@@ -30,6 +30,7 @@ def oxr_service():
         "image_requests": [],
         "responses": [],
         "raw_responses": [],
+        "missing_response_bytes": [],
         "statuses": [],
         "response": {},
         "status": 200,
@@ -51,7 +52,10 @@ def oxr_service():
             payload = raw_payload or json.dumps(payload_data).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
+            missing_bytes = (
+                state["missing_response_bytes"].pop(0) if state["missing_response_bytes"] else 0
+            )
+            self.send_header("Content-Length", str(len(payload) + missing_bytes))
             self.end_headers()
             self.wfile.write(payload)
 
@@ -353,6 +357,29 @@ class TestPdfConversionRemote:
         assert len(oxr_service["requests"]) == 1
         assert b"dummy-second" in oxr_service["requests"][0]["body"]
 
+    def test_remote_mode_tries_next_profile_after_incomplete_response(self, tmp_path, oxr_service):
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        oxr_service["missing_response_bytes"] = [1, 0]
+        oxr_service["response"] = {
+            "code": 0,
+            "data": {"result": {"outputs": {"markdown": "# Complete response"}}},
+        }
+        conversion_config = remoteConversionConfig(
+            oxr_service,
+            [
+                remoteProvider(oxr_service, "truncated"),
+                remoteProvider(oxr_service, "complete"),
+            ],
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, ReadyConversionOutcome)
+        assert outcome.markdown == "# Complete response"
+        assert outcome.converter == "oxr:complete"
+        assert len(oxr_service["requests"]) == 2
+
     @pytest.mark.parametrize(
         "invalid_case",
         [
@@ -523,8 +550,9 @@ class TestPdfConversionRemote:
         assert "invalid-json" in outcome.error.message
         assert "响应不是有效 JSON" in outcome.error.message
 
+    @pytest.mark.parametrize("invalid_image_kind", ["local_path", "invalid_http_url"])
     def test_remote_mode_cleans_failed_profile_assets_before_next_profile(
-        self, tmp_path, oxr_service
+        self, tmp_path, oxr_service, invalid_image_kind
     ):
         source_dir = tmp_path / "paper" / "source"
         source_dir.mkdir(parents=True)
@@ -532,6 +560,11 @@ class TestPdfConversionRemote:
         source_pdf.write_bytes(b"%PDF-1.4 remote source")
         private_image = tmp_path / "private figure.png"
         private_image.write_bytes(oxr_service["image_bytes"])
+        invalid_image_source = (
+            private_image.as_posix()
+            if invalid_image_kind == "local_path"
+            else oxr_service["image_url"].replace("figure.png", "bad image.png")
+        )
         oxr_service["responses"] = [
             {
                 "code": 0,
@@ -539,7 +572,7 @@ class TestPdfConversionRemote:
                     "result": {
                         "outputs": {
                             "markdown": (
-                                f"![local](<{private_image.as_posix()}>)"
+                                f"![unavailable](<{invalid_image_source}>)"
                                 "![partial](data:image/png;base64,"
                                 f"{base64.b64encode(oxr_service['image_bytes']).decode()})"
                             ),
