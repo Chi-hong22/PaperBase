@@ -93,8 +93,8 @@ Canonical 与 Registry 仍只由摄入流程写入。成功采用后的 `manifes
 当前有三层证据，不能相互替代：
 
 1. 离线合同测试使用可控 HTTP 调用真实 OXR 适配器，覆盖配置、顺延、图片物化、视觉续作、缓存失效及 Canonical 门禁；这些测试不证明公网服务可用。
-2. 2026-10-27 的两次 OXR Free API 调用分别使用合成 PDF 和一份公开 CC BY 论文。合成样例进入 `NORMALIZED`；公开论文返回 63,894 字符候选稿及 13 个可解码图片资产，但停在 `references_unparseable` 并进入 `NEEDS_REVIEW`。
-3. 公开论文候选正文未被 PaperBase 持久化；本次没有逐页验证它的阅读顺序、公式、表格或参考文献完整性。因此没有全文准确率、阅读顺序或质量通过结论。离线续作验证也不等于再次端到端核对该公开论文。
+2. 2026-10-27 有四个成功返回候选稿的真实 OXR Free API 场景：一份合成 PDF 以 `off` 采用，一份合成 PDF 以 `auto` 审计通过；同一公开 CC BY 论文先在旧 `off` 流程下进入待审，后又在缓存实现后重新解析并保留候选，仍因 `references_unparseable` 未采用。
+3. 最新公开候选按页抽查了双栏、公式、表格、插图和参考文献，发现跨页断词未合并及一条参考文献跨栏拆段。抽查不构成全文校对、准确率或质量通过；早先未缓存的公开候选与本次可抽查的缓存候选是两次独立调用，不能混为一谈。
 
 真实调用记录留在执行者本机被 Git 忽略的 `.scratch/remote-document-parsing/evidence/api-smoke/real-api-smoke.md`，克隆仓库不会包含该文件。本仓库跟踪的摘要与边界见[远程解析验证记录](validation/remote-document-parsing.md)。
 

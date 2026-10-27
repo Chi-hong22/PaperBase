@@ -15,12 +15,14 @@
 
 ## 真实 API 冒烟
 
-2026-10-27 以明确允许外传的输入对官方 OXR 免费 API 发出两次请求，配置只选 `https://free-oxr.somark.cn/api/v1`，没有调用付费 API 或自动添加后备地址。
+2026-10-27 共四个真实 OXR Free API 解析场景，均只配置 `https://free-oxr.somark.cn/api/v1`；未调用付费 API、未自动添加其他服务。
 
-- 合成一页 PDF 成功经过当前 Canonical 门禁，状态为 `NORMALIZED`；观察到公式文本、HTML 表格及本地化 PNG 图片。该样例只能证明当前候选路径可运行，不能作为一般论文准确率证据。
-- 一份 arXiv 公开 CC BY 4.0 论文 PDF（18 页，约 1.77 MB）得到 63,894 字符候选稿和 13 个可本地解码图片，但在现有 APA/作者年份参考文献格式门禁 `references_unparseable` 进入 `NEEDS_REVIEW`。CLI 退出码 0 不表示 Canonical 已采用。
-- 未保存未采用的论文 Markdown 候选正文，所以没有做全文逐页的阅读顺序、公式、表格、引用或参考文献对照；不报告准确率或质量通过。RDP-003 的候选缓存与离线续作验证也没有补做这次公开论文的全文质量验证。
-- 此外在 `f1fd602` 上用单页合成 PDF 完成一次真实 `visual.mode=auto` OXR 冒烟：上传后生成候选和自动审计任务包；Agent Host 对该页判定为单栏且通过，CLI 随后写入 `NORMALIZED`，本地 PNG 存在，缓存已清理。同一摄入命令续作时 `parseWithOxr` sentinel 与 `urlopen` 计数均为 0。该运行使用 provenance 修复前代码，Canonical frontmatter converter version 为 `1.0.0`、Manifest pipeline version 为 `unknown`；不将该旧产物说成由 `42b080c` 生成。该提交后的离线定向测试验证新采用结果两处均为 `unknown`，没有再次上传或改写这次旧产物。
+- **合成 PDF，`visual.mode=off`：** 一页输入经过 Canonical 门禁进入 `NORMALIZED`；候选保留公式、HTML 表格与本地化 PNG。此项证明合成路径可采用，不作为论文质量证据。
+- **公开 PDF，`visual.mode=off`，旧缓存实现前：** [arXiv:2608.28698](https://arxiv.org/abs/2608.28698)（18 页、约 1.77 MB、CC BY 4.0）返回 63,894 字符候选与 13 个可解码图像，因 `references_unparseable` 进入 `NEEDS_REVIEW`。当时未保存候选正文，无法据那次运行抽查页面。
+- **合成 PDF，`visual.mode=auto`：** OXR 候选生成自动审计任务包，Agent Host 将单页判为单栏且通过，CLI 写入 `NORMALIZED`，PNG 位于本地。用相同摄入命令续作时，`parseWithOxr` sentinel 与 `urlopen` 计数均为 0，没有第二次 HTTP 请求。该次运行基于修复前 `f1fd602`，Canonical frontmatter converter version 为 `1.0.0`，Manifest pipeline version 为 `unknown`；不把该旧产物说成由 `42b080c` 生成。后续离线定向测试验证修复后新产物两处均为 `unknown`，没有再次上传或改写旧产物。
+- **同一公开 PDF，`visual.mode=off`，候选缓存实现后：** 再次为检查缓存后的候选保留而调用一次；这不是自动重试或顺延。输出仍因 APA/作者年份参考文献格式未满足编号门禁而进入 `NEEDS_REVIEW`。抽查 page_num 0–1 的双栏顺序、page_num 3 的公式、page_num 4 的表格、page_num 5 的图像资产，以及 page_num 8–9 的引用顺序。发现页 1–2 的 `ex-`/`pensive` 跨页断词未合并且插入了脚注/图内容，Pfitzmann 2022 参考文献跨栏拆成两段；Formula 2、Table 1 表头及抽查数值与原页一致，PNG 可本地打开。主代理独立复核了 Formula 2 与 Table 1 数值。
+
+最后一次缓存调用保留了候选，但全文仍未成为 Canonical；这些代表页抽查不等于全文校对、准确率基准或质量通过。其他页及全部引用关系仍未完成逐项核对。
 
 公开样本来源为 [arXiv:2608.28698](https://arxiv.org/abs/2608.28698)，其来源页许可链接为 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。OXR Free API 当前公开文档说明单文件最大 10 MB、每次最多 20 页，并提示请求排队且不保证稳定性，参见 [SoMark OXR Free API 文档](https://docs.somark.ai/api-reference/oxr/index#free-api) 和 [OXR 官方仓库](https://github.com/SoMarkAI/OXR)。免费 API 的边界不套用于 SoMark 商业服务或其他自建实例。
 
