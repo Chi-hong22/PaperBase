@@ -9,6 +9,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 
+from paperbase.config.loader import load_config
 from paperbase.config.models import PdfConversionConfig
 from paperbase.core import pdf_conversion
 from paperbase.core.pdf_conversion import (
@@ -24,7 +25,14 @@ from paperbase.core.pdf_conversion import (
 @pytest.fixture
 def oxr_service():
     """Capture OXR POST requests and reply with a controllable JSON body."""
-    state: dict = {"requests": [], "image_requests": [], "response": {}, "status": 200}
+    state: dict = {
+        "requests": [],
+        "image_requests": [],
+        "responses": [],
+        "statuses": [],
+        "response": {},
+        "status": 200,
+    }
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -36,8 +44,10 @@ def oxr_service():
                     "body": self.rfile.read(length),
                 }
             )
-            payload = json.dumps(state["response"]).encode("utf-8")
-            self.send_response(state["status"])
+            payload_data = state["responses"].pop(0) if state["responses"] else state["response"]
+            status = state["statuses"].pop(0) if state["statuses"] else state["status"]
+            payload = json.dumps(payload_data).encode("utf-8")
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
@@ -71,6 +81,29 @@ def oxr_service():
         thread.join()
 
 
+def remoteConversionConfig(oxr_service, providers=None, *, visual_mode="off"):  # noqa: N802
+    if providers is None:
+        providers = [remoteProvider(oxr_service, "test-oxr")]
+    return PdfConversionConfig.model_validate(
+        {
+            "parser": "remote",
+            "visual": {"mode": visual_mode},
+            "remote": {"providers": providers},
+        }
+    )
+
+
+def remoteProvider(oxr_service, name, api_key="dummy-test-key", **overrides):  # noqa: N802
+    return {
+        "name": name,
+        "provider": "oxr",
+        "base_url": oxr_service["base_url"],
+        "api_key": api_key,
+        "timeout": 5,
+        **overrides,
+    }
+
+
 class TestPdfConversionRemote:
     """远程解析入口的最小合同测试。"""
 
@@ -100,23 +133,7 @@ class TestPdfConversionRemote:
                 },
             },
         }
-        conversion_config = PdfConversionConfig.model_validate(
-            {
-                "parser": "remote",
-                "visual": {"mode": "off"},
-                "remote": {
-                    "providers": [
-                        {
-                            "name": "test-oxr",
-                            "provider": "oxr",
-                            "base_url": oxr_service["base_url"],
-                            "api_key": "dummy-test-key",
-                            "timeout": 5,
-                        }
-                    ]
-                },
-            }
-        )
+        conversion_config = remoteConversionConfig(oxr_service)
 
         outcome = progressPdfConversion(source_pdf, conversion_config)
 
@@ -132,12 +149,315 @@ class TestPdfConversionRemote:
         assert request["content_type"].startswith("multipart/form-data")
         body = request["body"]
         assert b'name="file"' in body
-        assert b'filename="document.pdf"' in body
+        assert b'filename="paperbase-' in body
+        assert b'.pdf"' in body
         assert body.count(b'name="output_formats"') == 2
         assert b"\r\nmarkdown\r\n" in body
         assert b"\r\njson\r\n" in body
         assert b'name="api_key"' in body
         assert b"dummy-test-key" in body
+
+    def test_remote_mode_fails_over_in_order_and_stops_on_first_usable_result(
+        self, tmp_path, oxr_service, monkeypatch
+    ):
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        oxr_service["statuses"] = [401, 200]
+        oxr_service["responses"] = [
+            {"code": 1107, "message": "do not surface"},
+            {
+                "code": 0,
+                "data": {
+                    "result": {
+                        "outputs": {"markdown": "# From second", "json": {"pages": []}}
+                    }
+                },
+            },
+        ]
+        conversion_config = remoteConversionConfig(
+            oxr_service,
+            [
+                remoteProvider(oxr_service, "first", "dummy-first"),
+                remoteProvider(oxr_service, "second", "dummy-second"),
+                remoteProvider(oxr_service, "unused", "dummy-unused"),
+            ],
+        )
+        monkeypatch.setattr(
+            pdf_conversion,
+            "convert_pdf_to_markdown",
+            lambda *_: pytest.fail("remote parsing must not fall back to the local parser"),
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, ReadyConversionOutcome)
+        assert outcome.markdown == "# From second"
+        assert outcome.converter == "oxr:second"
+        assert len(oxr_service["requests"]) == 2
+        assert b"dummy-first" in oxr_service["requests"][0]["body"]
+        assert b"dummy-second" in oxr_service["requests"][1]["body"]
+        assert b"dummy-unused" not in b"".join(
+            request["body"] for request in oxr_service["requests"]
+        )
+
+    def test_remote_mode_does_not_call_next_profile_after_first_success(
+        self, tmp_path, oxr_service
+    ):
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        oxr_service["response"] = {
+            "code": 0,
+            "data": {
+                "result": {
+                    "outputs": {"markdown": "# First profile", "json": {"pages": []}}
+                }
+            },
+        }
+        conversion_config = remoteConversionConfig(
+            oxr_service,
+            [
+                remoteProvider(oxr_service, "first", "dummy-first"),
+                remoteProvider(oxr_service, "never", "dummy-never"),
+            ],
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, ReadyConversionOutcome)
+        assert outcome.converter == "oxr:first"
+        assert len(oxr_service["requests"]) == 1
+        assert b"dummy-never" not in oxr_service["requests"][0]["body"]
+
+    def test_remote_mode_retries_next_profile_after_network_failure(self, tmp_path, oxr_service):
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        oxr_service["response"] = {
+            "code": 0,
+            "data": {
+                "result": {"outputs": {"markdown": "# Recovered", "json": {"pages": []}}}
+            },
+        }
+        first_provider = remoteProvider(oxr_service, "unreachable", "dummy-first")
+        first_provider["base_url"] = "http://127.0.0.1:0/v1"
+        conversion_config = remoteConversionConfig(
+            oxr_service,
+            [
+                first_provider,
+                remoteProvider(oxr_service, "available", "dummy-second"),
+            ],
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, ReadyConversionOutcome)
+        assert outcome.converter == "oxr:available"
+        assert outcome.markdown == "# Recovered"
+        assert len(oxr_service["requests"]) == 1
+        assert b"dummy-second" in oxr_service["requests"][0]["body"]
+
+    @pytest.mark.parametrize(
+        "invalid_case",
+        [
+            "missing_api_key",
+            "unknown_provider",
+            "duplicate_name",
+            "invalid_url",
+            "invalid_timeout",
+            "invalid_port",
+        ],
+    )
+    def test_remote_mode_validates_entire_chain_before_request(
+        self, tmp_path, oxr_service, invalid_case
+    ):
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        first_provider = remoteProvider(oxr_service, "first", "dummy-first")
+        invalid_provider = remoteProvider(oxr_service, "second", "dummy-second")
+        if invalid_case == "missing_api_key":
+            invalid_provider["api_key"] = ""
+        elif invalid_case == "unknown_provider":
+            invalid_provider["provider"] = "unknown"
+        elif invalid_case == "duplicate_name":
+            invalid_provider["name"] = "first"
+        elif invalid_case == "invalid_url":
+            invalid_provider["base_url"] = "file:///private/oxr"
+        elif invalid_case == "invalid_timeout":
+            invalid_provider["timeout"] = 0
+        else:
+            invalid_provider["base_url"] = "http://["
+        conversion_config = remoteConversionConfig(
+            oxr_service, [first_provider, invalid_provider]
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, FailedConversionOutcome)
+        assert outcome.error.code == "remote_config_invalid"
+        assert not oxr_service["requests"]
+        assert "dummy-first" not in outcome.error.message
+        assert "dummy-second" not in outcome.error.message
+
+    def test_remote_mode_rejects_missing_key_environment_variable_before_request(
+        self, tmp_path, oxr_service, monkeypatch
+    ):
+        monkeypatch.delenv("PAPERBASE_TEST_MISSING_OXR_KEY", raising=False)
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        config_path = config_dir / "paperbase.yaml"
+        config_path.write_text(
+            "conversion:\n  pdf:\n    parser: remote\n    remote:\n"
+            "      providers:\n        - name: primary\n          provider: oxr\n"
+            f"          base_url: {oxr_service['base_url']}\n"
+            "          api_key: ${PAPERBASE_TEST_MISSING_OXR_KEY}\n          timeout: 5\n",
+            encoding="utf-8",
+        )
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+
+        conversion_config = load_config(config_path).conversion.pdf
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, FailedConversionOutcome)
+        assert outcome.error.code == "remote_config_invalid"
+        assert "api_key" in outcome.error.message
+        assert not oxr_service["requests"]
+
+    def test_local_mode_ignores_unused_remote_profile_configuration(
+        self, tmp_path, oxr_service, monkeypatch
+    ):
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 local source")
+        conversion_config = remoteConversionConfig(
+            oxr_service,
+            [remoteProvider(oxr_service, "unused", "")],
+        ).model_copy(update={"parser": "local"})
+        monkeypatch.setattr(
+            pdf_conversion, "convert_pdf_to_markdown", lambda _: "# Local candidate"
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, ReadyConversionOutcome)
+        assert outcome.markdown == "# Local candidate"
+        assert outcome.converter is None
+        assert not oxr_service["requests"]
+
+    def test_remote_mode_reports_each_failure_without_falling_back_to_local(
+        self, tmp_path, oxr_service, monkeypatch
+    ):
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        oxr_service["statuses"] = [401, 500]
+        oxr_service["responses"] = [
+            {"code": 1107, "message": "private service body"},
+            {
+                "code": 0,
+                "data": {"result": {"outputs": {"markdown": "  ", "json": {"pages": []}}}},
+            },
+        ]
+        conversion_config = remoteConversionConfig(
+            oxr_service,
+            [
+                remoteProvider(oxr_service, "primary", "dummy-primary"),
+                remoteProvider(oxr_service, "secondary", "dummy-secondary"),
+            ],
+        )
+        monkeypatch.setattr(
+            pdf_conversion,
+            "convert_pdf_to_markdown",
+            lambda *_: pytest.fail("remote parsing must not fall back to the local parser"),
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, FailedConversionOutcome)
+        assert outcome.error.code == "remote_transient_failure"
+        assert "primary" in outcome.error.message and "HTTP 401" in outcome.error.message
+        assert "secondary" in outcome.error.message and "HTTP 500" in outcome.error.message
+        assert "private service body" not in outcome.error.message
+        assert "dummy-primary" not in outcome.error.message
+        assert "dummy-secondary" not in outcome.error.message
+        assert len(oxr_service["requests"]) == 2
+
+    def test_remote_mode_reports_content_failures_as_permanent(self, tmp_path, oxr_service):
+        source_pdf = tmp_path / "paper.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        oxr_service["responses"] = [
+            {
+                "code": 0,
+                "data": {
+                    "result": {"outputs": {"markdown": "  ", "json": {"pages": []}}}
+                },
+            },
+            {"code": "private-code", "message": "private response"},
+        ]
+        conversion_config = remoteConversionConfig(
+            oxr_service,
+            [
+                remoteProvider(oxr_service, "empty-result", "dummy-first"),
+                remoteProvider(oxr_service, "service-error", "dummy-second"),
+            ],
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, FailedConversionOutcome)
+        assert outcome.error.code == "remote_all_profiles_failed"
+        assert "empty-result" in outcome.error.message
+        assert "缺少正文" in outcome.error.message
+        assert "service-error" in outcome.error.message
+        assert "private-code" not in outcome.error.message
+        assert "private response" not in outcome.error.message
+        assert len(oxr_service["requests"]) == 2
+
+    def test_remote_mode_cleans_failed_profile_assets_before_next_profile(
+        self, tmp_path, oxr_service
+    ):
+        source_dir = tmp_path / "paper" / "source"
+        source_dir.mkdir(parents=True)
+        source_pdf = source_dir / "source.pdf"
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        private_image = tmp_path / "private figure.png"
+        private_image.write_bytes(oxr_service["image_bytes"])
+        oxr_service["responses"] = [
+            {
+                "code": 0,
+                "data": {
+                    "result": {
+                        "outputs": {
+                            "markdown": (
+                                f"![local](<{private_image.as_posix()}>)"
+                                "![partial](data:image/png;base64,"
+                                f"{base64.b64encode(oxr_service['image_bytes']).decode()})"
+                            ),
+                            "json": {"pages": []},
+                        }
+                    }
+                },
+            },
+            {
+                "code": 0,
+                "data": {
+                    "result": {"outputs": {"markdown": "# Second profile", "json": {"pages": []}}}
+                },
+            },
+        ]
+        conversion_config = remoteConversionConfig(
+            oxr_service,
+            [
+                remoteProvider(oxr_service, "first", "dummy-first"),
+                remoteProvider(oxr_service, "second", "dummy-second"),
+            ],
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, ReadyConversionOutcome)
+        assert outcome.converter == "oxr:second"
+        assert outcome.markdown == "# Second profile"
+        assert outcome.assets == ()
+        assert not list((source_dir.parent / "assets").glob("oxr-*"))
+        assert len(oxr_service["requests"]) == 2
 
     @pytest.mark.parametrize("image_kind", ["base64", "url", "url_title", "html_url"])
     def test_remote_mode_localizes_oxr_images(self, tmp_path, oxr_service, image_kind):
@@ -178,23 +498,7 @@ class TestPdfConversionRemote:
                 }
             },
         }
-        conversion_config = PdfConversionConfig.model_validate(
-            {
-                "parser": "remote",
-                "visual": {"mode": "off"},
-                "remote": {
-                    "providers": [
-                        {
-                            "name": "test-oxr",
-                            "provider": "oxr",
-                            "base_url": oxr_service["base_url"],
-                            "api_key": "dummy-test-key",
-                            "timeout": 5,
-                        }
-                    ]
-                },
-            }
-        )
+        conversion_config = remoteConversionConfig(oxr_service)
 
         outcome = progressPdfConversion(source_pdf, conversion_config)
 
@@ -227,23 +531,7 @@ class TestPdfConversionRemote:
         source_pdf.write_bytes(b"%PDF-1.4 remote source")
         oxr_service["status"] = 200
         oxr_service["response"] = {"code": "secret-key-from-server", "message": "private"}
-        conversion_config = PdfConversionConfig.model_validate(
-            {
-                "parser": "remote",
-                "visual": {"mode": "off"},
-                "remote": {
-                    "providers": [
-                        {
-                            "name": "test-oxr",
-                            "provider": "oxr",
-                            "base_url": oxr_service["base_url"],
-                            "api_key": "dummy-test-key",
-                            "timeout": 5,
-                        }
-                    ]
-                },
-            }
-        )
+        conversion_config = remoteConversionConfig(oxr_service)
 
         outcome = progressPdfConversion(source_pdf, conversion_config)
 
@@ -281,28 +569,12 @@ class TestPdfConversionRemote:
                 }
             },
         }
-        conversion_config = PdfConversionConfig.model_validate(
-            {
-                "parser": "remote",
-                "visual": {"mode": "off"},
-                "remote": {
-                    "providers": [
-                        {
-                            "name": "test-oxr",
-                            "provider": "oxr",
-                            "base_url": oxr_service["base_url"],
-                            "api_key": "dummy-test-key",
-                            "timeout": 5,
-                        }
-                    ]
-                },
-            }
-        )
+        conversion_config = remoteConversionConfig(oxr_service)
 
         outcome = progressPdfConversion(source_pdf, conversion_config)
 
         assert isinstance(outcome, FailedConversionOutcome)
-        assert outcome.error.code == "remote_parsing_failed"
+        assert outcome.error.code == "remote_all_profiles_failed"
         assert not (source_dir.parent / "assets").exists()
         assert oxr_service["image_requests"] == ([] if image_kind != "corrupt_png" else ["/figure.png"])
 

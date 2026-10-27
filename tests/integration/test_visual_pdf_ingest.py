@@ -409,6 +409,8 @@ def test_explicit_visual_warning_flag_adopts_assets_and_cleans_ready_run(monkeyp
         ("visual_host_capability_missing", PaperState.BLOCKED),
         ("visual_progress_failed", PaperState.FAILED_RETRYABLE),
         ("visual_transient_failure_exhausted", PaperState.FAILED_RETRYABLE),
+        ("remote_transient_failure", PaperState.FAILED_RETRYABLE),
+        ("remote_all_profiles_failed", PaperState.FAILED_PERMANENT),
         ("visual_boundary_review_invalid", PaperState.NEEDS_REVIEW),
         ("visual_preparation_failed", PaperState.FAILED_PERMANENT),
     ],

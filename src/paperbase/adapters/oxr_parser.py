@@ -44,10 +44,13 @@ def parseWithOxr(source_pdf: Path, provider: RemotePdfProviderConfig) -> OxrCand
     except OSError as exc:
         raise OxrCandidateError("无法读取源 PDF 文件") from exc
 
-    boundary = f"----paperbase-{uuid4().hex}"
+    upload_id = uuid4().hex
+    boundary = f"----paperbase-{upload_id}"
     request = Request(
         f"{provider.base_url.rstrip('/')}/parse/sync",
-        data=_buildMultipartBody("document.pdf", source_bytes, provider.api_key, boundary),
+        data=_buildMultipartBody(
+            f"paperbase-{upload_id}.pdf", source_bytes, provider.api_key, boundary
+        ),
         headers={
             "Content-Type": f"multipart/form-data; boundary={boundary}",
             "Accept": "application/json",
@@ -58,18 +61,25 @@ def parseWithOxr(source_pdf: Path, provider: RemotePdfProviderConfig) -> OxrCand
         with urlopen(request, timeout=provider.timeout) as response:
             raw_body = response.read()
     except HTTPError as exc:
-        raise OxrCandidateError(f"OXR 服务返回 HTTP {exc.code}", transient=True) from exc
+        transient = exc.code in {408, 429} or exc.code >= 500
+        raise OxrCandidateError(f"OXR 服务返回 HTTP {exc.code}", transient=transient) from exc
     except OSError as exc:
         raise OxrCandidateError("OXR 服务请求失败", transient=True) from exc
 
     try:
         payload = json.loads(raw_body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise OxrCandidateError("OXR 响应不是有效 JSON") from exc
+        raise OxrCandidateError("OXR 响应不是有效 JSON", transient=True) from exc
     if not isinstance(payload, dict):
         raise OxrCandidateError("OXR 响应结构无效")
-    if payload.get("code") != 0:
-        raise OxrCandidateError("OXR rejected the parsing request")
+    if type(payload.get("code")) is not int or payload["code"] != 0:
+        code = payload.get("code")
+        if type(code) is int and code in {1101, 1105, 1107, 1108, 1123, 1124, 1132, 1133, 1137}:
+            raise OxrCandidateError(
+                f"OXR 服务返回 code={code}",
+                transient=code in {1101, 1124},
+            )
+        raise OxrCandidateError("OXR 服务拒绝了解析请求")
 
     data = payload.get("data")
     result = data.get("result") if isinstance(data, dict) else None

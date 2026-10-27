@@ -182,6 +182,7 @@ def _stateForConversionFailure(error_code: str) -> PaperState:  # noqa: N802
     retryable_codes = {
         "visual_progress_failed",
         "visual_transient_failure_exhausted",
+        "remote_transient_failure",
     }
     review_codes = {
         "visual_auto_audit_result_invalid",

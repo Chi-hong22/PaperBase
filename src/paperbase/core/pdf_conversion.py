@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypeAlias
 from urllib.parse import urlparse
@@ -201,37 +202,50 @@ def _progressRemoteConversion(  # noqa: N802
                 message="remote PDF parsing requires conversion.pdf.remote.providers",
             )
         )
-    if len(providers) > 1:
-        return FailedConversionOutcome(
-            error=PdfConversionError(
-                code="remote_multiple_providers_unsupported",
-                message="remote PDF parsing supports a single provider configuration",
+    provider_names: set[str] = set()
+    for provider in providers:
+        problem = _remoteProviderProblem(provider)
+        if problem is not None:
+            return FailedConversionOutcome(
+                error=PdfConversionError(code="remote_config_invalid", message=problem)
             )
-        )
-
-    provider = providers[0]
-    problem = _remoteProviderProblem(provider)
-    if problem is not None:
-        return FailedConversionOutcome(
-            error=PdfConversionError(code="remote_config_invalid", message=problem)
-        )
-
-    try:
-        candidate = parseWithOxr(source_pdf, provider)
-    except OxrCandidateError as exc:
-        return FailedConversionOutcome(
-            error=PdfConversionError(
-                code="remote_transient_failure" if exc.transient else "remote_parsing_failed",
-                message=str(exc),
+        name = provider.name.strip()
+        if name in provider_names:
+            return FailedConversionOutcome(
+                error=PdfConversionError(
+                    code="remote_config_invalid",
+                    message=f"remote provider name must be unique: {name}",
+                )
             )
+        provider_names.add(name)
+
+    failures: list[str] = []
+    has_transient_failure = False
+    for provider in providers:
+        try:
+            candidate = parseWithOxr(source_pdf, provider)
+        except OxrCandidateError as exc:
+            failures.append(f"{provider.name.strip()}: {exc}")
+            has_transient_failure |= exc.transient
+            continue
+
+        return ReadyConversionOutcome(
+            markdown=candidate.markdown,
+            assets=candidate.assets,
+            converter=f"oxr:{provider.name.strip()}",
+            converter_version="unknown",
+            page_data=candidate.page_data,
         )
 
-    return ReadyConversionOutcome(
-        markdown=candidate.markdown,
-        assets=candidate.assets,
-        converter=f"oxr:{provider.name}",
-        converter_version="unknown",
-        page_data=candidate.page_data,
+    return FailedConversionOutcome(
+        error=PdfConversionError(
+            code=(
+                "remote_transient_failure"
+                if has_transient_failure
+                else "remote_all_profiles_failed"
+            ),
+            message="all remote parsing profiles failed: " + "; ".join(failures),
+        )
     )
 
 
@@ -242,12 +256,21 @@ def _remoteProviderProblem(provider: RemotePdfProviderConfig) -> str | None:  # 
         return "remote provider requires a name"
     if provider.provider != "oxr":
         return f"remote provider {name} is not supported"
-    parsed_url = urlparse(provider.base_url)
-    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+    try:
+        parsed_url = urlparse(provider.base_url)
+        valid_url = (
+            parsed_url.scheme in {"http", "https"}
+            and parsed_url.hostname is not None
+            and not any(char.isspace() for char in provider.base_url)
+        )
+        parsed_url.port
+    except ValueError:
+        valid_url = False
+    if not valid_url:
         return f"remote provider {name} requires an http(s) base_url"
-    if provider.timeout is None or provider.timeout <= 0:
+    if provider.timeout is None or not isfinite(provider.timeout) or provider.timeout <= 0:
         return f"remote provider {name} requires a positive timeout"
-    if not provider.api_key or provider.api_key.startswith("$"):
+    if not provider.api_key.strip():
         return f"remote provider {name} requires an api_key environment reference"
     return None
 
