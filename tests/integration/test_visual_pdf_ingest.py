@@ -519,7 +519,7 @@ def test_batch_forwards_explicit_visual_warning_flag_to_local_pdf_ingest(monkeyp
     input_pdf = _write_input_pdf(tmp_path)
     batch_file = tmp_path / "batch.txt"
     batch_file.write_text(f"{input_pdf}\n", encoding="utf-8")
-    calls: list[tuple[Path, bool, bool, bool]] = []
+    calls: list[tuple[Path, bool, bool, bool, str | None]] = []
 
     def capture_local_ingest(
         ctx,
@@ -528,8 +528,9 @@ def test_batch_forwards_explicit_visual_warning_flag_to_local_pdf_ingest(monkeyp
         headless_graph,
         *,
         accept_visual_warnings=False,
+        pdf_parser=None,
     ):
-        calls.append((pdf_path, no_graph, headless_graph, accept_visual_warnings))
+        calls.append((pdf_path, no_graph, headless_graph, accept_visual_warnings, pdf_parser))
 
     monkeypatch.setattr(ingest_command, "_ingest_local_pdf", capture_local_ingest)
 
@@ -547,4 +548,4 @@ def test_batch_forwards_explicit_visual_warning_flag_to_local_pdf_ingest(monkeyp
     )
 
     assert result.exit_code == 0, result.output
-    assert calls == [(input_pdf, True, False, True)]
+    assert calls == [(input_pdf, True, False, True, None)]
