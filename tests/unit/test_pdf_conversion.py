@@ -83,13 +83,15 @@ def oxr_service():
         thread.join()
 
 
-def remoteConversionConfig(oxr_service, providers=None, *, visual_mode="off"):  # noqa: N802
+def remoteConversionConfig(  # noqa: N802
+    oxr_service, providers=None, *, visual_mode="off", visual_model="host-model"
+):
     if providers is None:
         providers = [remoteProvider(oxr_service, "test-oxr")]
     return PdfConversionConfig.model_validate(
         {
             "parser": "remote",
-            "visual": {"mode": visual_mode},
+            "visual": {"mode": visual_mode, "model": visual_model},
             "remote": {"providers": providers},
         }
     )
@@ -158,6 +160,100 @@ class TestPdfConversionRemote:
         assert b"\r\njson\r\n" in body
         assert b'name="api_key"' in body
         assert b"dummy-test-key" in body
+
+    def test_remote_visual_mode_requires_model_before_upload(self, tmp_path, oxr_service):
+        source_pdf = tmp_path / "paper" / "source" / "source.pdf"
+        source_pdf.parent.mkdir(parents=True)
+        source_pdf.write_bytes(b"%PDF-1.4 remote source")
+        conversion_config = remoteConversionConfig(
+            oxr_service, visual_mode="always", visual_model=""
+        )
+
+        outcome = progressPdfConversion(source_pdf, conversion_config)
+
+        assert isinstance(outcome, FailedConversionOutcome)
+        assert outcome.error.code == "visual_model_required"
+        assert oxr_service["requests"] == []
+
+    def test_remote_auto_audit_resumes_cached_candidate_and_preserves_metadata(
+        self, tmp_path, oxr_service
+    ):
+        source_pdf = tmp_path / "paper" / "source" / "source.pdf"
+        source_pdf.parent.mkdir(parents=True)
+        document = pymupdf.open()
+        page = document.new_page()
+        page.insert_text((72, 100), "Single column paper page.")
+        document.save(source_pdf)
+        document.close()
+        image_ref = (
+            "data:image/png;base64,"
+            + base64.b64encode(oxr_service["image_bytes"]).decode("ascii")
+        )
+        remote_markdown = "# OXR Candidate\n\n" + ("Parsed body. " * 60) + f"\n\n![figure]({image_ref})"
+        oxr_service["response"] = {
+            "code": 0,
+            "data": {
+                "result": {
+                    "outputs": {
+                        "markdown": remote_markdown,
+                        "json": {"pages": [{"page_num": 1, "blocks": []}]},
+                    }
+                }
+            },
+        }
+        config = remoteConversionConfig(
+            oxr_service, visual_mode="auto", visual_model="host-model"
+        )
+
+        first = progressPdfConversion(source_pdf, config)
+
+        assert isinstance(first, AgentActionRequiredOutcome)
+        audit_dir = first.task_package
+        remote_candidate_markdown = (audit_dir / "candidate.md").read_text(encoding="utf-8")
+        task = json.loads((audit_dir / "task.json").read_text(encoding="utf-8"))
+        schema = task["worker_output"]["schema"]
+        (audit_dir / "result.json").write_text(
+            json.dumps(
+                {
+                    "kind": schema["kind"],
+                    "version": schema["version"],
+                    "source_pdf_sha256": schema["source_pdf_sha256"],
+                    "candidate_sha256": schema["candidate_sha256"],
+                    "decision": "pass",
+                    "layout": "single_column",
+                    "flagged_pages": [],
+                    "reasons": ["The candidate preserves the single-column reading order."],
+                }
+            ),
+            encoding="utf-8",
+        )
+        rotated_key_config = remoteConversionConfig(
+            oxr_service,
+            [remoteProvider(oxr_service, "test-oxr", api_key="rotated-test-key")],
+            visual_mode="auto",
+            visual_model="host-model",
+        )
+
+        ready = progressPdfConversion(source_pdf, rotated_key_config)
+
+        assert isinstance(ready, ReadyConversionOutcome)
+        assert ready.markdown == remote_candidate_markdown
+        assert ready.converter == "oxr:test-oxr"
+        assert ready.converter_version == "unknown"
+        assert ready.page_data == {"pages": [{"page_num": 1, "blocks": []}]}
+        assert len(ready.assets) == 1
+        assert f"./assets/{Path(ready.assets[0]).name}" in ready.markdown
+        assert (
+            source_pdf.parent.parent
+            / "assets"
+            / ready.assets[0].removeprefix("./assets/")
+        ).is_file()
+        assert len(oxr_service["requests"]) == 1
+        cached_candidate = json.loads(
+            (source_pdf.parent.parent / ".remote-candidate.json").read_text(encoding="utf-8")
+        )
+        assert "dummy-test-key" not in json.dumps(cached_candidate)
+        assert "rotated-test-key" not in json.dumps(cached_candidate)
 
     def test_remote_mode_fails_over_in_order_and_stops_on_first_usable_result(
         self, tmp_path, oxr_service, monkeypatch

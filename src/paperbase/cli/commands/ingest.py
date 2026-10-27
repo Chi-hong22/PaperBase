@@ -31,6 +31,7 @@ from paperbase.core.pdf_conversion import (
     ReadyConversionOutcome,
     progressPdfConversion,
 )
+from paperbase.core.remote_pdf_candidate import clearRemoteCandidate
 from paperbase.core.registry import PaperRegistry
 from paperbase.core.visual_adoption import cleanupReadyVisualRuns
 from paperbase.core.visual_repair_run import isPathReparsePoint
@@ -303,7 +304,15 @@ def _cleanupVisualRunsAfterAdoption(  # noqa: N802
     primary_adoption_succeeded: bool,
 ) -> None:
     """Best-effort cleanup only after the primary visual adoption succeeds."""
-    if conversion_config.visual.mode == "off" or not primary_adoption_succeeded:
+    if not primary_adoption_succeeded:
+        return
+    if conversion_config.parser == "remote":
+        try:
+            clearRemoteCandidate(paths.paper_dir)
+        except Exception as exc:
+            console.print("[yellow]⚠ 远程候选稿清理失败，已保留现场[/yellow]")
+            console.print(f"   原因: {exc}")
+    if conversion_config.visual.mode == "off":
         return
     try:
         cleanupReadyVisualRuns(paths.paper_dir)

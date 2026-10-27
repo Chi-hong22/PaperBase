@@ -12,6 +12,11 @@ from paperbase.adapters.oxr_parser import OxrCandidateError, parseWithOxr
 from paperbase.adapters.pdf_converter import convert_pdf_to_markdown
 from paperbase.config.models import PdfConversionConfig
 from paperbase.core.pdf_auto_audit import prepareOrProgressPdfAutoAudit
+from paperbase.core.remote_pdf_candidate import (
+    loadRemoteCandidate,
+    remoteCandidateIdentity,
+    saveRemoteCandidate,
+)
 from paperbase.core.visual_progress import prepareOrProgressVisualConversion
 
 if TYPE_CHECKING:
@@ -105,19 +110,24 @@ def progressPdfConversion(  # noqa: N802
     re_review: bool = False,
 ) -> PdfConversionOutcome:
     """推进一次 PDF 转换，而不绑定具体 Agent Host。"""
-    if conversion_config.parser == "remote":
-        return _progressRemoteConversion(source_pdf, conversion_config)
-
     visual_config = conversion_config.visual
+    if visual_config.mode != "off" and not visual_config.model.strip():
+        return FailedConversionOutcome(
+            error=PdfConversionError(
+                code="visual_model_required",
+                message="visual mode requires conversion.pdf.visual.model",
+            )
+        )
+
+    if conversion_config.parser == "remote":
+        return _progressRemoteConversion(
+            source_pdf,
+            conversion_config,
+            accept_visual_warnings=accept_visual_warnings,
+            re_review=re_review,
+        )
 
     if visual_config.mode != "off":
-        if not visual_config.model.strip():
-            return FailedConversionOutcome(
-                error=PdfConversionError(
-                    code="visual_model_required",
-                    message="visual mode requires conversion.pdf.visual.model",
-                )
-            )
         try:
             candidate_markdown = convert_pdf_to_markdown(source_pdf)
         except Exception:
@@ -128,44 +138,12 @@ def progressPdfConversion(  # noqa: N802
                 )
             )
 
-        if visual_config.mode == "auto":
-            try:
-                if re_review:
-                    auto_outcome = prepareOrProgressPdfAutoAudit(
-                        source_pdf,
-                        candidate_markdown,
-                        visual_config,
-                        accept_visual_warnings=accept_visual_warnings,
-                        re_review=True,
-                    )
-                elif accept_visual_warnings:
-                    auto_outcome = prepareOrProgressPdfAutoAudit(
-                        source_pdf,
-                        candidate_markdown,
-                        visual_config,
-                        accept_visual_warnings=True,
-                    )
-                else:
-                    auto_outcome = prepareOrProgressPdfAutoAudit(
-                        source_pdf,
-                        candidate_markdown,
-                        visual_config,
-                    )
-                return auto_outcome
-            except Exception:
-                return FailedConversionOutcome(
-                    error=PdfConversionError(
-                        code="visual_auto_audit_preparation_failed",
-                        message="could not prepare automatic PDF layout audit task package",
-                    )
-                )
-
-        return _progressVisualConversion(
+        return _progressVisualCandidate(
             source_pdf,
             candidate_markdown,
             visual_config,
-            accept_visual_warnings,
-            re_review,
+            accept_visual_warnings=accept_visual_warnings,
+            re_review=re_review,
         )
 
     try:
@@ -184,16 +162,11 @@ def progressPdfConversion(  # noqa: N802
 def _progressRemoteConversion(  # noqa: N802
     source_pdf: Path,
     conversion_config: PdfConversionConfig,
+    *,
+    accept_visual_warnings: bool = False,
+    re_review: bool = False,
 ) -> PdfConversionOutcome:
-    """在 visual 关闭时用单条 OXR 配置取得远程解析候选。"""
-    if conversion_config.visual.mode != "off":
-        return FailedConversionOutcome(
-            error=PdfConversionError(
-                code="remote_visual_unsupported",
-                message="remote PDF parsing does not support visual review yet",
-            )
-        )
-
+    """校验远程链、复用已选候选，再推进现有视觉流程。"""
     providers = conversion_config.remote.providers
     if not providers:
         return FailedConversionOutcome(
@@ -219,6 +192,65 @@ def _progressRemoteConversion(  # noqa: N802
             )
         provider_names.add(name)
 
+    remote_candidate: ReadyConversionOutcome | None = None
+    cache_identity: str | None = None
+    if conversion_config.visual.mode != "off":
+        cache_identity = remoteCandidateIdentity(source_pdf, conversion_config)
+        cached = loadRemoteCandidate(source_pdf, cache_identity)
+        if cached is not None and cached["converter"] in {
+            f"oxr:{provider.name.strip()}" for provider in providers
+        }:
+            remote_candidate = ReadyConversionOutcome(**cached)
+
+    if remote_candidate is None:
+        remote_outcome = _parseRemoteProviders(source_pdf, providers)
+        if not isinstance(remote_outcome, ReadyConversionOutcome):
+            return remote_outcome
+        remote_candidate = remote_outcome
+        if cache_identity is not None:
+            try:
+                saveRemoteCandidate(
+                    source_pdf,
+                    cache_identity,
+                    markdown=remote_candidate.markdown,
+                    assets=remote_candidate.assets,
+                    converter=remote_candidate.converter or "",
+                    converter_version=remote_candidate.converter_version or "unknown",
+                    page_data=remote_candidate.page_data,
+                )
+            except OSError:
+                return FailedConversionOutcome(
+                    error=PdfConversionError(
+                        code="remote_candidate_cache_failed",
+                        message="could not save remote candidate for visual review resumption",
+                    )
+                )
+
+    if conversion_config.visual.mode == "off":
+        return remote_candidate
+
+    visual_outcome = _progressVisualCandidate(
+        source_pdf,
+        remote_candidate.markdown,
+        conversion_config.visual,
+        accept_visual_warnings=accept_visual_warnings,
+        re_review=re_review,
+    )
+    if not isinstance(visual_outcome, ReadyConversionOutcome):
+        return visual_outcome
+    return ReadyConversionOutcome(
+        markdown=visual_outcome.markdown,
+        assets=tuple(dict.fromkeys((*remote_candidate.assets, *visual_outcome.assets))),
+        converter=remote_candidate.converter,
+        converter_version=remote_candidate.converter_version,
+        page_data=remote_candidate.page_data,
+    )
+
+
+def _parseRemoteProviders(  # noqa: N802
+    source_pdf: Path,
+    providers: list[RemotePdfProviderConfig],
+) -> PdfConversionOutcome:
     failures: list[str] = []
     has_transient_failure = False
     for provider in providers:
@@ -246,6 +278,48 @@ def _progressRemoteConversion(  # noqa: N802
             ),
             message="all remote parsing profiles failed: " + "; ".join(failures),
         )
+    )
+
+
+def _progressVisualCandidate(  # noqa: N802
+    source_pdf: Path,
+    candidate_markdown: str,
+    visual_config: VisualPdfConfig,
+    *,
+    accept_visual_warnings: bool,
+    re_review: bool,
+) -> PdfConversionOutcome:
+    if visual_config.mode == "auto":
+        try:
+            if re_review:
+                return prepareOrProgressPdfAutoAudit(
+                    source_pdf,
+                    candidate_markdown,
+                    visual_config,
+                    accept_visual_warnings=accept_visual_warnings,
+                    re_review=True,
+                )
+            if accept_visual_warnings:
+                return prepareOrProgressPdfAutoAudit(
+                    source_pdf,
+                    candidate_markdown,
+                    visual_config,
+                    accept_visual_warnings=True,
+                )
+            return prepareOrProgressPdfAutoAudit(source_pdf, candidate_markdown, visual_config)
+        except Exception:
+            return FailedConversionOutcome(
+                error=PdfConversionError(
+                    code="visual_auto_audit_preparation_failed",
+                    message="could not prepare automatic PDF layout audit task package",
+                )
+            )
+    return _progressVisualConversion(
+        source_pdf,
+        candidate_markdown,
+        visual_config,
+        accept_visual_warnings,
+        re_review,
     )
 
 
